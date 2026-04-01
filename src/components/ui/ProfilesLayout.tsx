@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { User, LayoutDashboard, LogOut } from "lucide-react"; // replace PlusSquare with LayoutDashboard icon
+import { User, LayoutDashboard, LogOut } from "lucide-react";
+import { toast } from "sonner";
 
 interface LayoutProps {
   children: ReactNode;
@@ -17,8 +18,16 @@ export const ProfilesLayout = ({ children }: LayoutProps) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    // Clear all profile-related data from localStorage
     localStorage.removeItem("currentProfile");
-    navigate("/"); // back to landing page
+    localStorage.removeItem("currentUserRole");
+    localStorage.removeItem("unlockedDomains"); // Clear unlocked domains so they need to re-enter passwords
+    
+    toast.success("Logged out", {
+      description: "You have been successfully logged out.",
+    });
+    
+    navigate("/profiles"); // Go back to profiles landing page
   };
 
   return (
@@ -63,9 +72,9 @@ export const ProfilesLayout = ({ children }: LayoutProps) => {
       </aside>
 
       {/* Main Content */}
-     <main className="flex-1 w-full overflow-auto">
-  {children}
-</main>
+      <main className="flex-1 w-full overflow-auto">
+        {children}
+      </main>
     </div>
   );
 };

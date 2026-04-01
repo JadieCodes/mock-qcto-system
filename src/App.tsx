@@ -76,6 +76,8 @@ import InternalSkillsProgrammes from "./pages/QA/QAInternal/InternalSkillsProgra
 import InternalHistoricalQualifications from "./pages/QA/QAInternal/InternalHistoricalQualifications";
 import ResearchAuditTrail from "./pages/research/internal/ResearchAuditTrail";
 
+import ProtectedDepartmentRoute from "@/components/ProtectedDepartmentRoute";
+
 const App = () => {
   const [userRole, setUserRole] = useState('applicant');
   const [userName, setUserName] = useState('John Applicant'); // Add this
@@ -131,207 +133,224 @@ const App = () => {
              
    {/* NEW: Internal Qualifications Domain Routes */}
                       {/* UPDATED: Internal Qualifications Domain Routes - now the main qualifications domain */}
-              <Route
-                path="/departments/qualifications/*"
-                element={
-                  <InternalQualificationsLayout>
-                    <Routes>
-                      <Route path="" element={<Navigate to="/departments/qualifications/dashboard" replace />} />
-                      <Route path="dashboard" element={<InternalDashboard />} />
-                      <Route path="applications" element={<InternalApplications />} />
-                      <Route path="evaluations" element={<InternalEvaluations />} />
-                      <Route path="workspace" element={<DevelopmentWorkspace />} />
-                      <Route path="public-input" element={<PublicInputDashboard />} />
-                      <Route path="approval" element={<QualificationsApprovalPhase />} />
-                      <Route path="reporting" element={<InternalReporting />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </InternalQualificationsLayout>
-                }
-              />
+              {/* Protected Internal Qualifications Domain Routes */}
+  <Route
+    path="/departments/qualifications/*"
+    element={
+      <ProtectedDepartmentRoute department="qualifications">
+        <InternalQualificationsLayout>
+          <Routes>
+            <Route path="" element={<Navigate to="/departments/qualifications/dashboard" replace />} />
+            <Route path="dashboard" element={<InternalDashboard />} />
+            <Route path="applications" element={<InternalApplications />} />
+            <Route path="evaluations" element={<InternalEvaluations />} />
+            <Route path="workspace" element={<DevelopmentWorkspace />} />
+            <Route path="public-input" element={<PublicInputDashboard />} />
+            <Route path="approval" element={<QualificationsApprovalPhase />} />
+            <Route path="reporting" element={<InternalReporting />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </InternalQualificationsLayout>
+      </ProtectedDepartmentRoute>
+    }
+  />
 
               {/* Certification domain - wrapped with Layout */}
-              <Route
-                path="/certification/*"
-                element={
-                  <Layout>
-                    <Routes>
-                      <Route path="" element={<Dashboard />} />
-                      <Route path="intake" element={<Intake />} />
-                      <Route path="corrections" element={<InternalCorrections />} />
-                      <Route path="batches" element={<Batches />} />
-                      <Route path="integrations" element={<Integrations />} />
-                      <Route path="printing" element={<Printing />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </Layout>
-                }
-              />
-
+            {/* Protected Certification domain */}
+  <Route
+    path="/certification/*"
+    element={
+      <ProtectedDepartmentRoute department="certification">
+        <Layout>
+          <Routes>
+            <Route path="" element={<Dashboard />} />
+            <Route path="intake" element={<Intake />} />
+            <Route path="corrections" element={<InternalCorrections />} />
+            <Route path="batches" element={<Batches />} />
+            <Route path="integrations" element={<Integrations />} />
+            <Route path="printing" element={<Printing />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Layout>
+      </ProtectedDepartmentRoute>
+    }
+  />
               {/* Assessment domain */}
-              <Route
-                path="/departments/assessment/*"
-                element={
-                  <AssessmentLayout 
-                    userName="John Doe" 
-                    organizationName="ABC Training Institute"
-                  >
-                    <Routes>
-                      <Route 
-                        path="" 
-                        element={<Navigate to="/departments/assessment/assessor-management" replace />} 
-                      />
-                      <Route 
-                        path="assessor-management" 
-                        element={
-                          <AssessorManagement 
-                            userRole="quality_partner" 
-                            userName="John Doe" 
-                            organizationName="ABC Training Institute" 
-                          />
-                        } 
-                      />
-                      <Route 
-                        path="standards-management" 
-                        element={<StandardsManagement />} 
-                      />
-                      <Route 
-                        path="candidate-registration" 
-                        element={<CandidateRegistration />} 
-                      />
-                      <Route 
-                        path="quality-assurance" 
-                        element={<QualityAssurance />} 
-                      />
-                      <Route 
-                        path="results-management" 
-                        element={<ResultsManagement />} 
-                      />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </AssessmentLayout>
-                }
-              />
+       {/* Protected Assessment domain */}
+  <Route
+    path="/departments/assessment/*"
+    element={
+      <ProtectedDepartmentRoute department="assessment">
+        <AssessmentLayout 
+          userName="John Doe" 
+          organizationName="ABC Training Institute"
+        >
+          <Routes>
+            <Route 
+              path="" 
+              element={<Navigate to="/departments/assessment/assessor-management" replace />} 
+            />
+            <Route 
+              path="assessor-management" 
+              element={
+                <AssessorManagement 
+                  userRole="quality_partner" 
+                  userName="John Doe" 
+                  organizationName="ABC Training Institute" 
+                />
+              } 
+            />
+            <Route 
+              path="standards-management" 
+              element={<StandardsManagement />} 
+            />
+            <Route 
+              path="candidate-registration" 
+              element={<CandidateRegistration />} 
+            />
+            <Route 
+              path="quality-assurance" 
+              element={<QualityAssurance />} 
+            />
+            <Route 
+              path="results-management" 
+              element={<ResultsManagement />} 
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AssessmentLayout>
+      </ProtectedDepartmentRoute>
+    }
+  />
 
               {/* Accreditation Domain */}
-              <Route
-                path="/departments/accreditation/*"
-                element={
-                  <AccreditationLayout userName="John Doe" userRole="Accreditation Officer">
-                    <Routes>
-                      <Route 
-                        path="" 
-                        element={<Navigate to="/departments/accreditation/applications" replace />} 
-                      />
-                      <Route 
-                        path="applications" 
-                        element={<AccreditationInternalDashboard />} 
-                      />
-                     <Route 
-                          path="site-visits" 
-                          element={
-                            <SiteVisitManagement 
-                              userName={userName} 
-                              userRole={userRole === 'deputy-director' ? 'Deputy Director' : 'Assistant Director'} 
-                            />
-                          } 
-                        />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </AccreditationLayout>
-                }
-              />
-              {/* Research Domain */}
-<Route
-  path="/departments/research/*"
-  element={
-    <InternalSideMenuBar>
-      <Routes>
-        <Route 
-          path="" 
-          element={<Navigate to="/departments/research/dashboard" replace />} 
-        />
-        <Route 
-          path="dashboard" 
-          element={<DashboardResearch />} 
-        />
-        <Route 
-          path="requests" 
-          element={<ResearchRequestManagement />} 
-        />
-        <Route 
-          path="appointments" 
-          element={<ServiceProviderAppointment />} 
-        />
-        <Route 
-          path="reporting" 
-          element={<ResearchReporting />} 
-        />
-        <Route 
-          path="bulletin" 
-          element={<ResearchBulletinManagement />} 
-        />
-        <Route 
-          path="external" 
-          element={<ExternalResearchApplications />} 
-        />
-        <Route 
-          path="agenda-management" 
-          element={<AgendaManagement />} 
-        />
-        <Route 
-          path="project-archive" 
-          element={<ProjectArchive />} 
-        />
-         <Route 
-          path="audit-trail" 
-          element={<ResearchAuditTrail />} 
-        />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </InternalSideMenuBar>
-  }
-/>
-{/* Quality Assurance Internal Domain */}
-<Route 
-  path="/departments/qa/*" 
-  element={<Navigate to="/departments/quality-assurance/learner-enrolment" replace />} 
-/>
+  <Route
+    path="/departments/accreditation/*"
+    element={
+      <ProtectedDepartmentRoute department="accreditation">
+        <AccreditationLayout userName="John Doe" userRole="Accreditation Officer">
+          <Routes>
+            <Route 
+              path="" 
+              element={<Navigate to="/departments/accreditation/applications" replace />} 
+            />
+            <Route 
+              path="applications" 
+              element={<AccreditationInternalDashboard />} 
+            />
+            <Route 
+              path="site-visits" 
+              element={
+                <SiteVisitManagement 
+                  userName={userName} 
+                  userRole={userRole === 'deputy-director' ? 'Deputy Director' : 'Assistant Director'} 
+                />
+              } 
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AccreditationLayout>
+      </ProtectedDepartmentRoute>
+    }
+  />
 
-{/* Quality Assurance Internal Domain */}
-<Route
-  path="/departments/quality-assurance/*"
-  element={
-    <QAInternalSideBar>
-      <Routes>
-        <Route 
-          path="" 
-          element={<Navigate to="/departments/quality-assurance/learner-enrolment" replace />} 
-        />
-        <Route 
-          path="learner-enrolment" 
-          element={<InternalLearnerEnrolment />} 
-        />
-        <Route 
-          path="curriculum-implementation" 
-          element={<InternalCurriculumImplementation />} 
-        />
-        <Route 
-          path="skills-programmes" 
-          element={<InternalSkillsProgrammes />} 
-        />
-        <Route 
-          path="historical-qualifications" 
-          element={<InternalHistoricalQualifications />} 
-        />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </QAInternalSideBar>
-  }
-/>
+  {/* Protected Research Domain */}
+  <Route
+    path="/departments/research/*"
+    element={
+      <ProtectedDepartmentRoute department="research">
+        <InternalSideMenuBar>
+          <Routes>
+            <Route 
+              path="" 
+              element={<Navigate to="/departments/research/dashboard" replace />} 
+            />
+            <Route 
+              path="dashboard" 
+              element={<DashboardResearch />} 
+            />
+            <Route 
+              path="requests" 
+              element={<ResearchRequestManagement />} 
+            />
+            <Route 
+              path="appointments" 
+              element={<ServiceProviderAppointment />} 
+            />
+            <Route 
+              path="reporting" 
+              element={<ResearchReporting />} 
+            />
+            <Route 
+              path="bulletin" 
+              element={<ResearchBulletinManagement />} 
+            />
+            <Route 
+              path="external" 
+              element={<ExternalResearchApplications />} 
+            />
+            <Route 
+              path="agenda-management" 
+              element={<AgendaManagement />} 
+            />
+            <Route 
+              path="project-archive" 
+              element={<ProjectArchive />} 
+            />
+            <Route 
+              path="audit-trail" 
+              element={<ResearchAuditTrail />} 
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </InternalSideMenuBar>
+      </ProtectedDepartmentRoute>
+    }
+  />
+
+  {/* Protected Quality Assurance Internal Domain */}
+  <Route
+    path="/departments/quality-assurance/*"
+    element={
+      <ProtectedDepartmentRoute department="qa">
+        <QAInternalSideBar>
+          <Routes>
+            <Route 
+              path="" 
+              element={<Navigate to="/departments/quality-assurance/learner-enrolment" replace />} 
+            />
+            <Route 
+              path="learner-enrolment" 
+              element={<InternalLearnerEnrolment />} 
+            />
+            <Route 
+              path="curriculum-implementation" 
+              element={<InternalCurriculumImplementation />} 
+            />
+            <Route 
+              path="skills-programmes" 
+              element={<InternalSkillsProgrammes />} 
+            />
+            <Route 
+              path="historical-qualifications" 
+              element={<InternalHistoricalQualifications />} 
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </QAInternalSideBar>
+      </ProtectedDepartmentRoute>
+    }
+  />
               {/* Catch all for unknown routes */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            {/* Redirect old QA path */}
+  <Route 
+    path="/departments/qa/*" 
+    element={<Navigate to="/departments/quality-assurance/learner-enrolment" replace />} 
+  />
+
+  {/* Catch all for unknown routes */}
+  <Route path="*" element={<NotFound />} />
+</Routes>
           </BrowserRouter>
         </AppProvider>
       </TooltipProvider>

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import type { AppRole } from '@/types';
+import { toast } from "sonner";
+import { ArrowLeft } from 'lucide-react';
 
 export default function CreateProfile() {
   const navigate = useNavigate();
@@ -10,6 +12,7 @@ export default function CreateProfile() {
   const [form, setForm] = useState({
     fullName: '',
     email: '',
+    username: '',
     password: '',
     companyName: '',
     companyType: '',
@@ -35,26 +38,35 @@ export default function CreateProfile() {
     e.preventDefault();
 
     // Map company type to AppRole
-  const getRoleFromCompanyType = (companyType: string): AppRole => {
-  switch (companyType) {
-    case 'Assessment Unit':
-      return 'Assessment Unit';
-    case 'QP':
-      return 'QP';
-    case 'SDP':
-      return 'SDP';
-    case 'NAMB (Legacy)':
-    case 'NAMB':
-      return 'NAMB';
-    case 'Cert Admin':
-      return 'Cert Admin';
-    default:
-      return 'SDP';
-  }
-};
+    const getRoleFromCompanyType = (companyType: string): AppRole => {
+      switch (companyType) {
+        case 'Assessment Unit':
+          return 'Assessment Unit';
+        case 'QP':
+          return 'QP';
+        case 'SDP':
+          return 'SDP';
+        case 'NAMB (Legacy)':
+        case 'NAMB':
+          return 'NAMB';
+        case 'Cert Admin':
+          return 'Cert Admin';
+        default:
+          return 'SDP';
+      }
+    };
 
     // Get existing profiles or empty array
     const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
+
+    // Check if username already exists
+    const existingProfile = profiles.find((p: any) => p.username === form.username);
+    if (existingProfile) {
+      toast.error("Profile creation failed", {
+        description: "Username already exists. Please choose a different username.",
+      });
+      return;
+    }
 
     // Determine the role from company type
     const userRole = getRoleFromCompanyType(form.companyType);
@@ -79,13 +91,27 @@ export default function CreateProfile() {
     // Update the global role context
     setCurrentRole(userRole);
 
-    alert(`Profile created for ${form.fullName} at ${form.companyName} as ${userRole}`);
+    toast.success("Profile Created!", {
+      description: `${form.fullName} at ${form.companyName} has been created as ${userRole}`,
+    });
+    
     navigate("/profiles/dashboard");
   };
 
   return (
-    <div className="min-h-screen bg-blue-50 flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full bg-white p-8 rounded-xl shadow-lg overflow-auto">
+    <div className="min-h-screen bg-blue-50 flex items-center justify-center p-4 relative">
+      {/* Back Button */}
+      <div className="absolute top-4 left-4 z-10">
+        <button
+          onClick={() => navigate('/profiles')}
+          className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm text-gray-700 rounded-lg hover:bg-white transition-all shadow-md"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Profiles
+        </button>
+      </div>
+
+      <div className="max-w-4xl w-full bg-white p-8 rounded-xl shadow-lg overflow-auto max-h-[90vh]">
         <h1 className="text-3xl font-bold mb-8 text-center">Create Profile</h1>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -107,6 +133,15 @@ export default function CreateProfile() {
                 name="email"
                 placeholder="Email"
                 value={form.email}
+                onChange={handleChange}
+                className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+              <input
+                type="text"
+                name="username"
+                placeholder="Username (for login)"
+                value={form.username}
                 onChange={handleChange}
                 className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required

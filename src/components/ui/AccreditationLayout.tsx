@@ -35,8 +35,10 @@ export function AccreditationLayout({ children, userName = "Admin User", userRol
     return location.pathname.startsWith(path);
   };
 const handleLogout = () => {
-    navigate('/');
-  };
+  localStorage.removeItem('department_login_accreditation');
+  localStorage.removeItem('current_department');
+  navigate('/departments');
+};
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}

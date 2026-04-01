@@ -44,8 +44,10 @@ export const Layout = ({ children }: LayoutProps) => {
   const [isAssessmentOpen, setIsAssessmentOpen] = useState(true);
 
   const handleLogout = () => {
-    navigate('/');
-  };
+  localStorage.removeItem('department_login_certification');
+  localStorage.removeItem('current_department');
+  navigate('/departments');
+};
 
   // Determine which section is active based on current path
   const isCertificationPath = location.pathname.startsWith('/certification');

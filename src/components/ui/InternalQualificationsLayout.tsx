@@ -24,9 +24,11 @@ export default function InternalQualificationsLayout({ children }: InternalQuali
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
    const navigate = useNavigate();
- const handleLogout = () => {
-    navigate('/');
-  };
+const handleLogout = () => {
+  localStorage.removeItem('department_login_qualifications');
+  localStorage.removeItem('current_department');
+  navigate('/departments');
+};
   // Update paths to match the new route structure in App.tsx
   const navigationItems = [
     {

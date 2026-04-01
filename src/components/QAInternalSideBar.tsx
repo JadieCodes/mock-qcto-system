@@ -31,9 +31,11 @@ export const QAInternalSideBar = ({ children }: QAInternalSideBarProps) => {
   const navigate = useNavigate();
   const [isQAMenuOpen, setIsQAMenuOpen] = useState(true);
 
-  const handleLogout = () => {
-    navigate('/');
-  };
+ const handleLogout = () => {
+  localStorage.removeItem('department_login_qa');
+  localStorage.removeItem('current_department');
+  navigate('/departments');
+};
 
   // Determine if we're in QA internal path
   const isQAInternalPath = location.pathname.startsWith('/departments/quality-assurance');

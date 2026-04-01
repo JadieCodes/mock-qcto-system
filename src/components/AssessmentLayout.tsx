@@ -37,9 +37,11 @@ export const AssessmentLayout = ({ children, userName, organizationName }: Asses
   const navigate = useNavigate();
   const [isNavOpen, setIsNavOpen] = useState(true);
 
-  const handleLogout = () => {
-    navigate('/');
-  };
+ const handleLogout = () => {
+  localStorage.removeItem('department_login_assessment');
+  localStorage.removeItem('current_department');
+  navigate('/departments');
+};
 
   return (
     <div className="flex flex-col min-h-screen bg-background">

@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   FlaskConical,
 } from "lucide-react";
+import ProtectedTab from "@/components/ProtectedTab";
 
 import CertificationDomain from "./dashboardTabs/CertificationDomain";
 import QualificationsDomain from "./dashboardTabs/QualificationsDomain";
@@ -16,12 +17,11 @@ import AccreditationDomain from "./dashboardTabs/AccreditationDomain";
 import QualityAssuranceDomain from "./dashboardTabs/QualityAssuranceDomain";
 import ResearchDomain from "./dashboardTabs/ResearchDomain";
 
-
 const tabs = [
   { label: "Certification Domain", icon: <BookOpen size={18} />, component: <CertificationDomain /> },
   { label: "Qualifications Domain", icon: <GraduationCap size={18} />, component: <QualificationsDomain /> },
   { label: "Assessment Domain", icon: <ClipboardCheck size={18} />, component: <AssessmentDomain 
-   userRole="quality_partner"  // or whatever role is appropriate
+   userRole="quality_partner"
   userName="John Doe"
   organizationName="ABC Training"/> },
   { label: "Accreditation Domain", icon: <BadgeCheck size={18} />, component: <AccreditationDomain /> },
@@ -32,19 +32,24 @@ const tabs = [
 export default function ProfilesMainDashboard() {
   const [activeTab, setActiveTab] = useState(0);
 
+  // Get current profile info to display user name
+  const currentProfile = JSON.parse(localStorage.getItem("currentProfile") || "{}");
+
   return (
     <div className="w-full min-h-screen bg-gray-50">
-
-      {/* FULL WIDTH WRAPPER */}
       <div className="w-full px-8 py-6">
+        {/* Header with user info only */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          {currentProfile.fullName && (
+            <p className="text-gray-600 mt-1">
+              Welcome, {currentProfile.fullName} ({currentProfile.companyName})
+            </p>
+          )}
+        </div>
 
-        {/* Title */}
-        <h1 className="text-3xl font-bold mb-6 text-gray-900">Dashboard</h1>
-
-        {/* STICKY TABS */}
         <div className="sticky top-0 bg-gray-50 z-20 pb-4">
           <div className="grid grid-cols-6 gap-3 border-b pb-3">
-
             {tabs.map((tab, index) => (
               <button
                 key={index}
@@ -60,13 +65,10 @@ export default function ProfilesMainDashboard() {
                 {tab.label}
               </button>
             ))}
-
           </div>
         </div>
 
-        {/* CONTENT */}
         <div className="bg-white p-8 rounded-xl shadow-md mt-4 min-h-[55vh] -ml-7 -mr-5 -mb-5">
-
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -75,12 +77,12 @@ export default function ProfilesMainDashboard() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {tabs[activeTab].component}
+              <ProtectedTab domainName={tabs[activeTab].label}>
+                {tabs[activeTab].component}
+              </ProtectedTab>
             </motion.div>
           </AnimatePresence>
-
         </div>
-
       </div>
     </div>
   );

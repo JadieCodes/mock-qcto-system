@@ -1,4 +1,4 @@
-import { Building2, Book, CheckCircle, ClipboardList, Award, FileSearch } from "lucide-react";
+import { Building2, Book, CheckCircle, ClipboardList, Award, FileSearch, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function DepartmentsLanding() {
@@ -49,8 +49,23 @@ export default function DepartmentsLanding() {
     },
   ];
 
+  const handleBack = () => {
+    navigate("/");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-200 p-10">
+      {/* Back Button */}
+      <div className="absolute top-4 left-4">
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm text-gray-700 rounded-lg hover:bg-white transition-all shadow-md"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Selection
+        </button>
+      </div>
+
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
         Select a Department
       </h1>

@@ -25,14 +25,9 @@ interface InternalSideMenuBarProps {
 // Research domain nav items
 const researchNavItems = [
   { path: '/departments/research/dashboard', label: 'Dashboard Research', icon: LayoutDashboard },
-  //{ path: '/departments/research/requests', label: 'Research Request Management', icon: FileText },
- // { path: '/departments/research/appointments', label: 'Service Provider Appointment', icon: Calendar },
- // { path: '/departments/research/reporting', label: 'Research & Reporting', icon: BarChart3 },
- // { path: '/departments/research/bulletin', label: 'Research Bulletin Management', icon: ClipboardList },
- // { path: '/departments/research/external', label: 'External Research Applications', icon: ExternalLink },
   { path: '/departments/research/agenda-management', label: 'Agenda Management', icon: Calendar },
   { path: '/departments/research/project-archive', label: 'Project Archive', icon: Archive },
-   { path: '/departments/research/audit-trail', label: 'Research Audit Trail', icon: History },
+  { path: '/departments/research/audit-trail', label: 'Research Audit Trail', icon: History },
 ];
 
 export const InternalSideMenuBar = ({ children }: InternalSideMenuBarProps) => {
@@ -41,7 +36,12 @@ export const InternalSideMenuBar = ({ children }: InternalSideMenuBarProps) => {
   const [isResearchOpen, setIsResearchOpen] = useState(true);
 
   const handleLogout = () => {
-    navigate('/');
+    // Clear research department login from localStorage
+    localStorage.removeItem('department_login_research');
+    localStorage.removeItem('current_department');
+    
+    // Navigate back to departments landing page
+    navigate('/departments');
   };
 
   // Determine if we're in research path
@@ -55,7 +55,6 @@ export const InternalSideMenuBar = ({ children }: InternalSideMenuBarProps) => {
             {isResearchPath && 'Research Domain'}
             {!isResearchPath && 'QCTO System'}
           </h1>
-          {/* Add ResearchRoleSelector here */}
           <ResearchRoleSelector />
         </div>
       </header>
