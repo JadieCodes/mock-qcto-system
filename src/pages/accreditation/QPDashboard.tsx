@@ -129,84 +129,151 @@ export default function QPDashboard({
     );
   };
 
-  const handleStartSiteVisit = (applicationId: string) => {
-    // Update the application status to in_progress
-    const updatedApplications = applications.map(app => {
-      if (app.id === applicationId && app.siteVisitSchedule) {
-        return {
-          ...app,
-          siteVisitSchedule: {
-            ...app.siteVisitSchedule,
-            status: 'in_progress' as SiteVisitStatus,
-          },
-        };
-      }
-      return app;
-    });
+const handleStartSiteVisit = (applicationId: string) => {
+  const now = new Date().toISOString();
 
-    // Update in mockAccreditationService
-    const app = applications.find(a => a.id === applicationId);
-    if (app && app.siteVisitSchedule) {
-      mockAccreditationService.updateApplication(applicationId, {
+  let updatedSelectedApplication: ApplicationStatus | null = null;
+
+  const updatedApplications = applications.map((app) => {
+    if (app.id === applicationId && app.siteVisitSchedule) {
+      const updatedApp = {
         ...app,
         siteVisitSchedule: {
           ...app.siteVisitSchedule,
           status: 'in_progress' as SiteVisitStatus,
+          visitStartedAt: now,
         },
-      });
+      };
+
+      updatedSelectedApplication = updatedApp;
+      return updatedApp;
     }
+    return app;
+  });
 
-    // Update localStorage
-    localStorage.setItem('applications', JSON.stringify(updatedApplications));
-    
-    // Update state
-    setApplications(updatedApplications);
-    setModalActiveTab('site-visit');
-    
-    alert('Site visit started! You can now complete your review.');
-  };
-
-  const handleCompleteSiteVisit = (applicationId: string, report: SiteVisitReport) => {
-    // Update the application status to completed
-    const updatedApplications = applications.map(app => {
-      if (app.id === applicationId && app.siteVisitSchedule) {
-        return {
-          ...app,
-          siteVisitSchedule: {
-            ...app.siteVisitSchedule,
-            status: 'completed' as SiteVisitStatus,
-          },
-          siteVisitReport: report,
-        };
-      }
-      return app;
+  const app = applications.find((a) => a.id === applicationId);
+  if (app && app.siteVisitSchedule) {
+    mockAccreditationService.updateApplication(applicationId, {
+      ...app,
+      siteVisitSchedule: {
+        ...app.siteVisitSchedule,
+        status: 'in_progress' as SiteVisitStatus,
+        visitStartedAt: now,
+      },
     });
+  }
 
-    // Update in mockAccreditationService
-    const app = applications.find(a => a.id === applicationId);
-    if (app && app.siteVisitSchedule) {
-      mockAccreditationService.updateApplication(applicationId, {
+  localStorage.setItem('applications', JSON.stringify(updatedApplications));
+  setApplications(updatedApplications);
+
+  if (updatedSelectedApplication) {
+    setSelectedApplication(updatedSelectedApplication);
+  }
+
+  setModalActiveTab('site-visit');
+
+  alert('Site visit started. You can now verify on-site presence and complete the review.');
+};
+
+
+const handleVerifyOnSite = (applicationId: string) => {
+  const now = new Date().toISOString();
+  const mockLocation = "On-site at applicant premises";
+
+  let updatedSelectedApplication: ApplicationStatus | null = null;
+
+  const updatedApplications = applications.map((app) => {
+    if (app.id === applicationId && app.siteVisitSchedule) {
+      const updatedApp = {
         ...app,
         siteVisitSchedule: {
           ...app.siteVisitSchedule,
-          status: 'completed',
+          isOnSiteVerified: true,
+          onSiteVerifiedAt: now,
+          currentLocation: mockLocation,
+        },
+      };
+
+      updatedSelectedApplication = updatedApp;
+      return updatedApp;
+    }
+    return app;
+  });
+
+  const app = applications.find((a) => a.id === applicationId);
+  if (app && app.siteVisitSchedule) {
+    mockAccreditationService.updateApplication(applicationId, {
+      ...app,
+      siteVisitSchedule: {
+        ...app.siteVisitSchedule,
+        isOnSiteVerified: true,
+        onSiteVerifiedAt: now,
+        currentLocation: mockLocation,
+      },
+    });
+  }
+
+  localStorage.setItem('applications', JSON.stringify(updatedApplications));
+  setApplications(updatedApplications);
+
+  if (updatedSelectedApplication) {
+    setSelectedApplication(updatedSelectedApplication);
+  }
+
+  alert('Current location sent and on-site presence verified.');
+};
+const handleCompleteSiteVisit = (applicationId: string, report: SiteVisitReport) => {
+  const completedAt = new Date().toISOString();
+
+  const app = applications.find((a) => a.id === applicationId);
+  const startedAt = app?.siteVisitSchedule?.visitStartedAt;
+
+  const durationMinutes = startedAt
+    ? Math.max(
+        1,
+        Math.round(
+          (new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 60000
+        )
+      )
+    : 0;
+
+  const updatedApplications = applications.map((app) => {
+    if (app.id === applicationId && app.siteVisitSchedule) {
+      return {
+        ...app,
+        siteVisitSchedule: {
+          ...app.siteVisitSchedule,
+          status: 'completed' as SiteVisitStatus,
+          visitCompletedAt: completedAt,
+          durationMinutes,
         },
         siteVisitReport: report,
-      });
+      };
     }
+    return app;
+  });
 
-    // Update localStorage
-    localStorage.setItem('applications', JSON.stringify(updatedApplications));
-    
-    // Update state
-    setApplications(updatedApplications);
-    setSelectedApplication(null);
-    setShowEvaluationTool(false);
-    setSiteVisitReport(report);
-    
-    alert('Site visit completed! Report generated.');
-  };
+  if (app && app.siteVisitSchedule) {
+    mockAccreditationService.updateApplication(applicationId, {
+      ...app,
+      siteVisitSchedule: {
+        ...app.siteVisitSchedule,
+        status: 'completed',
+        visitCompletedAt: completedAt,
+        durationMinutes,
+      },
+      siteVisitReport: report,
+    });
+  }
 
+  localStorage.setItem('applications', JSON.stringify(updatedApplications));
+  setApplications(updatedApplications);
+  setSelectedApplication(null);
+  setShowEvaluationTool(false);
+  setSiteVisitReport(report);
+
+  alert(`Site visit completed. Duration logged: ${durationMinutes} minute(s).`);
+};
   const filteredApplications = myAllocatedApplications.filter(app => {
     const matchesSearch = searchTerm === '' || 
       app.applicationId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -217,10 +284,14 @@ export default function QPDashboard({
   });
 
   // Get scheduled visits for this QP
-  const myScheduledVisits = scheduledVisits.filter(sv => 
-    sv.assignedToName === userName && 
-    (sv.status === 'accepted' || sv.status === 'sent_to_applicant' || sv.status === 'pending_confirmation')
-  );
+const myScheduledVisits = scheduledVisits.filter((sv) =>
+  sv.assignedToName === userName &&
+  (
+    sv.status === 'booking_confirmed' ||
+    sv.status === 'in_progress' ||
+    sv.status === 'completed'
+  )
+);
 
   // Report Tab
   const renderReportTab = () => {
@@ -267,6 +338,86 @@ export default function QPDashboard({
             </p>
           </div>
         </div>
+        {/* Site Visit Conductor Information */}
+<div className="bg-white p-4 rounded-lg border border-gray-200">
+  <h4 className="text-lg font-semibold text-gray-800 mb-4">
+    Site Visit Conductor Information
+  </h4>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <p className="text-xs text-gray-500 mb-1">Conducted By</p>
+      <p className="text-sm font-semibold text-gray-800">
+        {(report as any).visitExecution?.conductorName || report.conductedBy}
+      </p>
+      <p className="text-xs text-gray-500">
+        {(report as any).visitExecution?.conductorRole === 'qp'
+          ? 'Quality Partner'
+          : (report as any).visitExecution?.conductorRole === 'verifier'
+          ? 'Verifier'
+          : report.conductedByRole}
+      </p>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <p className="text-xs text-gray-500 mb-1">Current Location</p>
+      <p className="text-sm font-semibold text-gray-800">
+        {(report as any).visitExecution?.location || 'No location recorded'}
+      </p>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <p className="text-xs text-gray-500 mb-1">On-Site Verification</p>
+      <p
+        className={`text-sm font-semibold ${
+          (report as any).visitExecution?.onSiteVerified
+            ? 'text-green-600'
+            : 'text-red-600'
+        }`}
+      >
+        {(report as any).visitExecution?.onSiteVerified
+          ? 'Verified On-Site'
+          : 'Not Verified'}
+      </p>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <p className="text-xs text-gray-500 mb-1">Started At</p>
+      <p className="text-sm font-semibold text-gray-800">
+        {(report as any).visitExecution?.visitStartedAt
+          ? new Date((report as any).visitExecution.visitStartedAt).toLocaleString()
+          : 'Not recorded'}
+      </p>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <p className="text-xs text-gray-500 mb-1">Ended At</p>
+      <p className="text-sm font-semibold text-gray-800">
+        {(report as any).visitExecution?.visitCompletedAt
+          ? new Date((report as any).visitExecution.visitCompletedAt).toLocaleString()
+          : 'Not recorded'}
+      </p>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <p className="text-xs text-gray-500 mb-1">Duration</p>
+      <p className="text-sm font-semibold text-gray-800">
+        {(report as any).visitExecution?.durationMinutes
+          ? `${(report as any).visitExecution.durationMinutes} minute(s)`
+          : 'Not recorded'}
+      </p>
+    </div>
+  </div>
+
+  {(report as any).visitExecution?.onSiteVerifiedAt && (
+    <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
+      <p className="text-sm text-green-700">
+        On-site presence verified at{' '}
+        {new Date((report as any).visitExecution.onSiteVerifiedAt).toLocaleString()}
+      </p>
+    </div>
+  )}
+</div>
 
         {/* Risk Profile (for QP only) */}
         {report.riskProfile && (
@@ -458,25 +609,72 @@ export default function QPDashboard({
             </div>
           </div>
         </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+  <h4 className="text-sm font-semibold text-gray-700 mb-3">On-Site Verification</h4>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <p className="text-xs text-gray-500">Current Status</p>
+      <p className="text-sm font-medium">
+        {selectedApplication.siteVisitSchedule?.isOnSiteVerified
+          ? 'Verified On-Site'
+          : 'Not yet verified'}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xs text-gray-500">Location</p>
+      <p className="text-sm font-medium">
+        {selectedApplication.siteVisitSchedule?.currentLocation || 'No location sent yet'}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xs text-gray-500">Verified At</p>
+      <p className="text-sm font-medium">
+        {selectedApplication.siteVisitSchedule?.onSiteVerifiedAt
+          ? new Date(selectedApplication.siteVisitSchedule.onSiteVerifiedAt).toLocaleString()
+          : 'Not yet verified'}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xs text-gray-500">Duration</p>
+      <p className="text-sm font-medium">
+        {selectedApplication.siteVisitSchedule?.status === 'completed'
+          ? `${selectedApplication.siteVisitSchedule?.durationMinutes || 0} minute(s)`
+          : selectedApplication.siteVisitSchedule?.visitStartedAt
+          ? `Started at ${new Date(selectedApplication.siteVisitSchedule.visitStartedAt).toLocaleTimeString()}`
+          : 'Not started'}
+      </p>
+    </div>
+  </div>
+
+  {selectedApplication.siteVisitSchedule?.status === 'in_progress' &&
+    !selectedApplication.siteVisitSchedule?.isOnSiteVerified && (
+      <div className="mt-4">
+        <button
+          onClick={() => handleVerifyOnSite(selectedApplication.id)}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+        >
+          Send Current Location
+        </button>
+      </div>
+    )}
+</div>
 
         {/* Action Buttons */}
-        <div className="flex space-x-3">
-          {!existingReport ? (
-            <button
-              onClick={() => setShowEvaluationTool(true)}
-              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700"
-            >
-              Start Site Visit Evaluation
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowEvaluationTool(true)}
-              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Edit Report
-            </button>
-          )}
-        </div>
+  <div className="flex space-x-3">
+  {(selectedApplication?.siteVisitSchedule?.status === 'in_progress' ||
+    selectedApplication?.siteVisitSchedule?.status === 'completed') && (
+    <button
+      onClick={() => setShowEvaluationTool(true)}
+      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+    >
+      {existingReport ? 'Edit Report' : 'Open Evaluation Tool'}
+    </button>
+  )}
+</div>
 
         {/* Quick Status if report exists */}
         {existingReport && (
@@ -558,18 +756,19 @@ export default function QPDashboard({
                   {myAllocatedApplications.filter(a => a.status === 'step9_completed').length}
                 </p>
               </div>
-              <div className="bg-yellow-50 rounded-lg shadow-sm p-4 border border-yellow-200">
-                <p className="text-sm text-yellow-600">In Progress</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {myAllocatedApplications.filter(a => a.siteVisitSchedule?.status === 'in_progress').length}
-                </p>
-              </div>
-              <div className="bg-green-50 rounded-lg shadow-sm p-4 border border-green-200">
-                <p className="text-sm text-green-600">Scheduled</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {myAllocatedApplications.filter(a => a.siteVisitSchedule?.status === 'accepted').length}
-                </p>
-              </div>
+           <div className="bg-yellow-50 rounded-lg shadow-sm p-4 border border-yellow-200">
+  <p className="text-sm text-yellow-600">In Progress</p>
+  <p className="text-2xl font-bold text-yellow-600">
+    {myScheduledVisits.filter((v) => v.status === 'in_progress').length}
+  </p>
+</div>
+
+<div className="bg-green-50 rounded-lg shadow-sm p-4 border border-green-200">
+  <p className="text-sm text-green-600">Scheduled</p>
+  <p className="text-2xl font-bold text-green-600">
+    {myScheduledVisits.filter((v) => v.status === 'booking_confirmed').length}
+  </p>
+</div>
             </div>
 
             {/* Filters */}
@@ -638,10 +837,9 @@ export default function QPDashboard({
                         (a.allocatedTo === 'quality_partner' || a.category === 'quality_partner')
                       );
                       
-                      const visit = scheduledVisits.find(sv => 
-                        sv.applicationId === app.id && 
-                        sv.assignedToName === userName
-                      );
+                     const visit = myScheduledVisits.find(sv => 
+  sv.applicationId === app.id
+);
                       
                       return (
                         <React.Fragment key={app.id}>
@@ -663,42 +861,66 @@ export default function QPDashboard({
                               {allocation ? new Date(allocation.allocatedAt || allocation.assignedAt).toLocaleDateString() : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {app.siteVisitSchedule?.status === 'in_progress' ? (
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                                  In Progress
-                                </span>
-                              ) : app.siteVisitSchedule?.status === 'accepted' ? (
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                                  Scheduled
-                                </span>
-                              ) : (
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                                  Allocated
-                                </span>
-                              )}
+                          {app.siteVisitSchedule?.status === 'booking_confirmed' ? (
+  <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+    Booking Confirmed
+  </span>
+) : app.siteVisitSchedule?.status === 'in_progress' ? (
+  <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+    In Progress
+  </span>
+) : app.siteVisitSchedule?.status === 'completed' ? (
+  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+    Completed
+  </span>
+) : (
+  <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+    Pending Schedule
+  </span>
+)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {visit ? (
-                                <div>
-                                  {visit.status === 'accepted' && (
-                                    <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
-                                      {new Date(visit.scheduledDate).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                  {visit.status === 'sent_to_applicant' && (
-                                    <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
-                                      Awaiting Acceptance
-                                    </span>
-                                  )}
-                                  {visit.status === 'pending_confirmation' && (
-                                    <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
-                                      Pending
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-gray-400">Not scheduled</span>
-                              )}
+                         {visit ? (
+  <div>
+    {visit.status === 'booking_confirmed' && (
+      <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
+        Booking Confirmed
+      </span>
+    )}
+
+    {(visit.status === 'pending_acceptance' || visit.status === 'sent_to_applicant') && (
+      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
+        Awaiting Applicant Acceptance
+      </span>
+    )}
+
+    {visit.status === 'applicant_confirmed' && (
+      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+        Awaiting Internal Confirmation
+      </span>
+    )}
+
+    {visit.status === 'pending_confirmation' && (
+      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
+        Pending Internal Send
+      </span>
+    )}
+
+    {visit.status === 'in_progress' && (
+      <span className="text-xs px-2 py-1 bg-orange-100 text-orange-800 rounded-full">
+        In Progress
+      </span>
+    )}
+
+    {visit.status === 'completed' && (
+      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-800 rounded-full">
+        Completed
+      </span>
+    )}
+  </div>
+) : (
+  <span className="text-xs text-gray-400">Not scheduled</span>
+)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <button
@@ -793,27 +1015,44 @@ export default function QPDashboard({
                                     {visit && (
                                       <div className="mt-4">
                                         <h4 className="text-sm font-semibold text-gray-900 mb-2">Scheduled Visit</h4>
-                                        <div className={`p-3 rounded border ${
-                                          visit.status === 'accepted' 
-                                            ? 'bg-green-50 border-green-200' 
-                                            : visit.status === 'sent_to_applicant'
-                                            ? 'bg-yellow-50 border-yellow-200'
-                                            : 'bg-purple-50 border-purple-200'
-                                        }`}>
-                                          <p className="text-sm text-gray-700">
-                                            Date: {new Date(visit.scheduledDate).toLocaleDateString()} at {visit.scheduledTime}
-                                          </p>
-                                          <p className="text-sm text-gray-700 mt-1">Venue: {visit.venue}</p>
-                                          {visit.status === 'accepted' && (
-                                            <p className="text-xs text-green-600 mt-2">✓ Applicant has accepted this visit</p>
-                                          )}
-                                          {visit.status === 'sent_to_applicant' && (
-                                            <p className="text-xs text-yellow-600 mt-2">⏳ Waiting for applicant to accept</p>
-                                          )}
-                                          {visit.status === 'pending_confirmation' && (
-                                            <p className="text-xs text-purple-600 mt-2">⏳ Waiting for Assistant Director to send</p>
-                                          )}
-                                        </div>
+                                 <div className={`p-3 rounded border ${
+  visit.status === 'booking_confirmed'
+    ? 'bg-green-50 border-green-200'
+    : visit.status === 'applicant_confirmed'
+    ? 'bg-blue-50 border-blue-200'
+    : visit.status === 'pending_acceptance' || visit.status === 'sent_to_applicant'
+    ? 'bg-yellow-50 border-yellow-200'
+    : 'bg-purple-50 border-purple-200'
+}`}>
+  <p className="text-sm text-gray-700">
+    Date: {new Date(visit.scheduledDate).toLocaleDateString()} at {visit.scheduledTime}
+  </p>
+  <p className="text-sm text-gray-700 mt-1">Venue: {visit.venue}</p>
+
+  {visit.status === 'booking_confirmed' && (
+    <p className="text-xs text-green-600 mt-2">
+      ✓ Booking fully confirmed. Site visit may start.
+    </p>
+  )}
+
+  {visit.status === 'applicant_confirmed' && (
+    <p className="text-xs text-blue-600 mt-2">
+      ⏳ Applicant accepted. Waiting for internal/QCTO confirmation.
+    </p>
+  )}
+
+  {(visit.status === 'pending_acceptance' || visit.status === 'sent_to_applicant') && (
+    <p className="text-xs text-yellow-600 mt-2">
+      ⏳ Waiting for applicant to accept.
+    </p>
+  )}
+
+  {visit.status === 'pending_confirmation' && (
+    <p className="text-xs text-purple-600 mt-2">
+      ⏳ Waiting for internal user to send the schedule.
+    </p>
+  )}
+</div>
                                       </div>
                                     )}
                                   </div>
@@ -1006,6 +1245,16 @@ export default function QPDashboard({
               ) : modalActiveTab === 'report' ? (
                 renderReportTab()
               ) : null}
+
+              {selectedApplication?.siteVisitSchedule?.status !== 'booking_confirmed' &&
+ selectedApplication?.siteVisitSchedule?.status !== 'in_progress' &&
+ selectedApplication?.siteVisitSchedule?.status !== 'completed' && (
+  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+    <p className="text-sm text-yellow-700">
+      This booking is not fully confirmed yet. The site visit cannot start until both the Applicant and QCTO have confirmed the booking.
+    </p>
+  </div>
+)}
             </div>
 
             {/* Action Buttons */}
@@ -1018,14 +1267,14 @@ export default function QPDashboard({
               </button>
               
               {/* Show Start Site Visit button only for accepted visits */}
-              {selectedApplication?.siteVisitSchedule?.status === 'accepted' && modalActiveTab === 'details' && (
-                <button
-                  onClick={() => handleStartSiteVisit(selectedApplication.id)}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  Start Site Visit
-                </button>
-              )}
+{selectedApplication?.siteVisitSchedule?.status === 'booking_confirmed' && modalActiveTab === 'site-visit' && (
+  <button
+    onClick={() => handleStartSiteVisit(selectedApplication.id)}
+    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+  >
+    Start Site Visit
+  </button>
+)}
               
               {/* Show Complete button when in progress */}
               {selectedApplication?.siteVisitSchedule?.status === 'in_progress' && modalActiveTab === 'site-visit' && siteVisitReport && (

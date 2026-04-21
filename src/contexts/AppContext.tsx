@@ -38,6 +38,7 @@ interface User {
   businessUnit: string;
 }
 
+
 interface AppContextType {
 
    auditEntries: AuditEntry[]; // This must be included
@@ -131,6 +132,7 @@ rejectProjectReport: (
   profileSubmissions: Submission[];
   addProfileSubmission: (submission: Omit<Submission, 'id'>) => void;
   acceptProfileSubmission: (id: string) => void;
+  clearExpiredCorrections: (submissions: Submission[]) => Submission[];
 
   batches: Batch[];
   addBatch: (batch: Omit<Batch, 'batchUuid'>) => void;
@@ -145,12 +147,14 @@ rejectProjectReport: (
   updatePrintJob: (jobId: string, updates: Partial<PrintJob>) => void;
 }
 
+
+
 // Mock user data based on roles
 const getUserDataByRole = (role: AppRole): User => {
   const userMap: Record<AppRole, User> = {
     // Existing roles
     'Assessment Unit': { name: 'Alex Assessment', email: 'alex.assessment@qcto.gov.za', role: 'Assessment Unit', businessUnit: 'Assessment' },
-    'Cert Admin': { name: 'Chris Certificate', email: 'chris.cert@qcto.gov.za', role: 'Cert Admin', businessUnit: 'Certification' },
+    'Certification Practitioner': { name: 'Chris Certificate', email: 'chris.cert@qcto.gov.za', role: 'Certification Practitioner', businessUnit: 'Certification' },
     'Supervisor': { name: 'Sam Supervisor', email: 'sam.supervisor@qcto.gov.za', role: 'Supervisor', businessUnit: 'Certification' },
     'Printer': { name: 'Peter Printer', email: 'peter.printer@qcto.gov.za', role: 'Printer', businessUnit: 'Printing' },
     'Finance': { name: 'Fiona Finance', email: 'fiona.finance@qcto.gov.za', role: 'Finance', businessUnit: 'Finance' },
@@ -1515,10 +1519,10 @@ const updateTask = (
   }, [approvedRequests]);
 
   // Initialize with Cert Admin as default
-  const [currentRole, setCurrentRole] = useState<AppRole>(() => {
-    const storedRole = localStorage.getItem('currentUserRole') as AppRole | null;
-    return storedRole || 'Cert Admin';
-  });
+ const [currentRole, setCurrentRole] = useState<AppRole>(() => {
+  const storedRole = localStorage.getItem('currentUserRole') as AppRole | null;
+  return storedRole || 'Certification Practitioner';
+});
   const [requests, setRequests] = useState<ResearchRequest[]>([]);
 
   // Add currentUser state based on role
@@ -1548,12 +1552,59 @@ const updateTask = (
   });
 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [profileSubmissions, setProfileSubmissions] = useState<Submission[]>([]);
+
+ const clearExpiredCorrections = (submissions: Submission[]) => {
+  return submissions.filter((sub) => {
+    const todoDate = sub.assessmentData?.correctionRecord?.todoDate;
+
+    if (!todoDate) return true;
+
+    const isExpired = new Date(todoDate).getTime() < Date.now();
+
+    if (isExpired) {
+      console.log('Removing expired correction submission:', sub.id);
+      return false;
+    }
+
+    return true;
+  });
+};
+
+const PROFILE_SUBMISSIONS_KEY = 'certification_profile_submissions';
+
+const [profileSubmissions, setProfileSubmissions] = useState<Submission[]>(() => {
+
+  const stored = localStorage.getItem(PROFILE_SUBMISSIONS_KEY);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      return clearExpiredCorrections(parsed);
+    } catch (e) {
+      console.error('Error loading profile submissions', e);
+    }
+  }
+  return [];
+});
+
+ useEffect(() => {
+  const cleaned = clearExpiredCorrections(profileSubmissions);
+
+  if (cleaned.length !== profileSubmissions.length) {
+    setProfileSubmissions(cleaned);
+  }
+}, [profileSubmissions]);
+
+useEffect(() => {
+  localStorage.setItem(PROFILE_SUBMISSIONS_KEY, JSON.stringify(profileSubmissions));
+}, [profileSubmissions]);
+
   const [batches, setBatches] = useState<Batch[]>([]);
   const [integrationJobs, setIntegrationJobs] = useState<IntegrationJob[]>([]);
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
 
   const STORAGE_KEY = 'research_requests';
+
+ 
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -1661,14 +1712,16 @@ const updateTask = (
   };
 
   // --- PROFILE SUBMISSIONS ---
-  const addProfileSubmission = (submission: Omit<Submission, 'id'>) => {
-    const newSubmission: Submission = {
-      ...submission,
-      id: `PROFILE-${Date.now()}`,
-    };
-    setProfileSubmissions(prev => [...prev, newSubmission]);
+ const addProfileSubmission = (submission: Omit<Submission, 'id'>) => {
+  const newSubmission: Submission = {
+    ...submission,
+    id: `PROFILE-${Date.now()}`,
   };
 
+  console.log('Saved submission in context:', newSubmission);
+
+  setProfileSubmissions((prev) => [...prev, newSubmission]);
+};
   const acceptProfileSubmission = (id: string): void => {
     setProfileSubmissions(prev =>
       prev.map(sub =>
@@ -1736,6 +1789,7 @@ const updateTask = (
     );
   };
 
+
   return (
     <AppContext.Provider
       value={{
@@ -1797,6 +1851,8 @@ rejectProjectReport,
         addAuditEntry,
          deleteMilestone,
   deleteTask,
+  clearExpiredCorrections
+  
       }}
     >
       {children}

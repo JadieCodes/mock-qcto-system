@@ -39,10 +39,12 @@ export default function DevelopmentProjectModal({
   project,
   mode 
 }: DevelopmentProjectModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'team' | 'timeline' | 'comments'>('overview');
-  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'team' | 'timeline' | 'comments'>('overview');
+const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
 
-  if (!isOpen || !project) return null;
+if (!isOpen || !project) return null;
+
+const app = project?.applicationData;
 
   // Mock data for development project
   const projectDocuments = [

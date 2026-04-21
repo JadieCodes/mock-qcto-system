@@ -1,5 +1,7 @@
 // components/qualifications/CyclePlan.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getApplications } from '@/lib/applicationStorage';
+import type { Application } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -35,8 +37,8 @@ interface CyclePlan {
   endDate: string;
   status: 'Planning' | 'In Progress' | 'Completed' | 'Published';
   phases: Phase[];
+  applicationData?: Application;
 }
-
 const cyclePlans: CyclePlan[] = [
   {
     id: 1,
@@ -92,6 +94,16 @@ export default function QualificationCyclePlan() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<CyclePlan | null>(null);
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
+  const [applications, setApplications] = useState<Application[]>([]);
+  
+
+useEffect(() => {
+  setApplications(getApplications());
+}, []);
+
+const developmentWorkspaceApps = applications.filter(
+  (app) => app.status === 'development_workspace'
+);
 
   const handleCreatePlan = () => {
     setSelectedPlan(null);
@@ -132,7 +144,48 @@ export default function QualificationCyclePlan() {
         return <Circle className="h-4 w-4 text-gray-300" />;
     }
   };
-
+const dynamicCyclePlans = developmentWorkspaceApps.map((app, index) => ({
+  id: Number(`${index + 1000}`),
+  title: app.qualification,
+  qualificationCode: app.id,
+  industry: 'To be assigned',
+  nqfLevel: 'TBD',
+  startDate: app.evaluationSummary?.approvalDate || app.submissionDate,
+  endDate: '',
+  status: 'Planning' as const,
+  phases: [
+    {
+      name: 'Scoping',
+      startDate: '',
+      endDate: '',
+      responsibleRole: 'Curriculum Developer',
+      status: 'pending' as const
+    },
+    {
+      name: 'Profile',
+      startDate: '',
+      endDate: '',
+      responsibleRole: 'Subject Matter Expert',
+      status: 'pending' as const
+    },
+    {
+      name: 'Curriculum Specification',
+      startDate: '',
+      endDate: '',
+      responsibleRole: 'Instructional Designer',
+      status: 'pending' as const
+    },
+    {
+      name: 'Knowledge & Practice',
+      startDate: '',
+      endDate: '',
+      responsibleRole: 'Assessment Specialist',
+      status: 'pending' as const
+    }
+  ],
+  applicationData: app
+}));
+const allCyclePlans = [...dynamicCyclePlans, ...cyclePlans];
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'Completed':
@@ -172,7 +225,7 @@ export default function QualificationCyclePlan() {
 
       {/* Cycle Plans Grid */}
       <div className="grid gap-4">
-        {cyclePlans.map((plan) => (
+        {allCyclePlans.map((plan) => (
           <Card key={plan.id} className="hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">

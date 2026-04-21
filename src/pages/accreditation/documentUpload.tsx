@@ -115,10 +115,23 @@ export default function DocumentUpload({
           {isPaymentUpload ? 'Upload Proof of Payment' : 'Upload Required Documents'}
         </h2>
         <p className="text-gray-600">Application ID: {applicationId}</p>
+        {isPaymentUpload && (
+  <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+    <p className="text-xs text-gray-600">Application ID</p>
+    <p className="text-sm font-medium text-gray-800">{applicationId}</p>
+    <p className="text-xs text-gray-600 mt-2">Upload rule</p>
+    <p className="text-sm text-red-600">
+      Only upload the proof of payment that belongs to this application.
+    </p>
+  </div>
+)}
         {isPaymentUpload ? (
-          <p className="text-sm text-yellow-600 mt-2">
-            Please upload your proof of payment to complete the application process.
-          </p>
+        <p className="text-sm text-yellow-700 mt-2">
+  Please upload proof of payment for this application only.
+  <p className="text-xs text-red-600 mt-1">
+  Payment must match this application reference and must not be reused for another application.
+</p>
+</p>
         ) : (
           <p className="text-sm text-blue-600 mt-2">
             Please upload all required documents for final review.

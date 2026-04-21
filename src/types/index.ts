@@ -1,6 +1,6 @@
 export type AppRole = 
   | 'Assessment Unit' 
-  | 'Cert Admin' 
+  | 'Certification Practitioner' 
   | 'Supervisor' 
   | 'Printer' 
   | 'Finance'
@@ -88,8 +88,7 @@ export type DocumentType =
   
   // Issue - Occupational specific
   | 'file_3_4'
-  | 'signed_result_approval'
-  | 'supporting_evidence'
+  
   
   // Issue - Skills specific
   | 'programme_approval_letter'
@@ -127,6 +126,7 @@ export interface DocumentVersion {
   uploadedBy: string;
   verified: boolean;
 }
+
 
 // Correction Note Interface
 export interface CorrectionNote {
@@ -166,6 +166,11 @@ export interface CorrectionRecord {
   returnReason: string;
   correctionNotes?: CorrectionNote[];
   integrationErrorLog?: IntegrationErrorLog;
+
+  // ✅ NEW (deadline system)
+  todoDate?: string;      // deadline to correct
+  expired?: boolean;      // system marked expired
+  expiredAt?: string;     // when expired
 }
 
 // Submission Document Interface
@@ -212,6 +217,26 @@ export interface Submission {
     integrationError?: string;
     integrationFailedAt?: string;
     systemChecks?: Array<{ name: string; passed: boolean; error?: string }>;
+    // External pre-intake CVS validation
+preIntakeValidationStatus?: 'not_started' | 'processing' | 'passed' | 'failed';
+preIntakeValidationAt?: string;
+preIntakeValidatedBy?: string;
+preIntakeValidationError?: string;
+preIntakeSystemChecks?: Array<{ name: string; passed: boolean; error?: string }>;
+preIntakeValidationStats?: {
+  totalChecks: number;
+  passedChecks: number;
+  failedChecks: number;
+};
+preIntakeValidationSummary?: {
+  totalLearners: number;
+  passedLearners: number;
+  failedLearners: number;
+  failedRows?: Array<{
+    learnerIdentifier: string;
+    reason: string;
+  }>;
+};
     // Re-issue fields
     reissueNumber?: string;
     previousCertificateNumber?: string;
@@ -224,6 +249,10 @@ export interface Submission {
     // Batch fields - ADD THIS
     readyForBatch?: boolean;
     readyForBatchAt?: string;
+    sentBackToIntake?: boolean;
+sentBackToIntakeAt?: string;
+sentBackToIntakeBy?: string;
+sentBackToIntakeReason?: string;
   };
   createdBy: string;
   processType: ProcessType;
@@ -401,6 +430,7 @@ export interface AcknowledgementLetter {
 }
 // Document types for accreditation
 export type AccreditationDocumentType = 
+  | 'application_form'
   | 'company_registration'
   | 'qms_documents'
   | 'training_material'
@@ -409,6 +439,7 @@ export type AccreditationDocumentType =
   | 'proof_of_payment'
   | 'site_visit_report'
   | 'outcome_letter';
+  
 
 // Document interface
 export interface AccreditationDocument {
@@ -419,6 +450,16 @@ export interface AccreditationDocument {
   uploadedAt: string;
   fileSize?: number;
   verified?: boolean;
+
+  validationStatus?: 'passed' | 'failed';
+  validationError?: string;
+  validationChecks?: Array<{
+    id: string;
+    label: string;
+    status: 'pending' | 'processing' | 'passed' | 'failed';
+    message?: string;
+  }>;
+  reviewDecision?: 'pending' | 'approved' | 'rejected';
 }
 
 // Enhanced Applicant Info
@@ -472,23 +513,97 @@ export interface EvaluationHistoryEntry {
   aiRecommendation?: AIRecommendation;
 }
 
+export interface InitialAccreditationCheck {
+  qualificationTitle: boolean;
+  saqaId: boolean;
+  curriculumCode: boolean;
+  nqfLevel: boolean;
+  credits: boolean;
+}
 
+export interface RequiredUploadItem {
+  id: string;
+  label: string;
+  uploaded?: boolean;
+  uploadedDocumentId?: string;
+}
+
+export interface ApplicantRequiredDocumentUpload {
+  requirementId: string;
+  label: string;
+  document?: AccreditationDocument;
+  uploadedAt?: string;
+}
 
 // Add to ApplicationStatus interface if not already there
 export interface ApplicationStatus {
-  // ... existing fields
+  id: string;
+  applicationId: string;
+  status: AccreditationStep;
+  submittedDate?: string;
+  lastUpdated: string;
   siteVisitSchedule?: SiteVisitSchedule;
-  // ... other fields
+  outcomeLetter?: OutcomeLetter;
+  acknowledgementLetter?: AcknowledgementLetter;
+  paymentNotification?: PaymentNotification;
+  paymentStatus: 'pending' | 'paid' | 'verified';
+  paymentAmount?: number;
+  paymentDate?: string;
+  paymentAllocatedToApplicationId?: string;
+paymentReferenceUsed?: string;
+paymentVerifiedForCorrectApplication?: boolean;
+paymentVerificationNotes?: string;
+  proofOfPayment?: AccreditationDocument[];
+  applicationData?: ApplicationForm;
+  evaluationHistory?: EvaluationHistoryEntry[];
+
+  initialQualificationChecks?: InitialAccreditationCheck;
+  requiredApplicantDocuments?: RequiredUploadItem[];
+  applicantRequiredUploads?: ApplicantRequiredDocumentUpload[];
+
+  initialReview?: {
+    reviewedBy?: string;
+    reviewedAt?: string;
+    checklist?: EvaluationChecklist[];
+    decision?: 'approved' | 'rejected';
+    comments?: string;
+  };
+
+  finalReview?: {
+    reviewedBy?: string;
+    reviewedAt?: string;
+    checklist?: EvaluationChecklist[];
+    aiRecommendation?: AIRecommendation;
+    decision?: 'approved' | 'rejected';
+    comments?: string;
+  };
+  financeVerificationRequested?: boolean;
+financeVerificationRequestedAt?: string;
+financeVerificationRequestedBy?: string;
+financeVerificationStatus?: 'not_requested' | 'requested' | 'confirmed';
+desktopEvaluationUploaded?: boolean;
+desktopEvaluationUploadedAt?: string;
+desktopEvaluationUploadedBy?: string;
+
+siteVisitAssigned?: boolean;
+siteVisitAssignedAt?: string;
+siteVisitAssignedBy?: string;
+
+  scheduleSent?: boolean;
+  scheduleStatus?: SiteVisitStatus;
+  siteVisitReport?: SiteVisitReport;
 }
-export type SiteVisitStatus = 
-  | 'pending_confirmation'  // Deputy Director assigned, waiting for Assistant Director to send
-  | 'sent_to_applicant'      // Assistant Director sent to applicant
-  | 'pending_acceptance'     // Applicant needs to accept
-  | 'accepted'               // Applicant accepted
-  | 'in_progress'            // QP/Verifier started the site visit
-  | 'rescheduled'            // Applicant requested reschedule
-  | 'completed'              // Site visit done
-  | 'cancelled';  
+export type SiteVisitStatus =
+ 'pending_confirmation'
+| 'sent_to_applicant'
+| 'pending_acceptance'
+| 'applicant_confirmed'
+| 'pending_qcto_confirmation'
+| 'booking_confirmed'
+| 'reschedule_requested'
+| 'in_progress'
+| 'completed'
+| 'cancelled'  
 
 export interface SiteVisitSchedule {
   scheduledDate: string;
@@ -498,6 +613,27 @@ export interface SiteVisitSchedule {
   assessorEmail?: string;
   status: SiteVisitStatus;
   notes?: string;
+  isOnSiteVerified?: boolean;
+onSiteVerifiedAt?: string;
+currentLocation?: string;
+visitStartedAt?: string;
+visitCompletedAt?: string;
+durationMinutes?: number;
+
+  applicantConfirmed?: boolean;
+  applicantConfirmedAt?: string;
+
+  qctoConfirmed?: boolean;
+  qctoConfirmedAt?: string;
+  qctoConfirmedBy?: string;
+
+  bookingConfirmed?: boolean;
+  bookingConfirmedAt?: string;
+
+  rescheduleRequested?: boolean;
+  rescheduleRequestedAt?: string;
+  rescheduleRequestedBy?: 'applicant';
+  rescheduleReason?: string;
 }
 
    // Add these to your existing types file
@@ -573,6 +709,23 @@ export interface ApplicationStatus {
   siteVisitReport?: SiteVisitReport; // Add this line
 }
 
+export interface DraftReportDocumentItem {
+  label: string;
+  status: boolean;
+  file: string | null;
+  optional?: boolean;
+}
+
+export interface DraftReportData {
+  applicationId: string;
+  applicant: string;
+  qualification: string;
+  date: string;
+  time: string;
+  documents: DraftReportDocumentItem[];
+  overallStatus: 'complete' | 'incomplete';
+  recommendation: string;
+}
 // types/application.types.ts
 
 // Add this export at the end of your lib/index.tsx file
@@ -582,16 +735,26 @@ export interface Application {
   applicantName: string;
   qualification: string;
   submissionDate: string;
-  status: 'draft' | 'submitted' | 'document_review' | 'resolution' | 'evaluation' | 'evaluation_summary' | 'approved' | 'rejected';
+  status:
+  | 'draft'
+  | 'submitted'
+  | 'document_review'
+  | 'resolution'
+  | 'evaluation'
+  | 'evaluation_summary'
+  | 'development_workspace'
+  | 'approved'
+  | 'rejected';
   documents: {
     applicationLetter: string | null;
     motivation: string | null;
     reference: string | null;
     acrLetter: string | null;
+    other: string |null
   };
   report?: {
     verified: boolean;
-    draftReport: string;
+    draftReport: string | DraftReportData;
     verificationDate: string;
   };
   documentReview?: {
@@ -648,6 +811,9 @@ export interface Application {
     approvedBy: string;
   };
 }
+
+
+
 // Add to your existing Application interface in lib/index.ts
 
 //research internal : 

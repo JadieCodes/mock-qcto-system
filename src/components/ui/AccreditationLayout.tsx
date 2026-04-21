@@ -1,13 +1,13 @@
 import React from 'react';
-import { Link, useLocation,useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  ClipboardList, 
-  Calendar, 
-  FileText, 
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  ClipboardList,
+  Calendar,
+  FileText,
   Settings,
   LogOut,
-  ChevronRight
+  ChevronRight,
 } from 'lucide-react';
 
 interface AccreditationLayoutProps {
@@ -16,16 +16,20 @@ interface AccreditationLayoutProps {
   userRole?: string;
 }
 
-export function AccreditationLayout({ children, userName = "Admin User", userRole = "Accreditation Officer" }: AccreditationLayoutProps) {
+export function AccreditationLayout({
+  children,
+  userName = 'Admin User',
+  userRole = 'Accreditation Officer',
+}: AccreditationLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const navigation = [
-    { name: 'Dashboard', href: '/departments/accreditation', icon: LayoutDashboard },
+   
     { name: 'Applications', href: '/departments/accreditation/applications', icon: ClipboardList },
     { name: 'Site Visits', href: '/departments/accreditation/site-visits', icon: Calendar },
-    //{ name: 'Reports', href: '/departments/accreditation/reports', icon: FileText },
-    { name: 'Settings', href: '/departments/accreditation/settings', icon: Settings },
+    { name: 'Outcome Letters', href: '/departments/accreditation/outcome-letters', icon: FileText },
+   
   ];
 
   const isActive = (path: string) => {
@@ -34,14 +38,15 @@ export function AccreditationLayout({ children, userName = "Admin User", userRol
     }
     return location.pathname.startsWith(path);
   };
-const handleLogout = () => {
-  localStorage.removeItem('department_login_accreditation');
-  localStorage.removeItem('current_department');
-  navigate('/departments');
-};
+
+  const handleLogout = () => {
+    localStorage.removeItem('department_login_accreditation');
+    localStorage.removeItem('current_department');
+    navigate('/departments');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900">Accreditation Domain</h2>
@@ -65,6 +70,7 @@ const handleLogout = () => {
             {navigation.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
+
               return (
                 <li key={item.name}>
                   <Link
@@ -76,7 +82,11 @@ const handleLogout = () => {
                     }`}
                   >
                     <div className="flex items-center">
-                      <Icon className={`w-5 h-5 mr-3 ${active ? 'text-blue-700' : 'text-gray-500'}`} />
+                      <Icon
+                        className={`w-5 h-5 mr-3 ${
+                          active ? 'text-blue-700' : 'text-gray-500'
+                        }`}
+                      />
                       {item.name}
                     </div>
                     {active && <ChevronRight className="w-4 h-4" />}
@@ -88,18 +98,17 @@ const handleLogout = () => {
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          <button  onClick={handleLogout}
-          className="flex items-center text-sm text-gray-700 hover:text-gray-900">
+          <button
+            onClick={handleLogout}
+            className="flex items-center text-sm text-gray-700 hover:text-gray-900"
+          >
             <LogOut className="w-5 h-5 mr-3 text-gray-500" />
             Logout
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        {children}
-      </div>
+      <div className="flex-1 overflow-auto">{children}</div>
     </div>
   );
 }

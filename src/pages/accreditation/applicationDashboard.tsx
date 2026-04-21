@@ -9,6 +9,7 @@ interface ApplicationDashboardProps {
   onUploadDocument: (id: string) => void;
   onViewOutcomeLetter: (id: string) => void;
   onViewSiteVisit: (id: string) => void;
+  onRefreshApplications: () => void;
 }
 
 export default function ApplicationDashboard({
@@ -16,10 +17,12 @@ export default function ApplicationDashboard({
   onViewApplication,
   onUploadDocument,
   onViewOutcomeLetter,
-  onViewSiteVisit
+  onViewSiteVisit,
+  onRefreshApplications
 }: ApplicationDashboardProps) {
   const [selectedApplication, setSelectedApplication] = useState<ApplicationStatus | null>(null);
-  const [modalActiveTab, setModalActiveTab] = useState<'details' | 'site-visit' | 'report'>('details');
+  const [modalActiveTab, setModalActiveTab] = useState<'details' | 'documents' | 'site-visit' | 'report'>('details');
+  const [rescheduleReason, setRescheduleReason] = useState('');
   
   const getStatusBadge = (status: ApplicationStatus['status']) => {
     const statusConfig: Record<string, { color: string; label: string }> = {
@@ -46,87 +49,67 @@ export default function ApplicationDashboard({
     );
   };
 
-  const handleAcceptSchedule = () => {
-    if (!selectedApplication || !selectedApplication.siteVisitSchedule) return;
+const handleAcceptSchedule = () => {
+  if (!selectedApplication || !selectedApplication.siteVisitSchedule) return;
 
-    // Update the application with proper typing
-    const updatedApp: ApplicationStatus = {
-      ...selectedApplication,
-      siteVisitSchedule: {
-        ...selectedApplication.siteVisitSchedule,
-        status: 'accepted' as SiteVisitStatus,
-      },
-      scheduleStatus: 'accepted' as SiteVisitStatus,
-      status: 'step10_site_visit_scheduled',
-    };
-
-    // Update in mockAccreditationService
-    mockAccreditationService.updateApplication(selectedApplication.id, updatedApp);
-
-    // Update in applications array in localStorage
-    const allApps = JSON.parse(localStorage.getItem('applications') || '[]');
-    const updatedApps = allApps.map((a: any) => a.id === selectedApplication.id ? updatedApp : a);
-    localStorage.setItem('applications', JSON.stringify(updatedApps));
-
-    // Also update the main applications storage
-    const accreditationApps = JSON.parse(localStorage.getItem('accreditationApplications') || '[]');
-    const updatedAccreditationApps = accreditationApps.map((a: any) => a.id === selectedApplication.id ? updatedApp : a);
-    localStorage.setItem('accreditationApplications', JSON.stringify(updatedAccreditationApps));
-
-    // Update the scheduledVisits
-    const scheduledVisits = JSON.parse(localStorage.getItem('scheduledVisits') || '[]');
-    const updatedVisits = scheduledVisits.map((sv: any) => 
-      sv.applicationId === selectedApplication.id ? { ...sv, status: 'accepted' } : sv
-    );
-    localStorage.setItem('scheduledVisits', JSON.stringify(updatedVisits));
-
-    // Update assignments
-    const assignments = JSON.parse(localStorage.getItem('assignments') || '[]');
-    const updatedAssignments = assignments.map((a: any) => 
-      a.applicationId === selectedApplication.id ? { ...a, status: 'accepted' } : a
-    );
-    localStorage.setItem('assignments', JSON.stringify(updatedAssignments));
-
-    // Update siteVisitAllocations for backward compatibility
-    const siteVisitAllocations = JSON.parse(localStorage.getItem('siteVisitAllocations') || '[]');
-    const updatedSiteVisitAllocations = siteVisitAllocations.map((a: any) => 
-      a.applicationId === selectedApplication.id ? { ...a, status: 'accepted' } : a
-    );
-    localStorage.setItem('siteVisitAllocations', JSON.stringify(updatedSiteVisitAllocations));
-
-    // Update the application in state
-    setSelectedApplication(updatedApp);
-    
-    alert('Schedule accepted! The assessor will be notified.');
+  const updatedApp: ApplicationStatus = {
+    ...selectedApplication,
+    siteVisitSchedule: {
+      ...selectedApplication.siteVisitSchedule,
+      applicantConfirmed: true,
+      applicantConfirmedAt: new Date().toISOString(),
+      qctoConfirmed: false,
+      bookingConfirmed: false,
+      status: 'applicant_confirmed' as SiteVisitStatus,
+    },
+    scheduleStatus: 'applicant_confirmed' as SiteVisitStatus,
   };
 
-  const handleRescheduleRequest = () => {
-    if (!selectedApplication || !selectedApplication.siteVisitSchedule) return;
+  mockAccreditationService.updateApplication(selectedApplication.id, updatedApp);
 
-    const updatedApp: ApplicationStatus = {
-      ...selectedApplication,
-      siteVisitSchedule: {
-        ...selectedApplication.siteVisitSchedule,
-        status: 'rescheduled' as SiteVisitStatus,
-      },
-      scheduleStatus: 'rescheduled' as SiteVisitStatus,
-    };
+  const updatedVisits = JSON.parse(localStorage.getItem('scheduledVisits') || '[]').map((sv: any) =>
+    sv.applicationId === selectedApplication.id
+      ? { ...sv, status: 'applicant_confirmed' }
+      : sv
+  );
+  localStorage.setItem('scheduledVisits', JSON.stringify(updatedVisits));
 
-    // Update in localStorage
-    const allApps = JSON.parse(localStorage.getItem('applications') || '[]');
-    const updatedApps = allApps.map((a: any) => a.id === selectedApplication.id ? updatedApp : a);
-    localStorage.setItem('applications', JSON.stringify(updatedApps));
+  setSelectedApplication(updatedApp);
+  onRefreshApplications();
 
-    // Update the scheduledVisits
-    const scheduledVisits = JSON.parse(localStorage.getItem('scheduledVisits') || '[]');
-    const updatedVisits = scheduledVisits.map((sv: any) => 
-      sv.applicationId === selectedApplication.id ? { ...sv, status: 'rescheduled' } : sv
-    );
-    localStorage.setItem('scheduledVisits', JSON.stringify(updatedVisits));
+  alert('You have confirmed the proposed date. QCTO must still confirm the booking before the site visit can proceed.');
+};
 
-    setSelectedApplication(updatedApp);
-    alert('Reschedule request sent. You will be contacted shortly.');
+ const handleRescheduleRequest = () => {
+  if (!selectedApplication || !selectedApplication.siteVisitSchedule) return;
+
+  const updatedApp: ApplicationStatus = {
+    ...selectedApplication,
+    siteVisitSchedule: {
+      ...selectedApplication.siteVisitSchedule,
+      status: 'reschedule_requested' as SiteVisitStatus,
+      rescheduleRequested: true,
+      rescheduleRequestedAt: new Date().toISOString(),
+      rescheduleRequestedBy: 'applicant',
+      rescheduleReason: rescheduleReason || 'Applicant requested a new date',
+    },
+    scheduleStatus: 'reschedule_requested' as SiteVisitStatus,
   };
+
+  mockAccreditationService.updateApplication(selectedApplication.id, updatedApp);
+
+  const updatedVisits = JSON.parse(localStorage.getItem('scheduledVisits') || '[]').map((sv: any) =>
+    sv.applicationId === selectedApplication.id
+      ? { ...sv, status: 'reschedule_requested' }
+      : sv
+  );
+  localStorage.setItem('scheduledVisits', JSON.stringify(updatedVisits));
+
+  setSelectedApplication(updatedApp);
+  onRefreshApplications();
+
+  alert('Reschedule request sent to QCTO. A new date must be confirmed by QCTO.');
+};
 
   const getPaymentStatusBadge = (status: string) => {
     const colors = {
@@ -141,10 +124,77 @@ export default function ApplicationDashboard({
     );
   };
 
-  const handleViewDetails = (app: ApplicationStatus) => {
-    setSelectedApplication(app);
-    setModalActiveTab('details');
+  
+    const getRequiredUploadsProgress = (app: ApplicationStatus | null) => {
+  if (!app?.requiredApplicantDocuments?.length) {
+    return {
+      total: 0,
+      uploaded: 0,
+      allUploaded: false
+    };
+  }
+
+  const total = app.requiredApplicantDocuments.length;
+  const uploaded = app.requiredApplicantDocuments.filter((req) =>
+    app.applicantRequiredUploads?.some(
+      (item) => item.requirementId === req.id && item.document
+    )
+  ).length;
+
+  return {
+    total,
+    uploaded,
+    allUploaded: total > 0 && uploaded === total
   };
+};
+
+const handleSubmitRequiredDocuments = () => {
+  if (!selectedApplication) return;
+
+  const uploadedRequiredDocs =
+    selectedApplication.applicantRequiredUploads
+      ?.filter((item) => item.document)
+      .map((item) => item.document!) || [];
+
+  const existingDocs = selectedApplication.applicationData?.documents || [];
+
+const updatedApp = mockAccreditationService.updateApplication(selectedApplication.id, {
+  status: 'step4_documents_uploaded',
+  applicationData: {
+    ...selectedApplication.applicationData!,
+    documents: [...existingDocs, ...uploadedRequiredDocs]
+  },
+  lastUpdated: new Date().toISOString()
+});
+
+onRefreshApplications();
+
+if (updatedApp) {
+  setSelectedApplication(updatedApp);
+}
+
+  if (updatedApp) {
+    setSelectedApplication(updatedApp);
+  }
+
+  alert('Documents submitted successfully. The application has been sent back for internal review.');
+};
+
+const uploadProgress = selectedApplication
+  ? getRequiredUploadsProgress(selectedApplication)
+  : { total: 0, uploaded: 0, allUploaded: false };
+
+const handleViewDetails = (app: ApplicationStatus) => {
+  const latestApp = mockAccreditationService.getApplicationById(app.id) || app;
+
+  console.log('VIEWED APPLICATION:', latestApp);
+  console.log('VIEWED DOCUMENTS:', latestApp.applicationData?.documents);
+  console.log('VIEWED REQUIRED UPLOADS:', latestApp.applicantRequiredUploads);
+
+  setSelectedApplication(latestApp);
+  setModalActiveTab('details');
+};
+
 
   // Report Tab Component
   const renderReportTab = () => {
@@ -152,6 +202,7 @@ export default function ApplicationDashboard({
     
     const report = selectedApplication.siteVisitReport;
     if (!report) return null;
+
 
     return (
       <div className="space-y-6">
@@ -322,6 +373,9 @@ export default function ApplicationDashboard({
                   Payment Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+  Site Visit
+</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -354,6 +408,53 @@ export default function ApplicationDashboard({
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getPaymentStatusBadge(app.paymentStatus)}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+  {app.siteVisitSchedule ? (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-gray-800">
+        {new Date(app.siteVisitSchedule.scheduledDate).toLocaleDateString()}
+      </p>
+
+      {app.siteVisitSchedule.status === 'pending_acceptance' && (
+        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+          Awaiting your confirmation
+        </span>
+      )}
+
+      {app.siteVisitSchedule.status === 'applicant_confirmed' && (
+        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+          Awaiting internal confirmation
+        </span>
+      )}
+
+      {app.siteVisitSchedule.status === 'booking_confirmed' && (
+        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+          Booking confirmed
+        </span>
+      )}
+
+      {app.siteVisitSchedule.status === 'in_progress' && (
+        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
+          In progress
+        </span>
+      )}
+
+      {app.siteVisitSchedule.status === 'completed' && (
+        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+          Completed
+        </span>
+      )}
+
+      {app.siteVisitSchedule.status === 'reschedule_requested' && (
+        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+          Reschedule requested
+        </span>
+      )}
+    </div>
+  ) : (
+    <span className="text-sm text-gray-400">Not scheduled</span>
+  )}
+</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => handleViewDetails(app)}
@@ -363,26 +464,10 @@ export default function ApplicationDashboard({
                         View
                       </button>
                       
-                      {/* Show Upload Documents button only when initial approved */}
-                      {app.status === 'step3_initial_approved' && (
-                        <button
-                          onClick={() => onUploadDocument(app.id)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Upload Documents
-                        </button>
-                      )}
+                     
                       
                       {/* Show Upload Payment button only when payment pending */}
-                      {app.status === 'step7_payment_pending' && (
-                        <button
-                          onClick={() => onUploadDocument(app.id)}
-                          className="text-yellow-600 hover:text-yellow-900"
-                        >
-                          Upload Payment
-                        </button>
-                      )}
-                      
+                     
                       {/* Show View Outcome Letter when available */}
                       {app.outcomeLetter && (
                         <button
@@ -394,11 +479,7 @@ export default function ApplicationDashboard({
                       )}
                       
                       {/* Show Payment Notification when available */}
-                      {app.paymentNotification && app.status === 'step7_payment_pending' && (
-                        <span className="ml-3 text-xs text-yellow-600">
-                          Payment Due: R{app.paymentNotification.amount}
-                        </span>
-                      )}
+                   
                     </td>
                   </tr>
                 ))
@@ -470,6 +551,18 @@ export default function ApplicationDashboard({
                 >
                   Site Visit
                 </button>
+                {selectedApplication.status === 'step3_initial_approved' && (
+  <button
+    onClick={() => setModalActiveTab('documents')}
+    className={`pb-2 px-1 text-sm font-medium ${
+      modalActiveTab === 'documents'
+        ? 'text-blue-600 border-b-2 border-blue-600'
+        : 'text-gray-500'
+    }`}
+  >
+    Documents
+  </button>
+)}
                 {selectedApplication.siteVisitReport && (
                   <button
                     onClick={() => setModalActiveTab('report')}
@@ -552,29 +645,137 @@ export default function ApplicationDashboard({
                   </div>
 
                   {/* Uploaded Documents */}
-                  {selectedApplication.applicationData?.documents && selectedApplication.applicationData.documents.length > 0 && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Uploaded Documents</h3>
-                      <div className="space-y-2">
-                        {selectedApplication.applicationData.documents.map((doc) => (
-                          <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                            <div className="flex items-center">
-                              <FileText className="w-4 h-4 text-gray-500 mr-2" />
-                              <span className="text-sm text-gray-600">{doc.name}</span>
-                            </div>
-                            <a
-                              href={doc.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-sm"
-                            >
-                              View
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+          {/* Application Form */}
+{selectedApplication.applicationData?.documents && (
+  (() => {
+    const applicationForm = selectedApplication.applicationData.documents.find(
+      (doc) => doc.type === 'application_form'
+    ) as any;
+
+    if (!applicationForm) return null;
+
+    return (
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Application Form
+        </h3>
+
+        <div className="flex items-center justify-between p-3 bg-white rounded border border-gray-200">
+          <div className="flex items-center">
+            <FileText className="w-5 h-5 text-blue-600 mr-2" />
+            <div>
+              <p className="text-sm font-medium text-gray-700">
+                {applicationForm.name}
+              </p>
+              <p className="text-xs text-gray-500">
+                Uploaded: {new Date(applicationForm.uploadedAt).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <a
+            href={applicationForm.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+          >
+            Open Form
+          </a>
+        </div>
+
+        {/* Validation Information */}
+        <div className="mt-4 bg-white rounded border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800">
+              Upload Validation
+            </h4>
+
+            <span
+              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                applicationForm.validationStatus === 'passed'
+                  ? 'bg-green-100 text-green-700'
+                  : applicationForm.validationStatus === 'failed'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {applicationForm.validationStatus || 'Not validated'}
+            </span>
+          </div>
+
+          {applicationForm.validationChecks?.length > 0 ? (
+            <div className="space-y-2">
+              {applicationForm.validationChecks.map((check: any) => (
+                <div
+                  key={check.id}
+                  className="flex items-center justify-between p-2 rounded border border-gray-200"
+                >
+                  <div>
+                    <p className="text-sm text-gray-700">{check.label}</p>
+                    {check.message && (
+                      <p className="text-xs text-gray-500 mt-1">{check.message}</p>
+                    )}
+                  </div>
+
+                  <span
+                    className={`text-xs font-medium px-2 py-1 rounded-full ${
+                      check.status === 'passed'
+                        ? 'bg-green-100 text-green-700'
+                        : check.status === 'failed'
+                        ? 'bg-red-100 text-red-700'
+                        : check.status === 'processing'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {check.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No validation details available.</p>
+          )}
+
+          {applicationForm.validationError && (
+            <p className="mt-3 text-sm text-red-600">{applicationForm.validationError}</p>
+          )}
+        </div>
+      </div>
+    );
+  })()
+)}
+
+{/* Other Uploaded Documents */}
+{selectedApplication.applicationData?.documents && (
+  <div className="bg-gray-50 p-4 rounded-lg">
+    <h3 className="text-lg font-semibold text-gray-800 mb-4">
+      Supporting Documents
+    </h3>
+
+    <div className="space-y-2">
+      {selectedApplication.applicationData.documents
+        .filter(doc => doc.type !== 'application_form')
+        .map((doc) => (
+          <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+            <div className="flex items-center">
+              <FileText className="w-4 h-4 text-gray-500 mr-2" />
+              <span className="text-sm text-gray-600">{doc.name}</span>
+            </div>
+
+            <a
+              href={doc.fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              View
+            </a>
+          </div>
+        ))}
+    </div>
+  </div>
+)}
 
                   {/* Acknowledgement Letter */}
                   {selectedApplication.acknowledgementLetter && (
@@ -593,141 +794,78 @@ export default function ApplicationDashboard({
                   )}
 
                   {/* Payment Notification */}
-                  {selectedApplication.paymentNotification && (
-                    <div className="bg-yellow-50 p-4 rounded-lg">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Required</h3>
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm text-gray-600">Amount Due</p>
-                          <p className="text-xl font-bold text-gray-900">R{selectedApplication.paymentNotification.amount}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Due Date</p>
-                          <p className="text-xl font-bold text-gray-900">
-                            {new Date(selectedApplication.paymentNotification.dueDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="bg-white p-3 rounded">
-                        <p className="text-sm font-medium text-gray-700 mb-2">Bank Details</p>
-                        <p className="text-xs text-gray-600">Bank: {selectedApplication.paymentNotification.bankDetails.bankName}</p>
-                        <p className="text-xs text-gray-600">Account: {selectedApplication.paymentNotification.bankDetails.accountNumber}</p>
-                        <p className="text-xs text-gray-600">Reference: {selectedApplication.paymentNotification.bankDetails.reference}</p>
-                      </div>
+       {selectedApplication.paymentNotification && (
+  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+    <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Required</h3>
 
-                      {selectedApplication.status === 'step7_payment_pending' && (
-                        <button
-                          onClick={() => {
-                            onUploadDocument(selectedApplication.id);
-                            setSelectedApplication(null);
-                          }}
-                          className="mt-4 px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
-                        >
-                          Upload Proof of Payment
-                        </button>
-                      )}
-                    </div>
-                  )}
+    <div className="grid grid-cols-2 gap-4 mb-4">
+      <div>
+        <p className="text-sm text-gray-600">Amount Due</p>
+        <p className="text-xl font-bold text-gray-900">
+          R{selectedApplication.paymentNotification.amount}
+        </p>
+      </div>
+      <div>
+        <p className="text-sm text-gray-600">Due Date</p>
+        <p className="text-xl font-bold text-gray-900">
+          {new Date(selectedApplication.paymentNotification.dueDate).toLocaleDateString()}
+        </p>
+      </div>
+    </div>
 
-                  {/* Site Visit Schedule */}
-                  {selectedApplication.siteVisitSchedule && (
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Site Visit Schedule</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-gray-600">Date</p>
-                          <p className="text-sm font-medium">{new Date(selectedApplication.siteVisitSchedule.scheduledDate).toLocaleDateString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Time</p>
-                          <p className="text-sm font-medium">{selectedApplication.siteVisitSchedule.scheduledTime}</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-sm text-gray-600">Venue</p>
-                          <p className="text-sm font-medium">{selectedApplication.siteVisitSchedule.venue}</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-sm text-gray-600">Assessor</p>
-                          <p className="text-sm font-medium">{selectedApplication.siteVisitSchedule.assessorName || 'To be assigned'}</p>
-                        </div>
-                      </div>
-                      
-                      {/* Check schedule status */}
-                      {(() => {
-                        const status = selectedApplication.scheduleStatus || selectedApplication.siteVisitSchedule?.status;
-                        
-                        if (status === 'pending_acceptance') {
-                          return (
-                            <div className="mt-4">
-                              <p className="text-sm text-yellow-600 mb-3">Please confirm your availability for this site visit.</p>
-                              <div className="flex space-x-3">
-                                <button
-                                  onClick={handleAcceptSchedule}
-                                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                                >
-                                  Accept Schedule
-                                </button>
-                                <button
-                                  onClick={handleRescheduleRequest}
-                                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                                >
-                                  Request Reschedule
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        }
-                        
-                        if (status === 'accepted') {
-                          return (
-                            <div className="mt-4">
-                              <p className="text-xs text-green-600">✓ You have accepted this site visit schedule</p>
-                              <p className="text-xs text-gray-500 mt-2">The assessor has been notified.</p>
-                            </div>
-                          );
-                        }
+    <div className="bg-white p-3 rounded border border-gray-200 mb-3">
+      <p className="text-sm font-medium text-gray-700 mb-2">Bank Details</p>
+      <p className="text-xs text-gray-600">
+        Bank: {selectedApplication.paymentNotification.bankDetails.bankName}
+      </p>
+      <p className="text-xs text-gray-600">
+        Account: {selectedApplication.paymentNotification.bankDetails.accountNumber}
+      </p>
+      <p className="text-xs text-gray-600">
+        Branch Code: {selectedApplication.paymentNotification.bankDetails.branchCode}
+      </p>
+    </div>
 
-                        if (status === 'in_progress') {
-                          return (
-                            <div className="mt-4">
-                              <p className="text-xs text-yellow-600">⏳ Site visit in progress</p>
-                              <p className="text-xs text-gray-500 mt-2">The assessor is conducting the site visit.</p>
-                            </div>
-                          );
-                        }
+    <div className="bg-white p-3 rounded border border-gray-200 mb-3">
+      <p className="text-xs text-gray-600">Application ID</p>
+      <p className="text-sm font-medium text-gray-800">
+        {selectedApplication.applicationId}
+      </p>
 
-                        if (status === 'completed') {
-                          return (
-                            <div className="mt-4">
-                              <p className="text-xs text-green-600">✓ Site visit completed</p>
-                              <p className="text-xs text-gray-500 mt-2">View the report in the Report tab.</p>
-                            </div>
-                          );
-                        }
+      <p className="text-xs text-gray-600 mt-2">Payment Reference</p>
+      <p className="text-sm font-medium text-blue-600">
+        {selectedApplication.paymentNotification.paymentReference}
+      </p>
 
-                        if (status === 'rescheduled') {
-                          return (
-                            <div className="mt-4">
-                              <p className="text-xs text-orange-600">⏳ Reschedule requested</p>
-                              <p className="text-xs text-gray-500 mt-2">You will be contacted with new dates.</p>
-                            </div>
-                          );
-                        }
+      <p className="text-xs text-gray-600 mt-2">Payment will be allocated to</p>
+      <p className="text-sm font-medium text-gray-800">
+        {selectedApplication.paymentAllocatedToApplicationId || selectedApplication.applicationId}
+      </p>
+    </div>
 
-                        if (status === 'sent_to_applicant') {
-                          return (
-                            <div className="mt-4">
-                              <p className="text-xs text-blue-600">📅 Site visit schedule has been sent to you</p>
-                              <p className="text-xs text-gray-500 mt-2">Please check back soon for confirmation.</p>
-                            </div>
-                          );
-                        }
+    <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
+      <p className="text-xs text-red-700">
+        Please upload proof of payment for this application only.
+        Do not use payment made for another application.
+      </p>
+    </div>
 
-                        return null;
-                      })()}
-                    </div>
-                  )}
+    {selectedApplication.status === 'step7_payment_pending' && (
+      <button
+        onClick={() => {
+          onUploadDocument(selectedApplication.id);
+          setSelectedApplication(null);
+        }}
+        className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
+      >
+        Upload Proof of Payment
+      </button>
+    )}
+  </div>
+)}
+    
+
+        
 
                   {/* Proof of Payment */}
                   {selectedApplication.proofOfPayment && selectedApplication.proofOfPayment.length > 0 && (
@@ -776,46 +914,337 @@ export default function ApplicationDashboard({
                 </>
               )}
 
-              {modalActiveTab === 'site-visit' && (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Site Visit Information</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Date</p>
-                        <p className="text-sm font-medium">
-                          {selectedApplication.siteVisitSchedule ? 
-                            new Date(selectedApplication.siteVisitSchedule.scheduledDate).toLocaleDateString() : 
-                            'Not scheduled'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Time</p>
-                        <p className="text-sm font-medium">{selectedApplication.siteVisitSchedule?.scheduledTime || 'Not scheduled'}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-sm text-gray-600">Venue</p>
-                        <p className="text-sm font-medium">{selectedApplication.siteVisitSchedule?.venue || 'Not specified'}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-sm text-gray-600">Assessor</p>
-                        <p className="text-sm font-medium">{selectedApplication.siteVisitSchedule?.assessorName || 'To be assigned'}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-sm text-gray-600">Status</p>
-                        <p className="text-sm font-medium">
-                          {selectedApplication.siteVisitSchedule?.status === 'pending_acceptance' && 'Awaiting your confirmation'}
-                          {selectedApplication.siteVisitSchedule?.status === 'accepted' && 'Confirmed - Awaiting site visit'}
-                          {selectedApplication.siteVisitSchedule?.status === 'in_progress' && 'Site visit in progress'}
-                          {selectedApplication.siteVisitSchedule?.status === 'completed' && 'Completed'}
-                          {selectedApplication.siteVisitSchedule?.status === 'rescheduled' && 'Reschedule requested'}
-                          {selectedApplication.siteVisitSchedule?.status === 'sent_to_applicant' && 'Schedule sent - pending confirmation'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+        {modalActiveTab === 'site-visit' && (
+  <div className="space-y-6">
+    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800">Site Visit Schedule</h3>
+          <p className="text-sm text-gray-500">
+            Review your booking details and confirm availability
+          </p>
+        </div>
+
+        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+          selectedApplication.siteVisitSchedule?.status === 'pending_acceptance'
+            ? 'bg-yellow-100 text-yellow-800'
+            : selectedApplication.siteVisitSchedule?.status === 'applicant_confirmed'
+            ? 'bg-blue-100 text-blue-800'
+            : selectedApplication.siteVisitSchedule?.status === 'booking_confirmed'
+            ? 'bg-green-100 text-green-800'
+            : selectedApplication.siteVisitSchedule?.status === 'in_progress'
+            ? 'bg-orange-100 text-orange-800'
+            : selectedApplication.siteVisitSchedule?.status === 'completed'
+            ? 'bg-gray-100 text-gray-800'
+            : 'bg-red-100 text-red-800'
+        }`}>
+          {selectedApplication.siteVisitSchedule?.status === 'pending_acceptance' && 'Awaiting your confirmation'}
+          {selectedApplication.siteVisitSchedule?.status === 'applicant_confirmed' && 'Awaiting internal/QCTO confirmation'}
+          {selectedApplication.siteVisitSchedule?.status === 'booking_confirmed' && 'Booking confirmed'}
+          {selectedApplication.siteVisitSchedule?.status === 'in_progress' && 'Site visit in progress'}
+          {selectedApplication.siteVisitSchedule?.status === 'completed' && 'Completed'}
+          {selectedApplication.siteVisitSchedule?.status === 'reschedule_requested' && 'Reschedule requested'}
+          {selectedApplication.siteVisitSchedule?.status === 'sent_to_applicant' && 'Schedule sent'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 mb-1">Date</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {selectedApplication.siteVisitSchedule
+              ? new Date(selectedApplication.siteVisitSchedule.scheduledDate).toLocaleDateString()
+              : 'Not scheduled'}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 mb-1">Time</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {selectedApplication.siteVisitSchedule?.scheduledTime || 'Not scheduled'}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-4 md:col-span-2">
+          <p className="text-xs text-gray-500 mb-1">Venue</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {selectedApplication.siteVisitSchedule?.venue || 'Not specified'}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-4 md:col-span-2">
+          <p className="text-xs text-gray-500 mb-1">Assessor</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {selectedApplication.siteVisitSchedule?.assessorName || 'To be assigned'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {(() => {
+      const status =
+        selectedApplication.scheduleStatus || selectedApplication.siteVisitSchedule?.status;
+
+      if (status === 'pending_acceptance') {
+        return (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold text-yellow-800">Action Required</h4>
+              <p className="text-sm text-yellow-700 mt-1">
+                Please confirm whether you are available for this proposed site visit date.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={handleAcceptSchedule}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Accept Schedule
+              </button>
+
+              <button
+                onClick={handleRescheduleRequest}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Request Reschedule
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">
+                Reason for requesting a new date
+              </label>
+              <textarea
+                rows={3}
+                value={rescheduleReason}
+                onChange={(e) => setRescheduleReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                placeholder="Add the reason if you need a different date..."
+              />
+            </div>
+          </div>
+        );
+      }
+
+      if (status === 'applicant_confirmed') {
+        return (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-blue-800">
+              You have confirmed the proposed site visit date.
+            </p>
+            <p className="text-sm text-blue-700 mt-1">
+              Waiting for internal/QCTO to confirm the booking.
+            </p>
+          </div>
+        );
+      }
+
+      if (status === 'booking_confirmed') {
+        return (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-green-800">
+              Booking confirmed by both Applicant and QCTO.
+            </p>
+            <p className="text-sm text-green-700 mt-1">
+              The QP / Verifier can now proceed with the site visit.
+            </p>
+          </div>
+        );
+      }
+
+      if (status === 'reschedule_requested') {
+        return (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-orange-800">New date requested.</p>
+            <p className="text-sm text-orange-700 mt-1">
+              Waiting for QCTO to confirm a replacement date.
+            </p>
+          </div>
+        );
+      }
+
+      if (status === 'in_progress') {
+        return (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-yellow-800">Site visit in progress.</p>
+            <p className="text-sm text-yellow-700 mt-1">
+              The assessor is currently conducting the visit.
+            </p>
+          </div>
+        );
+      }
+
+      if (status === 'completed') {
+        return (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-gray-800">Site visit completed.</p>
+            <p className="text-sm text-gray-600 mt-1">
+              You can view the outcome in the Report tab.
+            </p>
+          </div>
+        );
+      }
+
+      if (status === 'sent_to_applicant') {
+        return (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-blue-800">Schedule sent to you.</p>
+            <p className="text-sm text-blue-700 mt-1">
+              Please review and confirm the proposed booking.
+            </p>
+          </div>
+        );
+      }
+
+      return null;
+    })()}
+  </div>
+)}
+              
+              {modalActiveTab === 'documents' && (
+
+                
+  <div className="space-y-6">
+    <div className="bg-blue-50 p-4 rounded-lg">
+      <h3 className="text-lg font-semibold text-gray-800 mb-3">
+        Documents Required for Upload
+      </h3>
+
+      {selectedApplication.requiredApplicantDocuments &&
+      selectedApplication.requiredApplicantDocuments.length > 0 ? (
+        <div className="space-y-3">
+          {selectedApplication.requiredApplicantDocuments.map((req) => {
+            const uploadedMatch = selectedApplication.applicantRequiredUploads?.find(
+              item => item.requirementId === req.id
+            );
+
+            return (
+              <div
+                key={req.id}
+                className="flex items-center justify-between p-3 bg-white rounded border border-gray-200"
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{req.label}</p>
+                  <p className="text-xs text-gray-500">
+                    {uploadedMatch ? 'Uploaded' : 'Pending upload'}
+                  </p>
                 </div>
-              )}
+
+                {uploadedMatch?.document ? (
+                  <a
+                    href={uploadedMatch.document.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    View Upload
+                  </a>
+                ) : (
+                  <label className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer font-medium">
+                    Upload
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="hidden"
+                   onChange={(e) => {
+  const file = e.target.files?.[0];
+  if (!file || !selectedApplication) return;
+
+  const fileUrl = URL.createObjectURL(file);
+
+  const uploadedDoc = {
+    id: `DOC-${Date.now()}`,
+    type: 'other' as any,
+    name: file.name,
+    fileUrl,
+    uploadedAt: new Date().toISOString(),
+    fileSize: file.size,
+    verified: false,
+  };
+
+  const existingUploads = selectedApplication.applicantRequiredUploads || [];
+
+  const updatedUploads = [
+    ...existingUploads.filter(item => item.requirementId !== req.id),
+    {
+      requirementId: req.id,
+      label: req.label,
+      document: uploadedDoc,
+      uploadedAt: new Date().toISOString(),
+    }
+  ];
+
+  mockAccreditationService.updateApplication(selectedApplication.id, {
+    applicantRequiredUploads: updatedUploads
+  });
+
+  const refreshed = mockAccreditationService.getApplicationById(selectedApplication.id);
+  if (refreshed) {
+    setSelectedApplication(refreshed);
+  }
+}}
+                    />
+                  </label>
+                )}
+                
+              </div>
+              
+              
+            );
+          })}
+          
+        </div>
+        
+         ) : (
+        <p className="text-sm text-gray-500">
+          No required documents have been sent yet.
+        </p>
+      )}
+    </div>
+
+    {/* ✅ ADD HERE */}
+    {selectedApplication.requiredApplicantDocuments &&
+      selectedApplication.requiredApplicantDocuments.length > 0 && (
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800">
+                Submission Progress
+              </h4>
+              <p className="text-xs text-gray-600">
+                {uploadProgress.uploaded} of {uploadProgress.total} required documents uploaded
+              </p>
+            </div>
+
+            <span
+              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                uploadProgress.allUploaded
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-yellow-100 text-yellow-700'
+              }`}
+            >
+              {uploadProgress.allUploaded ? 'Ready to Submit' : 'Pending Uploads'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSubmitRequiredDocuments}
+            disabled={!uploadProgress.allUploaded}
+            className={`px-4 py-2 rounded-md text-white ${
+              uploadProgress.allUploaded
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Submit Documents to Internal Review
+          </button>
+        </div>
+      )}
+  </div>
+)}
+
 
               {modalActiveTab === 'report' && renderReportTab()}
             </div>

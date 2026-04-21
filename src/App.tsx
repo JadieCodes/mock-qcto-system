@@ -48,6 +48,7 @@ import PublicInputDashboard from "./pages/qualifications/internal/PublicInputDas
 import QualificationsApprovalPhase from "./pages/qualifications/internal/QualificationsApprovalPhase";
 import InternalReporting from "./pages/qualifications/internal/InternalReporting";
 import InternalQualificationsLayout from "./components/ui/InternalQualificationsLayout";
+import QasaManagementPage from "./pages/assessment/Internal/QasaManagementPage";
 
 import AccreditationInternalDashboard from './pages/accreditation/AccreditationInternalDashboard';
 import { AccreditationLayout } from './components/ui/AccreditationLayout';
@@ -56,6 +57,7 @@ import QPDashboard from './pages/accreditation/QPDashboard';
 import VerifierDashboard from './pages/accreditation/VerifierDashboard';
 import UserRoleSwitcher from "./components/ui/UserRoleSwitcher";
 import { useState } from 'react';
+import OutcomeLettersPage from "./pages/accreditation/OutcomeLettersPage";
 
 // Research domain pages
 // Research domain pages
@@ -82,10 +84,16 @@ const App = () => {
   const [userRole, setUserRole] = useState('applicant');
   const [userName, setUserName] = useState('John Applicant'); // Add this
   
-  const handleRoleChange = (role: string, name: string) => {
-    setUserRole(role);
-    setUserName(name);
-  };
+ const handleRoleChange = (role: string) => {
+  setUserRole(role);
+
+  if (role === 'applicant') setUserName('John Applicant');
+  else if (role === 'deputy-director') setUserName('Deputy Director');
+  else if (role === 'assistant-director') setUserName('Assistant Director');
+  else if (role === 'qp') setUserName('Quality Partner');
+  else if (role === 'verifier') setUserName('Verifier');
+  else setUserName('John Doe');
+};
   
   const queryClient = new QueryClient();
 
@@ -97,8 +105,7 @@ const App = () => {
           <Sonner />
           <BrowserRouter>
             {/* User Role Switcher - visible on all pages */}
-           
-            
+
             <Routes>
               {/* Landing page to choose Profiles or Certification */}
               <Route path="/" element={<ChooseUser />} />
@@ -157,102 +164,60 @@ const App = () => {
 
               {/* Certification domain - wrapped with Layout */}
             {/* Protected Certification domain */}
-  <Route
-    path="/certification/*"
-    element={
-      <ProtectedDepartmentRoute department="certification">
-        <Layout>
-          <Routes>
-            <Route path="" element={<Dashboard />} />
-            <Route path="intake" element={<Intake />} />
-            <Route path="corrections" element={<InternalCorrections />} />
-            <Route path="batches" element={<Batches />} />
-            <Route path="integrations" element={<Integrations />} />
-            <Route path="printing" element={<Printing />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Layout>
-      </ProtectedDepartmentRoute>
-    }
-  />
-              {/* Assessment domain */}
-       {/* Protected Assessment domain */}
-  <Route
-    path="/departments/assessment/*"
-    element={
-      <ProtectedDepartmentRoute department="assessment">
-        <AssessmentLayout 
-          userName="John Doe" 
-          organizationName="ABC Training Institute"
-        >
-          <Routes>
-            <Route 
-              path="" 
-              element={<Navigate to="/departments/assessment/assessor-management" replace />} 
-            />
-            <Route 
-              path="assessor-management" 
-              element={
-                <AssessorManagement 
-                  userRole="quality_partner" 
-                  userName="John Doe" 
-                  organizationName="ABC Training Institute" 
-                />
-              } 
-            />
-            <Route 
-              path="standards-management" 
-              element={<StandardsManagement />} 
-            />
-            <Route 
-              path="candidate-registration" 
-              element={<CandidateRegistration />} 
-            />
-            <Route 
-              path="quality-assurance" 
-              element={<QualityAssurance />} 
-            />
-            <Route 
-              path="results-management" 
-              element={<ResultsManagement />} 
-            />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AssessmentLayout>
-      </ProtectedDepartmentRoute>
-    }
-  />
-
-              {/* Accreditation Domain */}
-  <Route
-    path="/departments/accreditation/*"
-    element={
-      <ProtectedDepartmentRoute department="accreditation">
-        <AccreditationLayout userName="John Doe" userRole="Accreditation Officer">
-          <Routes>
-            <Route 
-              path="" 
-              element={<Navigate to="/departments/accreditation/applications" replace />} 
-            />
-            <Route 
-              path="applications" 
-              element={<AccreditationInternalDashboard />} 
-            />
-            <Route 
-              path="site-visits" 
-              element={
-                <SiteVisitManagement 
-                  userName={userName} 
-                  userRole={userRole === 'deputy-director' ? 'Deputy Director' : 'Assistant Director'} 
-                />
-              } 
-            />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AccreditationLayout>
-      </ProtectedDepartmentRoute>
-    }
-  />
+<Route
+  path="/departments/assessment/*"
+  element={
+    <ProtectedDepartmentRoute department="assessment">
+      <AssessmentLayout 
+        userName="John Doe" 
+        organizationName="ABC Training Institute"
+      >
+        <Routes>
+          <Route
+            path=""
+            element={
+              <Navigate
+                to="/departments/assessment/qasa-management"
+                replace
+              />
+            }
+          />
+          <Route
+            path="qasa-management"
+            element={<QasaManagementPage />}
+          />
+          <Route
+            path="assessor-management"
+            element={
+              <AssessorManagement
+                userRole="quality_partner"
+                userName="John Doe"
+                organizationName="ABC Training Institute"
+              />
+            }
+          />
+          <Route
+            path="standards-management"
+            element={<StandardsManagement />}
+          />
+          <Route
+            path="candidate-registration"
+            element={<CandidateRegistration />}
+          />
+          <Route
+            path="quality-assurance"
+            element={<QualityAssurance />}
+          />
+          <Route
+            path="results-management"
+            element={<ResultsManagement />}
+          />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AssessmentLayout>
+    </ProtectedDepartmentRoute>
+  }
+/>
 
   {/* Protected Research Domain */}
   <Route

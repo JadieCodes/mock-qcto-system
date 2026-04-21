@@ -26,7 +26,7 @@ import {
   History,
   Upload
 } from 'lucide-react';
-import type { Application } from '@/types';
+import type { Application,DraftReportData } from '@/types';
 
 interface ApplicationDetailsModalProps {
   isOpen: boolean;
@@ -69,6 +69,12 @@ export default function ApplicationDetailsModal({
   const [notes, setNotes] = useState('');
 
   if (!isOpen || !application) return null;
+  const draftReportData: DraftReportData | null =
+  application.report &&
+  application.report.draftReport &&
+  typeof application.report.draftReport !== 'string'
+    ? (application.report.draftReport as DraftReportData)
+    : null;
 
   // Mock data for demonstration - in real app, this would come from props/API
   const applicantDetails = {
@@ -304,19 +310,97 @@ export default function ApplicationDetailsModal({
               </div>
 
               {/* Draft Report */}
-              {application.report && (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-medium mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    Draft Report
-                  </h3>
-                  <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
-                    <pre className="whitespace-pre-wrap">
-                      {application.report.draftReport}
-                    </pre>
-                  </div>
-                </div>
-              )}
+            {application.report && (
+  <div className="bg-gray-50 p-4 rounded-lg">
+    <h3 className="font-medium mb-3 flex items-center gap-2">
+      <FileText className="w-4 h-4" />
+      Draft Report
+    </h3>
+
+    {typeof application.report.draftReport === 'string' ? (
+      <div className="bg-white border border-gray-200 p-4 rounded-lg text-sm text-gray-800">
+        <pre className="whitespace-pre-wrap font-sans">
+          {application.report.draftReport}
+        </pre>
+      </div>
+    ) : (
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-gray-50 px-4 py-3 border-b">
+          <h4 className="font-semibold text-gray-900">Gate Evaluation Report</h4>
+          <p className="text-sm text-gray-500">
+            Generated on {application.report.draftReport?.date} at {application.report.draftReport?.time}
+          </p>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-500">Application ID</p>
+              <p className="text-sm font-medium">
+                {application.report.draftReport?.applicationId}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs text-gray-500">Applicant</p>
+              <p className="text-sm font-medium">
+                {application.report.draftReport?.applicant}
+              </p>
+            </div>
+
+            <div className="md:col-span-2">
+              <p className="text-xs text-gray-500">Qualification</p>
+              <p className="text-sm font-medium">
+                {application.report.draftReport?.qualification}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <h5 className="font-medium text-gray-900 mb-2">Document Verification</h5>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-2">Document</th>
+                    <th className="text-left px-4 py-2">Status</th>
+                    <th className="text-left px-4 py-2">File</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {application.report.draftReport?.documents?.map((doc: any, idx: number) => (
+                    <tr key={idx} className="border-t">
+                      <td className="px-4 py-2">{doc.label}</td>
+                      <td className="px-4 py-2">
+                        {doc.status ? (
+                          <span className="text-green-600 font-medium">Present</span>
+                        ) : doc.optional ? (
+                          <span className="text-gray-400">Optional</span>
+                        ) : (
+                          <span className="text-red-600 font-medium">Missing</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-600">
+                        {doc.file || 'Not uploaded'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Recommendation</p>
+            <p className="text-sm font-medium text-gray-800">
+              {application.report.draftReport?.recommendation}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
               {/* Document Review Checklist - Only shown in documentReview mode */}
               {mode === 'documentReview' && (

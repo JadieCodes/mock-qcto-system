@@ -10,7 +10,6 @@ export default function QualificationDesign() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [modalMode, setModalMode] = useState<'create' | 'view'>('create');
 
-  // Load applications from localStorage on mount
   useEffect(() => {
     setApplications(getApplications());
   }, []);
@@ -39,21 +38,30 @@ export default function QualificationDesign() {
           applicationLetter: null,
           motivation: null,
           reference: null,
-          acrLetter: null
+          acrLetter: null,
+          other: null,
         },
-        report: applicationData.report
+        report: applicationData.report,
       };
-      
+
       saveApplication(newApplication);
       setApplications(getApplications());
     } else {
-      // Update existing application
       if (selectedApplication) {
-        const updatedApp = { ...selectedApplication, ...applicationData };
+        const updatedApp: Application = {
+          ...selectedApplication,
+          ...applicationData,
+          documents: {
+            ...selectedApplication.documents,
+            ...applicationData.documents,
+          },
+        };
+
         saveApplication(updatedApp);
         setApplications(getApplications());
       }
     }
+
     setIsModalOpen(false);
   };
 
@@ -63,23 +71,55 @@ export default function QualificationDesign() {
   };
 
   const getStatusBadge = (status: string) => {
-    switch(status) {
+    switch (status) {
       case 'draft':
-        return <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">Draft</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+            Draft
+          </span>
+        );
       case 'submitted':
-        return <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">Submitted</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+            Submitted
+          </span>
+        );
       case 'document_review':
-        return <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">Document Review</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+            Document Review
+          </span>
+        );
       case 'resolution':
-        return <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">Resolution</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+            Resolution
+          </span>
+        );
       case 'evaluation':
-        return <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">Evaluation</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">
+            Evaluation
+          </span>
+        );
       case 'approved':
-        return <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Approved</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+            Approved
+          </span>
+        );
       case 'rejected':
-        return <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Rejected</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+            Rejected
+          </span>
+        );
       default:
-        return <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">{status}</span>;
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+            {status}
+          </span>
+        );
     }
   };
 
@@ -89,7 +129,7 @@ export default function QualificationDesign() {
         <h2 className="text-2xl font-bold">Qualification Design Applications</h2>
         <button
           onClick={handleCreateApplication}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
         >
           Create Application
         </button>
@@ -101,7 +141,7 @@ export default function QualificationDesign() {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border rounded-lg">
+          <table className="min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -127,28 +167,58 @@ export default function QualificationDesign() {
                 </th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-200">
               {applications.map((app) => (
-                <tr key={app.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{app.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{app.applicantName}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{app.qualification}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{app.submissionDate}</td>
+                <tr key={app.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {app.id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {app.applicantName}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {app.qualification}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {app.submissionDate}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getStatusBadge(app.status)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex space-x-1">
-                      {app.documents.applicationLetter && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">AL</span>}
-                      {app.documents.motivation && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">M</span>}
-                      {app.documents.reference && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">R</span>}
-                      {app.documents.acrLetter && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">ACR</span>}
+                    <div className="flex flex-wrap gap-1">
+                      {app.documents.applicationLetter && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          AL
+                        </span>
+                      )}
+                      {app.documents.motivation && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          M
+                        </span>
+                      )}
+                      {app.documents.reference && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          R
+                        </span>
+                      )}
+                      {app.documents.acrLetter && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          ACR
+                        </span>
+                      )}
+                      {app.documents.other && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                          OTHER
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
                       onClick={() => handleViewApplication(app)}
-                      className="text-blue-600 hover:text-blue-900"
+                      className="text-blue-600 hover:text-blue-900 font-medium"
                     >
                       View
                     </button>

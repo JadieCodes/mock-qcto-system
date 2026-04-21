@@ -1,13 +1,25 @@
+import { useState } from 'react';
+import { CertExternalLayout } from '@/components/CertExternalLayout';
 import ProfileIntake from '@/users/dashboardTabs/ProfileIntake';
+import CertificationExternalCorrections from '@/users/dashboardTabs/CertificationExternalCorrections';
 
 export default function CertificationDomain() {
-  return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-xl font-bold">Certification Domain</h2>
-      <p>Manage submissions from profiles and department here.</p>
+  const [activeTab, setActiveTab] = useState('submissions');
 
-      {/* Render the Profile Intake form */}
-      <ProfileIntake />
-    </div>
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'submissions':
+        return <ProfileIntake />;
+      case 'corrections':
+        return <CertificationExternalCorrections />;
+      default:
+        return <ProfileIntake />;
+    }
+  };
+
+  return (
+    <CertExternalLayout activeTab={activeTab} setActiveTab={setActiveTab}>
+      {renderContent()}
+    </CertExternalLayout>
   );
 }

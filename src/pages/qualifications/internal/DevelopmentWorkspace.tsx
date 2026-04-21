@@ -1,5 +1,7 @@
 // pages/internal/DevelopmentWorkspace.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getApplications } from '@/lib/applicationStorage';
+import type { Application } from '@/types';
 import { 
   GitBranch, 
   FileText, 
@@ -36,6 +38,7 @@ interface DevelopmentProject {
   status: 'active' | 'on-hold' | 'completed';
   documents: Record<string, string>;
   reviews: Array<{ reviewer: string; status: string; date: string }>;
+  applicationData?: Application;
 }
 
 interface ResolutionItem {
@@ -55,90 +58,39 @@ export default function DevelopmentWorkspace() {
   const [activeSubTab, setActiveSubTab] = useState<'development' | 'resolution'>('development');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<DevelopmentProject | ResolutionItem | null>(null);
+  const [applications, setApplications] = useState<Application[]>([]);
+
+useEffect(() => {
+  setApplications(getApplications());
+}, []);
+
+const developmentWorkspaceApps = applications.filter(
+  (app) => app.status === 'development_workspace'
+);
 
   // Sample data for development phases
-  const developmentProjects: DevelopmentProject[] = [
-    {
-      id: 'DEV-2024-001',
-      qualificationTitle: 'Advanced Diploma in Project Management',
-      phase: 'drafting',
-      progress: 35,
-      startDate: '2024-02-01',
-      targetDate: '2024-05-30',
-      leadDeveloper: 'Dr. Sarah Johnson',
-      team: ['John Smith', 'Emily Brown', 'Michael Chen'],
-      status: 'active',
-      documents: {
-        curriculum: 'curriculum_draft_v2.pdf',
-        assessment: 'assessment_guide.pdf',
-        learningMaterials: 'learning_materials.docx'
-      },
-      reviews: [
-        { reviewer: 'Prof. David Wilson', status: 'pending', date: '2024-03-20' },
-        { reviewer: 'Dr. Lisa Anderson', status: 'completed', date: '2024-03-18' }
-      ]
-    },
-    {
-      id: 'DEV-2024-002',
-      qualificationTitle: 'National Certificate: Data Science',
-      phase: 'consultation',
-      progress: 65,
-      startDate: '2024-01-15',
-      targetDate: '2024-04-30',
-      leadDeveloper: 'Prof. Michael Chen',
-      team: ['Anna Williams', 'Robert Taylor', 'Maria Garcia'],
-      status: 'active',
-      documents: {
-        curriculum: 'data_science_curriculum.pdf',
-        assessment: 'assessment_framework.docx',
-        stakeholderFeedback: 'consultation_feedback.xlsx'
-      },
-      reviews: [
-        { reviewer: 'Industry Panel', status: 'in-progress', date: '2024-03-25' },
-        { reviewer: 'Academic Board', status: 'pending', date: '2024-03-28' }
-      ]
-    },
-    {
-      id: 'DEV-2024-003',
-      qualificationTitle: 'Bachelor of Education (Foundation Phase)',
-      phase: 'review',
-      progress: 85,
-      startDate: '2023-11-01',
-      targetDate: '2024-03-30',
-      leadDeveloper: 'Dr. Emily Brown',
-      team: ['James Wilson', 'Patricia Lee', 'Thomas Wright'],
-      status: 'active',
-      documents: {
-        curriculum: 'education_curriculum_final.pdf',
-        assessment: 'assessment_tools.docx',
-        qualityAssurance: 'qa_report.pdf'
-      },
-      reviews: [
-        { reviewer: 'Quality Council', status: 'completed', date: '2024-03-15' },
-        { reviewer: 'SACE', status: 'pending', date: '2024-03-22' }
-      ]
-    },
-    {
-      id: 'DEV-2024-004',
-      qualificationTitle: 'Higher Certificate: Business Management',
-      phase: 'finalization',
-      progress: 95,
-      startDate: '2023-12-01',
-      targetDate: '2024-03-15',
-      leadDeveloper: 'Dr. Robert Taylor',
-      team: ['Sarah Adams', 'David Lee'],
-      status: 'active',
-      documents: {
-        curriculum: 'business_curriculum_final.pdf',
-        assessment: 'assessment_final.docx',
-        qualityAssurance: 'qa_approved.pdf'
-      },
-      reviews: [
-        { reviewer: 'Academic Board', status: 'completed', date: '2024-03-10' },
-        { reviewer: 'Quality Council', status: 'completed', date: '2024-03-12' }
-      ]
-    }
-  ];
+ const developmentProjects = developmentWorkspaceApps.map((app) => ({
+  id: app.id,
+  qualificationTitle: app.qualification,
+  phase: 'drafting' as const,
+  progress: 0,
+  startDate: app.evaluationSummary?.approvalDate || app.submissionDate,
+  targetDate: '',
+  leadDeveloper: app.evaluationSummary?.approvedBy || 'Unassigned',
+  team: [],
+  status: 'active' as const,
+  documents: {
+    applicationLetter: app.documents.applicationLetter || '',
+    motivation: app.documents.motivation || '',
+    reference: app.documents.reference || '',
+    acrLetter: app.documents.acrLetter || '',
+    other: app.documents.other || '',
+    resolutionDocument: app.evaluationSummary?.resolutionUploaded || '',
+    approvalLetter: app.evaluationSummary?.approvalLetter || ''
+  },
+  reviews: [],
+  applicationData: app
+}));
 
   // Sample data for resolution items
   const resolutionItems: ResolutionItem[] = [

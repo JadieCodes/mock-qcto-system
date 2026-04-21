@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Eye, FileText, Download, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+
 import type { ProcessType, SubmissionSource, ReissueReason, Pathway, DocumentType, Submission, SubmissionStatus, AppRole,  ErrorType,           // Add this
   OriginType,          // Add this
   CorrectionRecord,    // Add this
@@ -19,42 +20,23 @@ import type { ProcessType, SubmissionSource, ReissueReason, Pathway, DocumentTyp
 
 // Define all roles as constants
 const ROLES = {
-  CERT_ADMIN: 'Cert Admin' as AppRole,
+  CERT_ADMIN: 'Certification Practitioner' as AppRole,
   ASSESSMENT_UNIT: 'Assessment Unit' as AppRole,
   NAMB: 'NAMB' as AppRole,
   QP: 'QP' as AppRole,
   SDP: 'SDP' as AppRole,
 } as const;
 
+const getCorrectionTodoDate = (days = 7) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+};
 // Review checklists by process type
-const ISSUE_REVIEW_CHECKS = [
-  { id: 'signed', label: 'Letters are signed' },
-  { id: 'dates_correct', label: 'Dates are correct' },
-  { id: 'qualification_code', label: 'Qualification code is correct' },
-  { id: 'name_matches', label: 'Learner name matches ID' },
-  { id: 'file_3_4_complete', label: 'File 3–4 is complete' },
-];
 
-const REISSUE_REVIEW_CHECKS = [
-  { id: 'payment_verified', label: 'Payment verified' },
-  { id: 'affidavit_verified', label: 'Affidavit signed and verified' },
-  { id: 'original_certificate_received', label: 'Original certificate received (if required)' },
-  { id: 'certificate_exists', label: 'Certificate number exists in system' },
-  { id: 'record_in_system', label: 'Learner record already in CVS/Apprentice' },
-  { id: 'duplicate_check', label: 'Not a duplicate re-issue attempt' },
-  { id: 'reason_valid', label: 'Reason valid' },
-];
-
-const REPLACE_REVIEW_CHECKS = [
-  { id: 'certificate_exists', label: 'Certificate Exists' },
-  { id: 'learner_identity_matches', label: 'Learner Identity Matches' },
-  { id: 'supporting_document_verified', label: 'Supporting Document Verified' },
-  { id: 'replacement_reason_valid', label: 'Replacement Reason Valid' },
-  { id: 'no_duplicate', label: 'No Duplicate Active Certificate' },
-];
 
 export default function Intake() {
-  const { profileSubmissions, updateSubmission, currentRole } = useApp();
+  const { profileSubmissions, updateSubmission, currentRole, setCurrentRole } = useApp();
   const { toast } = useToast();
   
   // Document viewer state
@@ -69,56 +51,35 @@ export default function Intake() {
   // Decision state
   const [reviewDecision, setReviewDecision] = useState<'approved' | 'return' | ''>('');
   const [returnReason, setReturnReason] = useState('');
+  const [todoDate, setTodoDate] = useState('');
+  const [viewedDocuments, setViewedDocuments] = useState<Record<string, boolean>>({});
+
+
+
 
   // Filter submissions that need review (draft or submitted status)
-  const getVisibleSubmissions = () => {
-    return profileSubmissions.filter(sub => {
-      // ONLY show submissions that need review (draft or submitted)
-      // NEVER show completed or pending_correction
-      if (sub.status !== 'draft' && sub.status !== 'submitted') {
-        return false;
-      }
-
-      // CERT ADMIN: Can only see Re-Issue and Replace submissions
-      if (currentRole === ROLES.CERT_ADMIN) {
-        return sub.processType === 'reissue' || sub.processType === 'replace';
-      }
-
-      // ASSESSMENT UNIT: Can only see Issue submissions
-      if (currentRole === ROLES.ASSESSMENT_UNIT) {
-        return sub.processType === 'issue';
-      }
-
-      // NAMB: Can only see Re-issue and Replace for Legacy
-      if (currentRole === ROLES.NAMB) {
-        return (sub.processType === 'reissue' || sub.processType === 'replace') && 
-               sub.pathway === 'legacy';
-      }
-
-      // QP: Can only see Re-issue and Replace for Occupational/Skills
-      if (currentRole === ROLES.QP) {
-        return (sub.processType === 'reissue' || sub.processType === 'replace') && 
-               (sub.pathway === 'occupational' || sub.pathway === 'skills');
-      }
-
-      // SDP: Can only see Re-issue and Replace for Occupational/Skills
-      if (currentRole === ROLES.SDP) {
-        return (sub.processType === 'reissue' || sub.processType === 'replace') && 
-               (sub.pathway === 'occupational' || sub.pathway === 'skills');
-      }
-
+const getVisibleSubmissions = () => {
+  return profileSubmissions.filter(sub => {
+    if (sub.status !== 'draft' && sub.status !== 'submitted') {
       return false;
-    });
-  };
-
-  const getReviewChecksForSubmission = (submission: Submission) => {
-    switch (submission.processType) {
-      case 'issue': return ISSUE_REVIEW_CHECKS;
-      case 'reissue': return REISSUE_REVIEW_CHECKS;
-      case 'replace': return REPLACE_REVIEW_CHECKS;
-      default: return [];
     }
-  };
+
+    // Internal intake reviewer sees all new submissions
+    if (currentRole === ROLES.CERT_ADMIN) {
+      return true;
+    }
+
+    return false;
+  });
+};
+
+const getCorrectionTodoDate = (days = 7) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+};
+
+ 
 
  const createCorrectionRecord = (
   submission: Submission,
@@ -144,23 +105,29 @@ export default function Intake() {
     lastUpdated: new Date().toISOString(),
     assignedTo: submission.createdBy as AppRole,
     returnReason,
-    correctionNotes: existingRecord?.correctionNotes || []
+    correctionNotes: existingRecord?.correctionNotes || [],
+      todoDate: getCorrectionTodoDate(7),
+  expired: false,
   };
 };
 
   useEffect(() => {
-    if (selectedSubmission) {
-      const docVerifications: Record<string, boolean> = {};
-      selectedSubmission.documents.forEach(doc => {
-        docVerifications[doc.id] = doc.verified || false;
-      });
-      setDocumentVerifications(docVerifications);
-      const savedChecks = selectedSubmission.assessmentData?.reviewChecks || {};
-      setReviewChecks(savedChecks);
-      setReviewDecision('');
-      setReturnReason('');
-      setActiveTab('details');
-    }
+if (selectedSubmission) {
+  const docVerifications: Record<string, boolean> = {};
+  selectedSubmission.documents.forEach(doc => {
+    docVerifications[doc.id] = doc.verified || false;
+  });
+
+  setDocumentVerifications(docVerifications);
+  setViewedDocuments({}); // ✅ ADD THIS
+
+  const savedChecks = selectedSubmission.assessmentData?.reviewChecks || {};
+  setReviewChecks(savedChecks);
+  setReviewDecision('');
+  setReturnReason('');
+  setTodoDate('');
+  setActiveTab('details');
+}
   }, [selectedSubmission]);
 
   const handleViewDocuments = (submission: Submission) => {
@@ -179,9 +146,10 @@ export default function Intake() {
   const handleReviewDecision = () => {
     if (!selectedSubmission) return;
 
-    const totalChecks = getReviewChecksForSubmission(selectedSubmission).length;
-    const completedChecks = Object.values(reviewChecks).filter(Boolean).length;
-    const allChecksPassed = totalChecks > 0 && completedChecks === totalChecks;
+   const reviewChecksList = getReviewChecksForSubmission(selectedSubmission);
+const totalChecks = reviewChecksList.length;
+const completedChecks = reviewChecksList.filter((check) => reviewChecks[check.id]).length;
+const allChecksPassed = totalChecks > 0 && completedChecks === totalChecks;
 
     const totalDocs = selectedSubmission.documents.length;
     const verifiedDocs = Object.values(documentVerifications).filter(Boolean).length;
@@ -195,6 +163,7 @@ export default function Intake() {
       });
       return;
     }
+
 
  if (reviewDecision === 'approved') {
   if (!allChecksPassed || !allDocsVerified) {
@@ -265,36 +234,38 @@ export default function Intake() {
   }
 
   // Create correction record
-  const correctionRecord: CorrectionRecord = {
-    correctionId: `COR-${Date.now()}`,
-    submissionId: selectedSubmission.id,
-    learnerName: selectedSubmission.candidateName,
-    qualification: selectedSubmission.certificateType,
-    pathway: selectedSubmission.pathway || 'occupational',
-    errorType,
-    origin: 'intake',
-    responsibleUnit: selectedSubmission.createdBy as AppRole,
-    currentStatus: 'active',
-    version: 1,
-    dateCreated: new Date().toISOString(),
-    lastUpdated: new Date().toISOString(),
-    assignedTo: selectedSubmission.createdBy as AppRole,
-    returnReason,
-    correctionNotes: []
-  };
+const correctionRecord: CorrectionRecord = {
+  correctionId: `COR-${Date.now()}`,
+  submissionId: selectedSubmission.id,
+  learnerName: selectedSubmission.candidateName,
+  qualification: selectedSubmission.certificateType,
+  pathway: selectedSubmission.pathway || 'occupational',
+  errorType,
+  origin: 'intake',
+  responsibleUnit: selectedSubmission.createdBy as AppRole,
+  currentStatus: 'active',
+  version: 1,
+  dateCreated: new Date().toISOString(),
+  lastUpdated: new Date().toISOString(),
+  assignedTo: selectedSubmission.createdBy as AppRole,
+  returnReason,
+  correctionNotes: [],
+  todoDate: new Date(todoDate).toISOString(),
+  expired: false,
+};
 
   // Update documents with verification status
-  const updatedDocuments = selectedSubmission.documents.map(doc => ({
-    ...doc,
-    verified: documentVerifications[doc.id] || false,
-    versions: [{
-      version: 1,
-      url: doc.url || '',
-      uploadedAt: doc.uploadedAt,
-      uploadedBy: selectedSubmission.createdBy,
-      verified: doc.verified || false
-    }]
-  }));
+const updatedDocuments = selectedSubmission.documents.map(doc => ({
+  ...doc,
+  verified: documentVerifications[doc.id] || false,
+  versions: [{
+    version: 1,
+    url: doc.url || '',
+    uploadedAt: doc.uploadedAt,
+    uploadedBy: selectedSubmission.createdBy,
+    verified: documentVerifications[doc.id] || false
+  }]
+}));
 
   // RETURN FOR CORRECTIONS
   const updatedSubmission: Submission = {
@@ -340,8 +311,7 @@ export default function Intake() {
       recommendation_letter: 'Recommendation Letter',
       id_copy: 'ID Copy',
       file_3_4: 'File 3–4',
-      signed_result_approval: 'Signed Result Approval',
-      supporting_evidence: 'Supporting Evidence',
+    
       programme_approval_letter: 'Programme Approval Letter',
       learner_result_approval_sheet: 'Learner Result Approval Sheet',
       qualification_data_confirmation: 'Qualification/Programme Data Confirmation',
@@ -359,13 +329,20 @@ export default function Intake() {
     return labels[type] || type;
   };
 
+ const getReviewChecksForSubmission = (submission: Submission) => {
+  return submission.documents.map((doc) => ({
+    id: `doc_${doc.type}`,
+    label: `${getDocumentLabel(doc.type)} checked`,
+  }));
+};
+
   const renderDocumentViewer = () => {
     if (!selectedSubmission) return null;
 
-    const reviewChecksList = getReviewChecksForSubmission(selectedSubmission);
-    const totalChecks = reviewChecksList.length;
-    const completedChecks = Object.values(reviewChecks).filter(Boolean).length;
-    const allChecksPassed = totalChecks > 0 && completedChecks === totalChecks;
+const reviewChecksList = getReviewChecksForSubmission(selectedSubmission);
+const totalChecks = reviewChecksList.length;
+const completedChecks = reviewChecksList.filter((check) => reviewChecks[check.id]).length;
+const allChecksPassed = totalChecks > 0 && completedChecks === totalChecks;
     const totalDocs = selectedSubmission.documents.length;
     const verifiedDocs = Object.values(documentVerifications).filter(Boolean).length;
     const allDocsVerified = totalDocs > 0 && verifiedDocs === totalDocs;
@@ -416,8 +393,116 @@ export default function Intake() {
                     </div>
                   )}
                 </div>
+                
               </div>
+              
+{selectedSubmission.assessmentData?.preIntakeValidationStatus && (
+  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
+    <div>
+      <h4 className="font-medium text-blue-900">External CVS Pre-Validation</h4>
+      <p className="text-sm text-blue-700">
+        Validation completed before the submission was sent to Internal Intake.
+      </p>
+    </div>
 
+    <div className="flex items-center gap-2 flex-wrap">
+      <Badge
+        variant={
+          selectedSubmission.assessmentData.preIntakeValidationStatus === 'passed'
+            ? 'outline'
+            : selectedSubmission.assessmentData.preIntakeValidationStatus === 'failed'
+            ? 'destructive'
+            : 'secondary'
+        }
+      >
+        {selectedSubmission.assessmentData.preIntakeValidationStatus}
+      </Badge>
+
+      {selectedSubmission.assessmentData.preIntakeValidationAt && (
+        <span className="text-xs text-muted-foreground">
+          Checked: {new Date(selectedSubmission.assessmentData.preIntakeValidationAt).toLocaleString()}
+        </span>
+      )}
+
+      {selectedSubmission.assessmentData.preIntakeValidatedBy && (
+        <span className="text-xs text-muted-foreground">
+          By: {selectedSubmission.assessmentData.preIntakeValidatedBy}
+        </span>
+      )}
+    </div>
+
+    {selectedSubmission.assessmentData.preIntakeValidationError && (
+      <div className="rounded-md border border-red-200 bg-red-50 p-3">
+        <p className="text-sm font-medium text-red-800">Validation Error</p>
+        <p className="text-sm text-red-700 mt-1">
+          {selectedSubmission.assessmentData.preIntakeValidationError}
+        </p>
+      </div>
+    )}
+
+    {selectedSubmission.assessmentData.preIntakeValidationSummary && (
+      <div className="space-y-3">
+        <p className="text-sm font-medium">File 3 to 4 Learner Summary</p>
+
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="rounded-md border bg-white p-3">
+            <p className="text-xs text-muted-foreground">Total Learners</p>
+            <p className="font-semibold">
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.totalLearners}
+            </p>
+          </div>
+
+          <div className="rounded-md border bg-white p-3">
+            <p className="text-xs text-muted-foreground">Passed</p>
+            <p className="font-semibold text-green-600">
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.passedLearners}
+            </p>
+          </div>
+
+          <div className="rounded-md border bg-white p-3">
+            <p className="text-xs text-muted-foreground">Failed</p>
+            <p className="font-semibold text-red-600">
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.failedLearners}
+            </p>
+          </div>
+        </div>
+
+        {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows &&
+          selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Failed Learners / Rows</p>
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-md border border-red-200 bg-red-50 p-2 text-xs"
+                >
+                  <span className="font-medium">{row.learnerIdentifier}:</span> {row.reason}
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
+    )}
+
+    {selectedSubmission.assessmentData.preIntakeSystemChecks &&
+      selectedSubmission.assessmentData.preIntakeSystemChecks.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Validation Checks</p>
+          {selectedSubmission.assessmentData.preIntakeSystemChecks.map((check, idx) => (
+            <div key={idx} className="flex items-start gap-2 text-sm">
+              <span>{check.passed ? '✅' : '❌'}</span>
+              <div>
+                <p>{check.name}</p>
+                {check.error && (
+                  <p className="text-xs text-red-600">{check.error}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+  </div>
+)}
               <h4 className="font-medium text-lg">Documents ({selectedSubmission.documents.length})</h4>
               
               {selectedSubmission.documents.map((doc) => (
@@ -433,17 +518,50 @@ export default function Intake() {
                   </div>
                   <div className="flex items-center space-x-4">
                     {doc.url && (
-                      <Button variant="outline" size="sm" className="h-8" onClick={() => window.open(doc.url, '_blank')}>
+                      <Button
+  variant="outline"
+  size="sm"
+  className="h-8"
+  onClick={() => {
+    window.open(doc.url, '_blank');
+    setViewedDocuments(prev => ({
+      ...prev,
+      [doc.id]: true
+    }));
+  }}
+>
                         <Eye className="h-4 w-4 mr-1" /> View
                       </Button>
                     )}
                     <div className="flex items-center space-x-2 border-l pl-4">
-                      <Checkbox
-                        id={`verify-${doc.id}`}
-                        checked={documentVerifications[doc.id] || false}
-                        onCheckedChange={(checked) => handleDocumentVerification(doc.id, checked as boolean)}
-                      />
-                      <Label htmlFor={`verify-${doc.id}`} className="text-sm">Verified</Label>
+                     <Checkbox
+  id={`verify-${doc.id}`}
+  checked={documentVerifications[doc.id] || false}
+  disabled={!viewedDocuments[doc.id]} // ✅ BLOCK UNTIL VIEWED
+  onCheckedChange={(checked) => {
+    if (!viewedDocuments[doc.id]) {
+      toast({
+        title: 'View Required',
+        description: 'You must view the document before verifying it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    handleDocumentVerification(doc.id, checked as boolean);
+  }}
+/>
+                      <div className="flex flex-col">
+  <Label htmlFor={`verify-${doc.id}`} className="text-sm">
+    Verified
+  </Label>
+
+  {!viewedDocuments[doc.id] && (
+    <span className="text-xs text-amber-600">
+      View document first
+    </span>
+  )}
+</div>
                     </div>
                   </div>
                 </div>
@@ -471,6 +589,20 @@ export default function Intake() {
                   ))}
                 </div>
               </div>
+              {selectedSubmission.assessmentData?.sentBackToIntakeReason && (
+  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+    <p className="text-xs text-amber-700 font-medium">Returned from Integration</p>
+    <p className="text-sm text-amber-800 mt-1">
+      {selectedSubmission.assessmentData.sentBackToIntakeReason}
+    </p>
+    <p className="text-xs text-amber-600 mt-2">
+      Sent back by: {selectedSubmission.assessmentData.sentBackToIntakeBy || 'Unknown'} on{' '}
+      {selectedSubmission.assessmentData.sentBackToIntakeAt
+        ? new Date(selectedSubmission.assessmentData.sentBackToIntakeAt).toLocaleDateString()
+        : '-'}
+    </p>
+  </div>
+)}
             </TabsContent>
           </Tabs>
 
@@ -485,15 +617,29 @@ export default function Intake() {
                 <RadioGroupItem value="return" id="return" />
                 <div className="flex-1">
                   <Label htmlFor="return" className="text-amber-600">Return for Corrections</Label>
-                  {reviewDecision === 'return' && (
-                    <Textarea
-                      className="mt-2"
-                      value={returnReason}
-                      onChange={(e) => setReturnReason(e.target.value)}
-                      placeholder="Explain what needs to be corrected..."
-                      rows={3}
-                    />
-                  )}
+                {reviewDecision === 'return' && (
+  <div className="space-y-3 mt-2">
+    <Textarea
+      value={returnReason}
+      onChange={(e) => setReturnReason(e.target.value)}
+      placeholder="Explain what needs to be corrected..."
+      rows={3}
+    />
+
+    <div>
+      <Label htmlFor="todo-date" className="text-sm">
+        To Do Date
+      </Label>
+      <input
+        id="todo-date"
+        type="date"
+        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        value={todoDate}
+        onChange={(e) => setTodoDate(e.target.value)}
+      />
+    </div>
+  </div>
+)}
                 </div>
               </div>
             </RadioGroup>

@@ -1,17 +1,15 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard,
+import {
   UserCog,
   BookOpen,
-  Building2,
   Users,
   Shield,
-  Award,
   LogOut,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  FileCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,25 +21,45 @@ interface AssessmentLayoutProps {
 
 // Assessment nav items
 const assessmentNavItems = [
-  
-  { path: '/departments/assessment/assessor-management', label: 'Assessor Management', icon: UserCog },
-  { path: '/departments/assessment/standards-management', label: 'Standards Management', icon: BookOpen },
- // { path: '/departments/assessment/center-management', label: 'Center Management', icon: Building2 },
-  { path: '/departments/assessment/candidate-registration', label: 'Candidate Registration', icon: Users },
-  { path: '/departments/assessment/quality-assurance', label: 'Quality Assurance', icon: Shield },
-  //{ path: '/departments/assessment/results-management', label: 'Results Management', icon: Award },
+  {
+    path: '/departments/assessment/qasa-management',
+    label: 'QASA Management',
+    icon: FileCheck,
+  },
+
+  {
+    path: '/departments/assessment/standards-management',
+    label: 'Standards Management',
+    icon: BookOpen,
+  },
+  // { path: '/departments/assessment/center-management', label: 'Center Management', icon: Building2 },
+  {
+    path: '/departments/assessment/candidate-registration',
+    label: 'Candidate Registration',
+    icon: Users,
+  },
+  {
+    path: '/departments/assessment/quality-assurance',
+    label: 'Quality Assurance',
+    icon: Shield,
+  },
+  // { path: '/departments/assessment/results-management', label: 'Results Management', icon: Award },
 ];
 
-export const AssessmentLayout = ({ children, userName, organizationName }: AssessmentLayoutProps) => {
+export const AssessmentLayout = ({
+  children,
+  userName,
+  organizationName,
+}: AssessmentLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isNavOpen, setIsNavOpen] = useState(true);
 
- const handleLogout = () => {
-  localStorage.removeItem('department_login_assessment');
-  localStorage.removeItem('current_department');
-  navigate('/departments');
-};
+  const handleLogout = () => {
+    localStorage.removeItem('department_login_assessment');
+    localStorage.removeItem('current_department');
+    navigate('/departments');
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -59,14 +77,22 @@ export const AssessmentLayout = ({ children, userName, organizationName }: Asses
       </header>
 
       <div className="flex flex-1 w-full px-4 py-6">
-        <aside className={`${isNavOpen ? 'w-64' : 'w-20'} mr-6 flex flex-col justify-between transition-all duration-300`}>
+        <aside
+          className={`${
+            isNavOpen ? 'w-64' : 'w-20'
+          } mr-6 flex flex-col justify-between transition-all duration-300`}
+        >
           <nav className="p-8 space-y-2">
             {/* Toggle Button */}
             <button
               onClick={() => setIsNavOpen(!isNavOpen)}
               className="w-full flex items-center justify-end mb-4 text-gray-500 hover:text-gray-700"
             >
-              {isNavOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+              {isNavOpen ? (
+                <ChevronDown className="h-5 w-5" />
+              ) : (
+                <ChevronRight className="h-5 w-5" />
+              )}
             </button>
 
             {/* Navigation Links */}
@@ -74,6 +100,7 @@ export const AssessmentLayout = ({ children, userName, organizationName }: Asses
               {assessmentNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
+
                 return (
                   <Link
                     key={item.path}
@@ -102,7 +129,7 @@ export const AssessmentLayout = ({ children, userName, organizationName }: Asses
               'flex items-center gap-4 rounded-lg px-4 py-4 text-lg font-medium text-red-600 cursor-pointer hover:bg-red-100 hover:text-red-700 m-8',
               !isNavOpen && 'justify-center px-2'
             )}
-            title={!isNavOpen ? "Logout" : undefined}
+            title={!isNavOpen ? 'Logout' : undefined}
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
             {isNavOpen && <span>Logout</span>}

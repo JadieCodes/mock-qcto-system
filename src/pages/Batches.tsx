@@ -62,7 +62,8 @@ export default function Batches() {
   const [paperStartNumber, setPaperStartNumber] = useState<number>(10001);
   const [paperEndNumber, setPaperEndNumber] = useState<number>(10001);
 
-  const canCreate = ['Cert Admin'].includes(currentRole);
+  const canCreate = ['Certification Practitioner'].includes(currentRole);
+
 const handleCreatePrintJob = (batch: Batch) => {
   // Update batch status to 'printing'
   updateBatchStatus(batch.batchUuid, 'printing');
@@ -704,47 +705,7 @@ const handleCreatePrintJob = (batch: Batch) => {
               )}
 
               {/* Paper Allocation Record */}
-              {selectedBatch.paperAllocation && (
-                <div className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Printer className="h-5 w-5 text-green-500" />
-                      <h3 className="font-semibold">Paper Allocation Record</h3>
-                    </div>
-                    <Badge variant="outline">System Generated</Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm bg-muted/30 p-3 rounded">
-                    <div>
-                      <p className="text-muted-foreground">Batch ID</p>
-                      <p className="font-mono font-medium">{selectedBatch.paperAllocation.batchId}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Paper Range</p>
-                      <p className="font-medium">
-                        {selectedBatch.paperAllocation.paperStartNumber} - {selectedBatch.paperAllocation.paperEndNumber}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Quantity Allocated</p>
-                      <p className="font-medium">{selectedBatch.paperAllocation.quantity}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Allocated By</p>
-                      <p className="font-medium">{selectedBatch.paperAllocation.allocatedBy}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Date</p>
-                      <p className="font-medium">
-                        {new Date(selectedBatch.paperAllocation.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Remaining Stock</p>
-                      <p className="font-medium">{selectedBatch.paperAllocation.remainingStock.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
+         
 
               {/* Inventory Control Record */}
               {selectedBatch.inventoryControl && (

@@ -18,9 +18,13 @@ import type { ProcessType, Submission, DocumentType, AppRole, ErrorType,        
 import { Input } from '@/components/ui/input';
 
 const ROLES = {
-  CERT_ADMIN: 'Cert Admin' as AppRole,
+  CERT_ADMIN: 'Certification Practitioner' as AppRole,
 } as const;
-
+const getCorrectionTodoDate = (days = 7) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+};
 // System check types
 interface SystemCheck {
   id: string;
@@ -28,6 +32,7 @@ interface SystemCheck {
   status: 'pending' | 'processing' | 'passed' | 'failed';
   message?: string;
 }
+
 
 export default function Integration() {
   const { profileSubmissions, updateSubmission, currentRole } = useApp();
@@ -45,16 +50,75 @@ export default function Integration() {
     qualificationCode: ''
   });
   const [showDoubleCapture, setShowDoubleCapture] = useState(false);
+  const [todoDate, setTodoDate] = useState('');
+  const [sendBackToIntakeReason, setSendBackToIntakeReason] = useState('');
+const [showSendBackToIntake, setShowSendBackToIntake] = useState(false);
 
+
+const handleSendBackToIntake = () => {
+  if (!selectedSubmission) return;
+
+  if (!sendBackToIntakeReason.trim()) {
+    toast({
+      title: 'Reason Required',
+      description: 'Please provide a reason for sending the submission back to Intake.',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  const updatedSubmission: Submission = {
+    ...selectedSubmission,
+    status: 'submitted',
+    assessmentData: {
+      ...selectedSubmission.assessmentData,
+
+      // Clear integration workflow
+      integrationStatus: 'pending',
+      integrationError: undefined,
+      integrationFailedAt: undefined,
+      integrationCompletedAt: undefined,
+      integratedBy: undefined,
+      integratedSystem: undefined,
+      systemChecks: undefined,
+
+      // Add send-back tracking
+      sentBackToIntake: true,
+      sentBackToIntakeAt: new Date().toISOString(),
+      sentBackToIntakeBy: currentRole,
+      sentBackToIntakeReason: sendBackToIntakeReason,
+    }
+  };
+
+  updateSubmission(selectedSubmission.id, updatedSubmission);
+
+  toast({
+    title: 'Sent Back to Intake',
+    description: 'Submission has been returned to Intake for re-review.',
+  });
+
+  setIsDocumentModalOpen(false);
+  setSelectedSubmission(null);
+  setSendBackToIntakeReason('');
+  setShowSendBackToIntake(false);
+};
+  const getCorrectionTodoDate = (days = 7) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+};
   // Reset state when opening a new submission
   useEffect(() => {
-    if (selectedSubmission && isDocumentModalOpen) {
-      setSystemChecks([]);
-      setProgress(0);
-      setIntegrationStatus('idle');
-      setIntegrationError('');
-      setShowDoubleCapture(false);
-    }
+if (selectedSubmission && isDocumentModalOpen) {
+  setSystemChecks([]);
+  setProgress(0);
+  setIntegrationStatus('idle');
+  setIntegrationError('');
+  setShowDoubleCapture(false);
+  setTodoDate('');
+  setSendBackToIntakeReason('');
+  setShowSendBackToIntake(false);
+}
   }, [selectedSubmission, isDocumentModalOpen]);
 
   // ONLY CRT Admin can access this page
@@ -148,7 +212,7 @@ export default function Integration() {
     
     // FOR PRESENTATION PURPOSES - Use submission ID to determine success/failure
     // Even IDs will succeed, odd IDs will fail
-    const shouldSucceed = parseInt(submission.id.split('-').pop() || '0') % 2 === 0;
+    const shouldSucceed = integrationTestMode === 'pass';
     
     // Make a copy of checks to work with
     const updatedChecks = [...checks];
@@ -263,6 +327,10 @@ export default function Integration() {
     setProgress(100);
     return { success: true };
   };
+
+  
+  const [integrationTestMode, setIntegrationTestMode] = useState<'pass' | 'fail'>('pass');
+  
 const createCorrectionRecord = (
   submission: Submission,
   errorType: ErrorType,
@@ -289,7 +357,10 @@ const createCorrectionRecord = (
     assignedTo: submission.createdBy as AppRole,
     returnReason,
     correctionNotes: existingRecord?.correctionNotes || [],
-    integrationErrorLog
+    integrationErrorLog,
+      // ✅ NEW
+  todoDate: getCorrectionTodoDate(7),
+  expired: false,
   };
 };
 
@@ -297,6 +368,15 @@ const createCorrectionRecord = (
 
 const handleSendToCorrections = () => {
   if (!selectedSubmission) return;
+
+  if (!todoDate) {
+    toast({
+      title: 'To Do Date Required',
+      description: 'Please set a to do date before sending back for correction.',
+      variant: 'destructive',
+    });
+    return;
+  }
 
   // Create integration error log
   const integrationErrorLog: IntegrationErrorLog = {
@@ -310,21 +390,23 @@ const handleSendToCorrections = () => {
   // Create correction record
   const correctionRecord: CorrectionRecord = {
     correctionId: `COR-${Date.now()}`,
-    submissionId: selectedSubmission.id,
-    learnerName: selectedSubmission.candidateName,
-    qualification: selectedSubmission.certificateType,
-    pathway: selectedSubmission.pathway || 'occupational',
-    errorType: 'integration_failure',
-    origin: 'integration',
-    responsibleUnit: selectedSubmission.createdBy as AppRole,
-    currentStatus: 'active',
-    version: 1,
-    dateCreated: new Date().toISOString(),
-    lastUpdated: new Date().toISOString(),
-    assignedTo: selectedSubmission.createdBy as AppRole,
-    returnReason: `Integration Failure: ${integrationError || 'System verification failed'}`,
-    correctionNotes: [],
-    integrationErrorLog
+  submissionId: selectedSubmission.id,
+  learnerName: selectedSubmission.candidateName,
+  qualification: selectedSubmission.certificateType,
+  pathway: selectedSubmission.pathway || 'occupational',
+  errorType: 'integration_failure',
+  origin: 'integration',
+  responsibleUnit: selectedSubmission.createdBy as AppRole,
+  currentStatus: 'active',
+  version: 1,
+  dateCreated: new Date().toISOString(),
+  lastUpdated: new Date().toISOString(),
+  assignedTo: selectedSubmission.createdBy as AppRole,
+  returnReason: `Integration Failure: ${integrationError || 'System verification failed'}`,
+  correctionNotes: [],
+  integrationErrorLog,
+   todoDate: new Date(todoDate).toISOString(),
+  expired: false,
   };
 
   // Send back to corrections with integration failure reason
@@ -512,8 +594,7 @@ if (result.success) {
       recommendation_letter: 'Recommendation Letter',
       id_copy: 'ID Copy',
       file_3_4: 'File 3–4',
-      signed_result_approval: 'Signed Result Approval',
-      supporting_evidence: 'Supporting Evidence',
+   
       programme_approval_letter: 'Programme Approval Letter',
       learner_result_approval_sheet: 'Learner Result Approval Sheet',
       qualification_data_confirmation: 'Qualification/Programme Data Confirmation',
@@ -563,13 +644,13 @@ if (result.success) {
                 <TableHead>Pathway</TableHead>
                 <TableHead>Target System</TableHead>
                 <TableHead>Approved</TableHead>
-                <TableHead>Status</TableHead>
+                
                 <TableHead className="text-center">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {pendingSubmissions.map((sub) => {
-                const shouldSucceed = parseInt(sub.id.split('-').pop() || '0') % 2 === 0;
+               
                 return (
                   <TableRow key={sub.id}>
                     <TableCell className="font-mono text-xs">{sub.id}</TableCell>
@@ -591,15 +672,7 @@ if (result.success) {
                       {sub.assessmentData?.reviewedAt ? 
                         new Date(sub.assessmentData.reviewedAt).toLocaleDateString() : '-'}
                     </TableCell>
-                    <TableCell>
-                      {sub.assessmentData?.integrationStatus === 'failed' ? (
-                        <Badge variant="destructive">Failed</Badge>
-                      ) : (
-                        <Badge variant={shouldSucceed ? "secondary" : "destructive"} className={shouldSucceed ? "" : "bg-orange-100 text-orange-800"}>
-                          {shouldSucceed ? 'Ready' : 'Will Fail'}
-                        </Badge>
-                      )}
-                    </TableCell>
+                
                     <TableCell className="text-center">
                       <Button 
                         size="sm" 
@@ -664,10 +737,70 @@ if (result.success) {
                     <p className="font-medium">{selectedSubmission.assessmentData?.integrationAttempts || 0}</p>
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-muted-foreground bg-blue-50 p-2 rounded">
-                  Demo: This submission will {parseInt(selectedSubmission.id.split('-').pop() || '0') % 2 === 0 ? '✅ SUCCEED' : '❌ FAIL'}
-                </div>
+               <div className="mt-2 space-y-2">
+ <div className="mt-2 text-sm text-muted-foreground bg-blue-50 p-2 rounded">
+  <strong>Demo Mode:</strong> Use the Force Pass / Force Fail controls in the integration modal.
+</div>
+
+  <div className="flex gap-2">
+    <Button
+      type="button"
+      variant={integrationTestMode === 'pass' ? 'default' : 'outline'}
+      onClick={() => setIntegrationTestMode('pass')}
+    >
+      Force Pass
+    </Button>
+
+    <Button
+      type="button"
+      variant={integrationTestMode === 'fail' ? 'destructive' : 'outline'}
+      onClick={() => setIntegrationTestMode('fail')}
+    >
+      Force Fail
+    </Button>
+  </div>
+</div>
               </div>
+              <div className="border rounded-lg p-4 bg-amber-50 border-amber-200 space-y-3">
+  <div className="flex items-center justify-between">
+    <div>
+      <h4 className="font-medium text-amber-800">Send Back to Intake</h4>
+      <p className="text-sm text-amber-700">
+        Use this if the submission must go back to Intake for re-review before integration continues.
+      </p>
+    </div>
+
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => setShowSendBackToIntake((prev) => !prev)}
+    >
+      {showSendBackToIntake ? 'Cancel' : 'Send Back to Intake'}
+    </Button>
+  </div>
+
+  {showSendBackToIntake && (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="send-back-intake-reason">Reason</Label>
+        <Textarea
+          id="send-back-intake-reason"
+          value={sendBackToIntakeReason}
+          onChange={(e) => setSendBackToIntakeReason(e.target.value)}
+          placeholder="Explain why this submission must go back to Intake..."
+          rows={3}
+          className="mt-1"
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="destructive" onClick={handleSendBackToIntake}>
+          Send Back to Intake
+        </Button>
+      </div>
+    </div>
+  )}
+</div>
 
               {/* Re-Issue Double Capture */}
               {selectedSubmission.processType === 'reissue' && selectedSubmission.reissueReason === 'administrative_error' && integrationStatus === 'idle' && (
@@ -776,26 +909,145 @@ if (result.success) {
               )}
 
               {/* Failure State - Send to Corrections */}
-              {integrationStatus === 'failed' && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6 space-y-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-red-800">Integration Failed</h4>
-                      <p className="text-sm text-red-700 mt-1">{integrationError}</p>
-                      <div className="flex gap-2 mt-4">
-                        <Button onClick={handleIntegrate} variant="outline" size="sm">
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Retry Verification
-                        </Button>
-                        <Button onClick={handleSendToCorrections} variant="destructive" size="sm">
-                          Send to Corrections
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+         {integrationStatus === 'failed' && (
+  <div className="bg-red-50 border border-red-200 rounded-lg p-6 space-y-4">
+    <div className="flex items-start gap-3">
+      <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+      <div className="flex-1">
+        <h4 className="font-semibold text-red-800">Integration Failed</h4>
+        <p className="text-sm text-red-700 mt-1">{integrationError}</p>
+
+        <div className="mt-4">
+          <Label htmlFor="integration-todo-date">To Do Date</Label>
+          <Input
+            id="integration-todo-date"
+            type="date"
+            value={todoDate}
+            onChange={(e) => setTodoDate(e.target.value)}
+            className="mt-1 max-w-xs"
+          />
+        </div>
+
+        <div className="flex gap-2 mt-4">
+          <Button onClick={handleIntegrate} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry Verification
+          </Button>
+          <Button onClick={handleSendToCorrections} variant="destructive" size="sm">
+            Send to Corrections
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+{selectedSubmission?.assessmentData?.preIntakeValidationStatus && (
+  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
+    <div>
+      <h4 className="font-medium text-blue-900">External CVS Pre-Validation</h4>
+      <p className="text-sm text-blue-700">
+        Validation completed before the submission was sent to Internal Intake.
+      </p>
+    </div>
+
+    <div className="flex items-center gap-2 flex-wrap">
+      <Badge
+        variant={
+          selectedSubmission.assessmentData.preIntakeValidationStatus === 'passed'
+            ? 'outline'
+            : selectedSubmission.assessmentData.preIntakeValidationStatus === 'failed'
+            ? 'destructive'
+            : 'secondary'
+        }
+      >
+        {selectedSubmission.assessmentData.preIntakeValidationStatus}
+      </Badge>
+
+      {selectedSubmission.assessmentData.preIntakeValidationAt && (
+        <span className="text-xs text-muted-foreground">
+          Checked: {new Date(selectedSubmission.assessmentData.preIntakeValidationAt).toLocaleString()}
+        </span>
+      )}
+
+      {selectedSubmission.assessmentData.preIntakeValidatedBy && (
+        <span className="text-xs text-muted-foreground">
+          By: {selectedSubmission.assessmentData.preIntakeValidatedBy}
+        </span>
+      )}
+    </div>
+
+    {selectedSubmission.assessmentData.preIntakeValidationError && (
+      <div className="rounded-md border border-red-200 bg-red-50 p-3">
+        <p className="text-sm font-medium text-red-800">Validation Error</p>
+        <p className="text-sm text-red-700 mt-1">
+          {selectedSubmission.assessmentData.preIntakeValidationError}
+        </p>
+      </div>
+    )}
+
+    {selectedSubmission.assessmentData.preIntakeValidationSummary && (
+      <div className="space-y-3">
+        <p className="text-sm font-medium">File 3 to 4 Learner Summary</p>
+
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="rounded-md border bg-white p-3">
+            <p className="text-xs text-muted-foreground">Total Learners</p>
+            <p className="font-semibold">
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.totalLearners}
+            </p>
+          </div>
+
+          <div className="rounded-md border bg-white p-3">
+            <p className="text-xs text-muted-foreground">Passed</p>
+            <p className="font-semibold text-green-600">
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.passedLearners}
+            </p>
+          </div>
+
+          <div className="rounded-md border bg-white p-3">
+            <p className="text-xs text-muted-foreground">Failed</p>
+            <p className="font-semibold text-red-600">
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.failedLearners}
+            </p>
+          </div>
+        </div>
+
+        {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows &&
+          selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Failed Learners / Rows</p>
+              {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-md border border-red-200 bg-red-50 p-2 text-xs"
+                >
+                  <span className="font-medium">{row.learnerIdentifier}:</span> {row.reason}
                 </div>
-              )}
+              ))}
+            </div>
+          )}
+      </div>
+    )}
+
+    {selectedSubmission.assessmentData.preIntakeSystemChecks &&
+      selectedSubmission.assessmentData.preIntakeSystemChecks.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Validation Checks</p>
+          {selectedSubmission.assessmentData.preIntakeSystemChecks.map((check, idx) => (
+            <div key={idx} className="flex items-start gap-2 text-sm">
+              <span>{check.passed ? '✅' : '❌'}</span>
+              <div>
+                <p>{check.name}</p>
+                {check.error && (
+                  <p className="text-xs text-red-600">{check.error}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+  </div>
+)}
 
               {/* Document Preview */}
               <div>

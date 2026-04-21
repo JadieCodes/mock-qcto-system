@@ -30,6 +30,8 @@ export default function InternalEvaluations() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
 
+  
+
   useEffect(() => {
     setApplications(getApplications());
   }, []);
@@ -67,24 +69,29 @@ export default function InternalEvaluations() {
     }
   };
 
-  const handleSummaryComplete = (id: string, resolution: string, resolutionFile: string | null, recommended: boolean) => {
-    const updatedApp = updateApplication(id, {
-      status: 'approved',
-      evaluationSummary: {
-        resolution: resolution,
-        resolutionUploaded: resolutionFile,
-        recommended: recommended,
-        submitted: true,
-        approvalLetter: null,
-        approvalDate: new Date().toISOString(),
-        approvedBy: 'Current User'
-      }
-    });
-    
-    if (updatedApp) {
-      setApplications(getApplications());
+const handleSummaryComplete = (
+  id: string,
+  resolution: string,
+  resolutionFile: string | null,
+  recommended: boolean
+) => {
+  const updatedApp = updateApplication(id, {
+    status: recommended ? 'development_workspace' : 'rejected',
+    evaluationSummary: {
+      resolution,
+      resolutionUploaded: resolutionFile,
+      recommended,
+      submitted: true,
+      approvalLetter: null,
+      approvalDate: new Date().toISOString(),
+      approvedBy: 'Current User'
     }
-  };
+  });
+
+  if (updatedApp) {
+    setApplications(getApplications());
+  }
+};
 
  const handleApprovalLetterUpload = (id: string, file: string) => {
   const app = applications.find(a => a.id === id);
@@ -216,21 +223,22 @@ export default function InternalEvaluations() {
           getStatusColor={getStatusColor}
         />
       ) : (
-        <EvaluationSummary 
-          applications={summaryApps}
-          onViewApplication={handleViewApplication}
-          onSummaryComplete={handleSummaryComplete}
-          onApprovalLetterUpload={handleApprovalLetterUpload}
-        />
+       <EvaluationSummary 
+  applications={summaryApps}
+  onViewApplication={handleViewApplication}
+  onApprovalLetterUpload={handleApprovalLetterUpload}
+/>
       )}
 
       {/* Evaluation Details Modal */}
-      <EvaluationDetailsModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        application={selectedApplication}
-        onEvaluationComplete={handleEvaluationComplete}
-      />
+     <EvaluationDetailsModal
+  isOpen={isModalOpen}
+  onClose={handleCloseModal}
+  application={selectedApplication}
+  onEvaluationComplete={handleEvaluationComplete}
+  onSummaryComplete={handleSummaryComplete}
+  onApprovalLetterUpload={handleApprovalLetterUpload}
+/>
     </div>
   );
 }
@@ -316,27 +324,7 @@ function InitialEvaluation({ applications, onViewApplication, getStatusColor }: 
 }
 
 // Evaluation Summary Component
-function EvaluationSummary({ applications, onViewApplication, onSummaryComplete, onApprovalLetterUpload }: any) {
-  const [selectedApp, setSelectedApp] = useState<string | null>(null);
-  const [resolution, setResolution] = useState('');
-  const [resolutionFile, setResolutionFile] = useState<string | null>(null);
-  const [recommended, setRecommended] = useState(false);
-
-  const handleSubmit = (appId: string) => {
-    onSummaryComplete(appId, resolution, resolutionFile, recommended);
-    setSelectedApp(null);
-    setResolution('');
-    setResolutionFile(null);
-    setRecommended(false);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setResolutionFile(file.name);
-    }
-  };
-
+function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUpload }: any) {
   return (
     <div className="space-y-6">
       {/* Summary Stats Cards */}
@@ -356,9 +344,9 @@ function EvaluationSummary({ applications, onViewApplication, onSummaryComplete,
         <div className="bg-gradient-to-br from-green-50 to-white p-6 rounded-xl shadow-sm border border-green-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-green-600 font-medium">Resolution Pending</p>
+              <p className="text-sm text-green-600 font-medium">Resolution Submitted</p>
               <p className="text-3xl font-bold text-gray-900">
-                {applications.filter((a: Application) => !a.evaluationSummary?.submitted).length}
+                {applications.filter((a: Application) => a.evaluationSummary?.submitted).length}
               </p>
             </div>
             <div className="bg-green-100 p-3 rounded-lg">
@@ -370,9 +358,9 @@ function EvaluationSummary({ applications, onViewApplication, onSummaryComplete,
         <div className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-xl shadow-sm border border-blue-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-blue-600 font-medium">Approval Letters</p>
+              <p className="text-sm text-blue-600 font-medium">Approval Letters Pending</p>
               <p className="text-3xl font-bold text-gray-900">
-                {applications.filter((a: Application) => !a.evaluationSummary?.approvalLetter).length}
+                {applications.filter((a: Application) => a.evaluationSummary?.submitted && !a.evaluationSummary?.approvalLetter).length}
               </p>
             </div>
             <div className="bg-blue-100 p-3 rounded-lg">
@@ -382,154 +370,106 @@ function EvaluationSummary({ applications, onViewApplication, onSummaryComplete,
         </div>
       </div>
 
-      {/* Applications List */}
-      <div className="space-y-4">
-        {applications.map((app: Application) => (
-          <div key={app.id} className="bg-white rounded-lg shadow-sm border p-6">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="flex items-center gap-3">
-                  <h4 className="font-semibold">{app.applicantName}</h4>
-                  <span className="text-sm text-gray-500">{app.id}</span>
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                    Evaluation Summary
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">{app.qualification}</p>
-                
-                {/* Resolution Section */}
-                {selectedApp === app.id ? (
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Resolution / Recommendation
-                      </label>
-                      <textarea
-                        value={resolution}
-                        onChange={(e) => setResolution(e.target.value)}
-                        className="w-full border rounded-lg p-3 text-sm"
-                        rows={3}
-                        placeholder="Enter resolution details..."
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Upload Resolution Document
-                      </label>
-                      <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                        <input
-                          type="file"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                          id="resolution-upload"
-                        />
-                        <label
-                          htmlFor="resolution-upload"
-                          className="cursor-pointer flex flex-col items-center"
-                        >
-                          <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                          <span className="text-sm text-gray-500">
-                            {resolutionFile || 'Click to upload resolution document'}
-                          </span>
-                        </label>
-                      </div>
-                    </div>
+      {/* Better Table */}
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Application ID
+              </th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Applicant
+              </th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Qualification
+              </th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Resolution Status
+              </th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Recommendation
+              </th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Approval Letter
+              </th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
 
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={recommended}
-                          onChange={(e) => setRecommended(e.target.checked)}
-                          className="rounded"
-                        />
-                        <span className="text-sm">Recommend Approval</span>
-                      </label>
-                    </div>
+          <tbody className="divide-y divide-gray-200">
+            {applications.length > 0 ? (
+              applications.map((app: Application) => (
+                <tr key={app.id} className="hover:bg-gray-50">
+                  <td className="py-4 px-6 text-sm font-medium text-gray-900">{app.id}</td>
+                  <td className="py-4 px-6 text-sm text-gray-700">{app.applicantName}</td>
+                  <td className="py-4 px-6 text-sm text-gray-700 max-w-[260px] truncate">
+                    {app.qualification}
+                  </td>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSubmit(app.id)}
-                        className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700"
-                      >
-                        Submit Resolution
-                      </button>
-                      <button
-                        onClick={() => setSelectedApp(null)}
-                        className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : app.evaluationSummary?.submitted ? (
-                  <div className="mt-4 space-y-3">
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm font-medium">Resolution:</p>
-                      <p className="text-sm text-gray-600 mt-1">{app.evaluationSummary.resolution}</p>
-                      {app.evaluationSummary.recommended && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full inline-block mt-2">
-                          ✓ Recommended
-                        </span>
-                      )}
-                    </div>
-                    
-                    {!app.evaluationSummary.approvalLetter ? (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Upload Approval Letter
-                        </label>
-                        <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                          <input
-                            type="file"
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) {
-                                onApprovalLetterUpload(app.id, e.target.files[0].name);
-                              }
-                            }}
-                            className="hidden"
-                            id={`approval-${app.id}`}
-                          />
-                          <label
-                            htmlFor={`approval-${app.id}`}
-                            className="cursor-pointer flex flex-col items-center"
-                          >
-                            <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                            <span className="text-sm text-gray-500">Click to upload approval letter</span>
-                          </label>
-                        </div>
-                      </div>
+                  <td className="py-4 px-6">
+                    {app.evaluationSummary?.submitted ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        Submitted
+                      </span>
                     ) : (
-                      <div className="bg-green-50 p-3 rounded-lg flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                          <span className="text-sm">Approval letter uploaded</span>
-                        </div>
-                        <button className="text-blue-600 text-sm hover:underline">Download</button>
-                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                        Pending
+                      </span>
                     )}
-                  </div>
-                ) : (
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => setSelectedApp(app.id)}
-                      className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700"
-                    >
-                      Add Resolution
-                    </button>
+                  </td>
+
+                  <td className="py-4 px-6">
+                    {app.evaluationSummary?.submitted ? (
+                      app.evaluationSummary.recommended ? (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          Recommended
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                          Not Recommended
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-sm text-gray-400">—</span>
+                    )}
+                  </td>
+
+                  <td className="py-4 px-6">
+                    {app.evaluationSummary?.submitted ? (
+                      app.evaluationSummary.approvalLetter ? (
+                        <span className="text-sm text-green-700 font-medium">Uploaded</span>
+                      ) : (
+                        <span className="text-sm text-gray-400">Pending</span>
+                      )
+                    ) : (
+                      <span className="text-sm text-gray-400">—</span>
+                    )}
+                  </td>
+
+                  <td className="py-4 px-6">
                     <button
                       onClick={() => onViewApplication(app)}
-                      className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
+                      className="inline-flex items-center gap-2 px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
                     >
+                      <Eye className="w-4 h-4" />
                       View Details
                     </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="py-10 text-center text-gray-500">
+                  <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                  <p>No applications in evaluation summary</p>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

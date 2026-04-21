@@ -20,7 +20,7 @@ import {
   Zap,
   History
 } from 'lucide-react';
-import type { ApplicationStatus, EvaluationChecklist, AIRecommendation, EvaluationHistoryEntry } from '@/types';
+import type { ApplicationStatus, EvaluationChecklist, AIRecommendation, EvaluationHistoryEntry ,RequiredUploadItem} from '@/types';
 import { mockAccreditationService } from '@/services/mockAccreditationService';
 
 interface AccreditationInternalDashboardProps {
@@ -38,14 +38,34 @@ const initialEvaluationCriteria = [
 ];
 
 // Final evaluation criteria (without payment check)
-const finalEvaluationCriteria = [
-  { id: 'final1', name: 'QMS documentation meets minimum requirements' },
-  { id: 'final2', name: 'Training material is comprehensive and up-to-date' },
-  { id: 'final3', name: 'Staff qualifications are verified and adequate' },
-  { id: 'final4', name: 'Venue meets safety and accessibility requirements' },
-  { id: 'final5', name: 'AI recommendation has been reviewed' },
-];
 
+
+const requiredDocumentOptions = [
+  { id: 'ohs_audit', label: 'OHS Audit Report' },
+  { id: 'ownership_lease', label: 'Ownership / Lease Proof' },
+  { id: 'facilitator_cvs', label: 'Facilitator CVs' },
+  { id: 'facilitator_ids', label: 'Facilitator ID Copies' },
+  { id: 'facilitator_qualifications', label: 'Facilitator Qualifications' },
+  { id: 'business_plan', label: 'Business Plan' },
+  { id: 'financial_statements', label: 'Financial Statements' },
+  { id: 'tax_compliance', label: 'Tax Compliance / Exemption' },
+  { id: 'registration_proof', label: 'Registration Proof' },
+  { id: 'mou_sla', label: 'MoU / SLA / Intent Letter' },
+  { id: 'learning_material_matrix', label: 'Learning Material Matrix' },
+];
+const requiredDocumentEvaluationLabels: Record<string, string> = {
+  ohs_audit: 'Valid Occupational Health and Safety Audit Report (Signed by a registered OHS inspector/auditor and not older than 12 months)',
+  ownership_lease: 'Proof of Ownership or Lease Agreement',
+  facilitator_cvs: 'Comprehensive CVs of facilitators',
+  facilitator_ids: 'Certified ID copies of individual facilitators',
+  facilitator_qualifications: 'Certified Facilitators qualifications as per curriculum specifications.',
+  business_plan: 'Financial sustainability information (C1 Business plan [new company / institution])',
+  financial_statements: 'C2 Audited Financial Statement, [if company/institution has been operational for more than 1 year]; not applicable to a new institution',
+  tax_compliance: 'Valid Tax compliance pin, if exempted provide proof of exemption',
+  registration_proof: 'Proof of Registration (PTY, CC, NGO, NPO, CET, Public Institution)',
+  mou_sla: 'Signed Memorandum of Understanding (MoU) / Service Level Agreement (SLA) / Declaration / Letter of Intent for the implementation of the workplace component, indicating clear deliverables for learners',
+  learning_material_matrix: 'Learning material matrix',
+};
 export default function AccreditationInternalDashboard({ 
   userName = "Admin User", 
   userRole = "Accreditation Officer" 
@@ -60,18 +80,57 @@ export default function AccreditationInternalDashboard({
   const [initialChecklist, setInitialChecklist] = useState<EvaluationChecklist[]>(
     initialEvaluationCriteria.map(c => ({ criteriaId: c.id, criteriaName: c.name, isMet: false }))
   );
-  const [finalChecklist, setFinalChecklist] = useState<EvaluationChecklist[]>(
-    finalEvaluationCriteria.map(c => ({ criteriaId: c.id, criteriaName: c.name, isMet: false }))
-  );
+const [finalChecklist, setFinalChecklist] = useState<EvaluationChecklist[]>([]);
  // Update the state declarations
 const [activeTab, setActiveTab] = useState<'details' | 'initial-evaluation' | 'final-evaluation' | 'ai-report' | 'payment' | 'history'>('details');
   const [showInitialEvaluation, setShowInitialEvaluation] = useState(false);
+  const [paymentVerificationChecks, setPaymentVerificationChecks] = useState({
+  referenceMatchesApplication: false,
+  amountMatchesApplication: false,
+  paymentBelongsToThisApplication: false,
+});
+
+  const [qualificationChecks, setQualificationChecks] = useState({
+  qualificationTitle: false,
+  saqaId: false,
+  curriculumCode: false,
+  nqfLevel: false,
+  credits: false,
+});
+
+const [requiredApplicantDocuments, setRequiredApplicantDocuments] = useState<RequiredUploadItem[]>([]);
+
+useEffect(() => {
+  if (!selectedApplication || activeTab !== 'final-evaluation') return;
+
+  const allDocsUploaded = areAllRequestedDocumentsUploaded(selectedApplication);
+
+  setFinalChecklist((prev) =>
+    prev.map((item) =>
+      item.criteriaId === 'all_requested_uploaded'
+        ? { ...item, isMet: allDocsUploaded }
+        : item
+    )
+  );
+}, [selectedApplication, activeTab]);
 
   useEffect(() => {
     loadApplications();
     const interval = setInterval(loadApplications, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+  if (!selectedApplication) return;
+
+  const refreshedSelectedApplication = applications.find(
+    (app) => app.id === selectedApplication.id
+  );
+
+  if (refreshedSelectedApplication) {
+    setSelectedApplication(refreshedSelectedApplication);
+  }
+}, [applications, selectedApplication?.id]);
 
   const loadApplications = () => {
     const apps = mockAccreditationService.getApplications();
@@ -116,6 +175,25 @@ const getStatusBadge = (status: ApplicationStatus['status']) => {
   );
 };
 
+
+const toggleQualificationCheck = (key: keyof typeof qualificationChecks) => {
+  setQualificationChecks(prev => ({
+    ...prev,
+    [key]: !prev[key]
+  }));
+};
+
+const toggleRequiredDocument = (doc: { id: string; label: string }) => {
+  setRequiredApplicantDocuments(prev => {
+    const exists = prev.some(item => item.id === doc.id);
+
+    if (exists) {
+      return prev.filter(item => item.id !== doc.id);
+    }
+
+    return [...prev, { id: doc.id, label: doc.label }];
+  });
+};
 // Update the handleStartInitialReview function
 const handleStartInitialReview = (applicationId: string) => {
   mockAccreditationService.updateApplication(applicationId, {
@@ -134,30 +212,63 @@ const handleInitialReview = (applicationId: string, decision: 'approved' | 'reje
   if (!app) return;
 
   const newStatus = decision === 'approved' ? 'step3_initial_approved' : 'step3_initial_rejected';
-  
-  // Create evaluation history entry
-  const evaluationEntry: EvaluationHistoryEntry = {
-    stage: 'initial',
-    reviewedBy: userName,
-    reviewedAt: new Date().toISOString(),
-    checklist: initialChecklist,
-    decision: decision,
-    comments: verificationNotes,
-  };
+
+  const actualInitialChecklist: EvaluationChecklist[] = [
+  {
+    criteriaId: 'qualificationTitle',
+    criteriaName: 'Qualification / Curriculum Title',
+    isMet: qualificationChecks.qualificationTitle,
+  },
+  {
+    criteriaId: 'saqaId',
+    criteriaName: 'SAQA ID',
+    isMet: qualificationChecks.saqaId,
+  },
+  {
+    criteriaId: 'curriculumCode',
+    criteriaName: 'Curriculum Code',
+    isMet: qualificationChecks.curriculumCode,
+  },
+  {
+    criteriaId: 'nqfLevel',
+    criteriaName: 'NQF Level',
+    isMet: qualificationChecks.nqfLevel,
+  },
+  {
+    criteriaId: 'credits',
+    criteriaName: 'Credits',
+    isMet: qualificationChecks.credits,
+  },
+  ...requiredApplicantDocuments.map((doc) => ({
+    criteriaId: `requested_${doc.id}`,
+    criteriaName: `Requested from applicant: ${doc.label}`,
+    isMet: true,
+  })),
+];
+
+const evaluationEntry: EvaluationHistoryEntry = {
+  stage: 'initial',
+  reviewedBy: userName,
+  reviewedAt: new Date().toISOString(),
+  checklist: actualInitialChecklist,
+  decision,
+  comments: verificationNotes,
+};
 
   const updates: any = {
     status: newStatus,
-    initialReview: {
-      reviewedBy: userName,
-      reviewedAt: new Date().toISOString(),
-      checklist: initialChecklist,
-      decision: decision,
-      comments: verificationNotes,
-    },
+    initialQualificationChecks: qualificationChecks,
+    requiredApplicantDocuments: requiredApplicantDocuments,
+   initialReview: {
+  reviewedBy: userName,
+  reviewedAt: new Date().toISOString(),
+  checklist: actualInitialChecklist,
+  decision,
+  comments: verificationNotes,
+},
     evaluationHistory: [...(app.evaluationHistory || []), evaluationEntry]
   };
-  
-  // If approved, generate acknowledgement letter
+
   if (decision === 'approved') {
     updates.acknowledgementLetter = {
       id: `ack-${Date.now()}`,
@@ -166,11 +277,24 @@ const handleInitialReview = (applicationId: string, decision: 'approved' | 'reje
       content: `Acknowledgement of Initial Approval for ${app.applicationId}`,
     };
   }
-  
+
   mockAccreditationService.updateApplication(applicationId, updates);
   loadApplications();
   setSelectedApplication(null);
-  setInitialChecklist(initialEvaluationCriteria.map(c => ({ criteriaId: c.id, criteriaName: c.name, isMet: false })));
+
+  setQualificationChecks({
+    qualificationTitle: false,
+    saqaId: false,
+    curriculumCode: false,
+    nqfLevel: false,
+    credits: false,
+  });
+  setRequiredApplicantDocuments([]);
+  setInitialChecklist(initialEvaluationCriteria.map(c => ({
+    criteriaId: c.id,
+    criteriaName: c.name,
+    isMet: false
+  })));
   setVerificationNotes('');
 };
 
@@ -184,80 +308,84 @@ const handleCloseModal = () => {
 // When opening an application, check if it's in initial review and set the tab accordingly
 const handleOpenApplication = (app: ApplicationStatus) => {
   setSelectedApplication(app);
-  
-  // If the application is in initial review, default to the initial evaluation tab
+  setPaymentVerificationChecks({
+  referenceMatchesApplication: app.paymentVerifiedForCorrectApplication || false,
+  amountMatchesApplication: false,
+  paymentBelongsToThisApplication: app.paymentVerifiedForCorrectApplication || false,
+});
+
   if (app.status === 'step2_under_initial_review') {
     setActiveTab('initial-evaluation');
   } else {
     setActiveTab('details');
   }
+
+  if (app.status === 'step5_under_final_review') {
+    setFinalChecklist(buildFinalChecklist(app));
+  }
 };
 
 const generateAIRecommendation = (applicationId: string) => {
-  // Simulate AI evaluation based on uploaded documents
   const app = applications.find(a => a.id === applicationId);
-  if (!app || !app.applicationData?.documents) return;
+  if (!app) return;
 
-  // Define the allowed status types
-  type DocumentStatus = 'valid' | 'invalid' | 'missing' | 'needs_review';
+  const requestedDocs = app.requiredApplicantDocuments || [];
+  const uploadedDocs = app.applicantRequiredUploads || [];
 
-  const documentFindings = app.applicationData.documents.map(doc => {
-    const randomScore = Math.floor(Math.random() * 30) + 70;
-    
-    // Determine status based on score with proper typing
-    let status: DocumentStatus;
-    if (randomScore > 80) {
-      status = 'valid';
-    } else if (randomScore > 60) {
-      status = 'needs_review';
-    } else {
-      status = 'invalid';
-    }
-    
-    return {
-      documentType: doc.type,
-      fileName: doc.name,
-      status: status,
-      confidence: randomScore,
-      issues: randomScore < 70 ? ['Document requires verification'] : undefined,
-    };
-  });
+const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map((req) => {
+  const uploadedMatch = uploadedDocs.find(
+    (item) => item.requirementId === req.id && item.document
+  );
 
-  const overallScore = Math.floor(documentFindings.reduce((acc, f) => acc + f.confidence, 0) / documentFindings.length);
-  
+  return {
+    documentType: 'application_form' as const,
+    fileName: uploadedMatch?.document?.name || req.label,
+    status: uploadedMatch?.document ? 'valid' as const : 'missing' as const,
+    confidence: 100,
+    issues: uploadedMatch?.document ? [] : ['Document was not uploaded'],
+  };
+});
+
+  const validCount = documentFindings.filter(f => f.status === 'valid').length;
+  const missingCount = documentFindings.filter(f => f.status === 'missing').length;
+
   const aiRecommendation: AIRecommendation = {
     recommendationId: `ai-${Date.now()}`,
     generatedAt: new Date().toISOString(),
-    overallScore: overallScore,
-    summary: `AI analysis complete. ${documentFindings.filter(f => f.status === 'valid').length} documents valid, ${documentFindings.filter(f => f.status === 'needs_review').length} need review.`,
-    documentFindings: documentFindings,
-    recommendedAction: overallScore > 75 ? 'approve' : overallScore > 60 ? 'needs_review' : 'reject',
-    riskLevel: overallScore > 80 ? 'low' : overallScore > 60 ? 'medium' : 'high',
+    overallScore: 0,
+    summary: `AI document evaluation completed. ${validCount} requested documents were uploaded and ${missingCount} requested documents are missing.`,
+    documentFindings,
+    recommendedAction: 'needs_review',
+    riskLevel: 'low',
   };
 
-  // Create an AI evaluation history entry
   const aiEvaluationEntry: EvaluationHistoryEntry = {
     stage: 'ai-evaluation',
     reviewedBy: 'AI System',
     reviewedAt: new Date().toISOString(),
-    checklist: [], // AI doesn't use checklist
-    decision: aiRecommendation.recommendedAction === 'approve' ? 'approved' : 
-              aiRecommendation.recommendedAction === 'reject' ? 'rejected' : 'pending',
+    checklist: [],
+    decision: 'pending',
     comments: aiRecommendation.summary,
-    aiRecommendation: aiRecommendation,
+    aiRecommendation,
   };
 
   mockAccreditationService.updateApplication(applicationId, {
     status: 'step5_under_final_review',
     finalReview: {
       ...app.finalReview,
-      aiRecommendation: aiRecommendation,
+      aiRecommendation,
     },
     evaluationHistory: [...(app.evaluationHistory || []), aiEvaluationEntry]
   });
-  
+
   loadApplications();
-  // Stay on the AI report tab to show the generated report
+
+  const refreshedApp = mockAccreditationService.getApplicationById(applicationId);
+  if (refreshedApp) {
+    setSelectedApplication(refreshedApp);
+    setFinalChecklist(buildFinalChecklist(refreshedApp));
+  }
+
   setActiveTab('ai-report');
 };
   const handleFinalReview = (applicationId: string, decision: 'approved' | 'rejected') => {
@@ -312,20 +440,55 @@ const generateAIRecommendation = (applicationId: string) => {
     mockAccreditationService.updateApplication(applicationId, updates);
     loadApplications();
     setSelectedApplication(null);
-    setFinalChecklist(finalEvaluationCriteria.map(c => ({ criteriaId: c.id, criteriaName: c.name, isMet: false })));
+    setFinalChecklist([]);
     setVerificationNotes('');
   };
 
-  const handleVerifyPayment = (applicationId: string) => {
-    mockAccreditationService.updateApplication(applicationId, {
-      status: 'step9_completed',
-      paymentStatus: 'verified',
-      paymentDate: new Date().toISOString(),
-    });
-    
-    loadApplications();
-    setSelectedApplication(null);
-  };
+  const handleRequestFinanceVerification = (applicationId: string) => {
+  mockAccreditationService.updateApplication(applicationId, {
+    financeVerificationRequested: true,
+    financeVerificationRequestedAt: new Date().toISOString(),
+    financeVerificationRequestedBy: userName,
+    financeVerificationStatus: 'requested',
+    paymentVerificationNotes: 'Proof of payment sent to Finance Department for verification.',
+  });
+
+  loadApplications();
+
+  const refreshedApp = mockAccreditationService.getApplicationById(applicationId);
+  if (refreshedApp) {
+    setSelectedApplication(refreshedApp);
+  }
+};
+
+const handleVerifyPayment = (applicationId: string) => {
+  const allChecksPassed =
+    paymentVerificationChecks.referenceMatchesApplication &&
+    paymentVerificationChecks.amountMatchesApplication &&
+    paymentVerificationChecks.paymentBelongsToThisApplication;
+
+  if (!allChecksPassed) {
+    alert('Please complete all payment attribution checks before verifying payment.');
+    return;
+  }
+
+  if (!selectedApplication?.financeVerificationRequested) {
+    alert('Please first send the proof of payment to the Finance Department for verification.');
+    return;
+  }
+
+  mockAccreditationService.updateApplication(applicationId, {
+    status: 'step9_completed',
+    paymentStatus: 'verified',
+    paymentDate: new Date().toISOString(),
+    paymentVerifiedForCorrectApplication: true,
+    paymentVerificationNotes: 'Payment verified and confirmed for the correct application.',
+    financeVerificationStatus: 'confirmed',
+  });
+
+  loadApplications();
+  setSelectedApplication(null);
+};
 
   const filteredApplications = applications.filter(app => {
     const matchesSearch = searchTerm === '' || 
@@ -341,6 +504,42 @@ const generateAIRecommendation = (applicationId: string) => {
 
   const regions = ['Gauteng', 'Western Cape', 'KwaZulu-Natal', 'Eastern Cape', 'Free State', 'Mpumalanga', 'Limpopo', 'North West', 'Northern Cape'];
 
+  const areAllRequestedDocumentsUploaded = (app: ApplicationStatus | null) => {
+  if (!app?.requiredApplicantDocuments || app.requiredApplicantDocuments.length === 0) {
+    return false;
+  }
+
+  return app.requiredApplicantDocuments.every((req) =>
+    app.applicantRequiredUploads?.some(
+      (item) => item.requirementId === req.id && item.document
+    )
+  );
+};
+
+const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist[] => {
+  if (!app) return [];
+
+  const requiredDocsChecklist =
+    (app.requiredApplicantDocuments || []).map((doc) => ({
+      criteriaId: `required_${doc.id}`,
+      criteriaName: requiredDocumentEvaluationLabels[doc.id] || doc.label,
+      isMet: false,
+    }));
+
+  return [
+    ...requiredDocsChecklist,
+    {
+      criteriaId: 'ai_report_evaluated',
+      criteriaName: 'AI report evaluated',
+      isMet: false,
+    },
+    {
+      criteriaId: 'all_requested_uploaded',
+      criteriaName: 'All documentation of annexures was uploaded',
+      isMet: false,
+    },
+  ];
+};
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -689,14 +888,16 @@ const generateAIRecommendation = (applicationId: string) => {
   )}
   
   {/* Payment tab - only show when payment is pending */}
-  {selectedApplication.status === 'step7_payment_pending' && (
-    <button
-      onClick={() => setActiveTab('payment')}
-      className={`pb-2 px-1 ${activeTab === 'payment' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
-    >
-      Payment
-    </button>
-  )}
+ {(selectedApplication.status === 'step7_payment_pending' ||
+  selectedApplication.status === 'step8_payment_uploaded' ||
+  selectedApplication.paymentNotification) && (
+  <button
+    onClick={() => setActiveTab('payment')}
+    className={`pb-2 px-1 ${activeTab === 'payment' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
+  >
+    Payment
+  </button>
+)}
 
   {/* History tab - always show if there's history */}
   {selectedApplication.evaluationHistory && selectedApplication.evaluationHistory.length > 0 && (
@@ -803,6 +1004,111 @@ const generateAIRecommendation = (applicationId: string) => {
           </div>
         ))}
       </div>
+      {(() => {
+  const applicationForm = selectedApplication.applicationData?.documents?.find(
+    (doc) => doc.type === 'application_form'
+  ) as any;
+
+  if (!applicationForm) return null;
+
+  return (
+    <div className="mt-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
+      <h4 className="text-sm font-semibold text-gray-800 mb-3">
+        Application Form Validation
+      </h4>
+
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-sm font-medium text-gray-700">{applicationForm.name}</p>
+          <p className="text-xs text-gray-500">
+            Uploaded: {new Date(applicationForm.uploadedAt).toLocaleString()}
+          </p>
+        </div>
+
+        <span
+          className={`px-2 py-1 text-xs font-medium rounded-full ${
+            applicationForm.validationStatus === 'passed'
+              ? 'bg-green-100 text-green-700'
+              : applicationForm.validationStatus === 'failed'
+              ? 'bg-red-100 text-red-700'
+              : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          {applicationForm.validationStatus || 'Not validated'}
+        </span>
+      </div>
+
+      {applicationForm.validationChecks?.length > 0 ? (
+        <div className="space-y-2">
+          {applicationForm.validationChecks.map((check: any) => (
+            <div
+              key={check.id}
+              className="flex items-center justify-between p-2 bg-white rounded border border-gray-200"
+            >
+              <div>
+                <p className="text-sm text-gray-700">{check.label}</p>
+                {check.message && (
+                  <p className="text-xs text-gray-500 mt-1">{check.message}</p>
+                )}
+              </div>
+
+              <span
+                className={`text-xs font-medium px-2 py-1 rounded-full ${
+                  check.status === 'passed'
+                    ? 'bg-green-100 text-green-700'
+                    : check.status === 'failed'
+                    ? 'bg-red-100 text-red-700'
+                    : check.status === 'processing'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {check.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">No validation details available.</p>
+      )}
+
+      {applicationForm.validationError && (
+        <p className="mt-3 text-sm text-red-600">{applicationForm.validationError}</p>
+      )}
+    </div>
+  );
+})()}
+      {selectedApplication.applicantRequiredUploads &&
+ selectedApplication.applicantRequiredUploads.length > 0 && (
+  <>
+    <h4 className="text-sm font-medium text-gray-700 mb-2 mt-4">
+      Applicant Uploaded Required Documents
+    </h4>
+    <div className="space-y-2">
+      {selectedApplication.applicantRequiredUploads.map((item) =>
+        item.document ? (
+          <div
+            key={item.requirementId}
+            className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-200"
+          >
+            <div>
+              <p className="text-sm font-medium text-gray-700">{item.label}</p>
+              <p className="text-xs text-gray-500">{item.document.name}</p>
+            </div>
+            <a
+              href={item.document.fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              View
+            </a>
+          </div>
+        ) : null
+      )}
+    </div>
+  </>
+)}
     </>
   ) : (
     <p className="text-sm text-gray-500 mb-4">No documents uploaded yet</p>
@@ -838,6 +1144,7 @@ const generateAIRecommendation = (applicationId: string) => {
       )}
     </>
   )}
+  
 </div>
 
                   {selectedApplication.acknowledgementLetter && (
@@ -858,44 +1165,134 @@ const generateAIRecommendation = (applicationId: string) => {
               )}
 
               {/* Initial Evaluation Tab */}
-              {activeTab === 'initial-evaluation' && (
-                <div className="space-y-6">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Initial Evaluation Checklist</h3>
-                    <div className="space-y-3">
-                      {initialEvaluationCriteria.map((criteria) => (
-                        <div key={criteria.id} className="flex items-center justify-between p-3 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">{criteria.name}</span>
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={initialChecklist.find(c => c.criteriaId === criteria.id)?.isMet || false}
-                              onChange={(e) => {
-                                setInitialChecklist(prev => prev.map(c => 
-                                  c.criteriaId === criteria.id ? { ...c, isMet: e.target.checked } : c
-                                ));
-                              }}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-600">Met</span>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+        {activeTab === 'initial-evaluation' && (
+  <div className="space-y-6">
+    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+      <h3 className="text-lg font-semibold text-gray-800 mb-1">
+        Qualification Verification
+      </h3>
+      <p className="text-sm text-gray-600 mb-4">
+        Complete these checks before approving the initial application.
+      </p>
 
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Verification Notes</h3>
-                    <textarea
-                      rows={4}
-                      value={verificationNotes}
-                      onChange={(e) => setVerificationNotes(e.target.value)}
-                      placeholder="Add notes about your evaluation findings..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
+          <span className="text-sm text-gray-700">Qualification / Curriculum Title</span>
+          <input
+            type="checkbox"
+            checked={qualificationChecks.qualificationTitle}
+            onChange={() => toggleQualificationCheck('qualificationTitle')}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+        </label>
+
+        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
+          <span className="text-sm text-gray-700">SAQA ID</span>
+          <input
+            type="checkbox"
+            checked={qualificationChecks.saqaId}
+            onChange={() => toggleQualificationCheck('saqaId')}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+        </label>
+
+        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
+          <span className="text-sm text-gray-700">Curriculum Code</span>
+          <input
+            type="checkbox"
+            checked={qualificationChecks.curriculumCode}
+            onChange={() => toggleQualificationCheck('curriculumCode')}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+        </label>
+
+        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
+          <span className="text-sm text-gray-700">NQF Level</span>
+          <input
+            type="checkbox"
+            checked={qualificationChecks.nqfLevel}
+            onChange={() => toggleQualificationCheck('nqfLevel')}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+        </label>
+
+        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200 md:col-span-2">
+          <span className="text-sm text-gray-700">Credits</span>
+          <input
+            type="checkbox"
+            checked={qualificationChecks.credits}
+            onChange={() => toggleQualificationCheck('credits')}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+        </label>
+      </div>
+    </div>
+
+    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+      <h3 className="text-lg font-semibold text-gray-800 mb-1">
+        Required Applicant Documents
+      </h3>
+      <p className="text-sm text-gray-600 mb-4">
+        Tick the documents the external applicant must upload after initial approval.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {requiredDocumentOptions.map((doc) => {
+          const selected = requiredApplicantDocuments.some(item => item.id === doc.id);
+
+          return (
+            <label
+              key={doc.id}
+              className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                selected
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white'
+              }`}
+            >
+              <span className="text-sm text-gray-700">{doc.label}</span>
+
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => toggleRequiredDocument(doc)}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+            </label>
+          );
+        })}
+      </div>
+
+      {requiredApplicantDocuments.length > 0 && (
+        <div className="mt-4 p-3 bg-white rounded border border-gray-200">
+          <p className="text-xs font-medium text-gray-600 mb-2">
+            Selected documents to request from applicant:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {requiredApplicantDocuments.map((doc) => (
+              <span
+                key={doc.id}
+                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full"
+              >
+                {doc.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">Verification Notes</h3>
+      <textarea
+        rows={4}
+        value={verificationNotes}
+        onChange={(e) => setVerificationNotes(e.target.value)}
+        placeholder="Add notes for the applicant or internal reviewers..."
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    </div>
+  </div>
+)}
 
               {/* AI Report Tab */}
         {/* AI Report Tab */}
@@ -923,89 +1320,72 @@ const generateAIRecommendation = (applicationId: string) => {
       )
     ) : (
       // Show the AI report whenever it exists, regardless of status
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border border-blue-200">
-        <div className="flex items-center justify-between mb-4">
+    <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border border-blue-200">
+  <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center">
+      <Zap className="w-6 h-6 text-blue-600 mr-2" />
+      <h3 className="text-lg font-semibold text-gray-800">AI Draft Evaluation Report</h3>
+    </div>
+    <span className="text-sm text-gray-500">
+      Generated: {new Date(selectedApplication.finalReview.aiRecommendation.generatedAt).toLocaleString()}
+    </span>
+  </div>
+
+  <div className="bg-white p-4 rounded-lg mb-4">
+    <p className="text-sm text-gray-700">
+      {selectedApplication.finalReview.aiRecommendation.summary}
+    </p>
+  </div>
+
+  <h4 className="font-medium text-gray-800 mb-3">Requested Document Evaluation</h4>
+  <div className="space-y-3">
+    {selectedApplication.finalReview.aiRecommendation.documentFindings.map((finding, index) => (
+      <div key={index} className="bg-white p-3 rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center">
-            <Zap className="w-6 h-6 text-blue-600 mr-2" />
-            <h3 className="text-lg font-semibold text-gray-800">AI Recommendation Report</h3>
+            <FileText className="w-4 h-4 text-gray-500 mr-2" />
+            <span className="text-sm font-medium">{finding.fileName}</span>
           </div>
-          <span className="text-sm text-gray-500">
-            Generated: {new Date(selectedApplication.finalReview.aiRecommendation.generatedAt).toLocaleString()}
+
+          <span
+            className={`text-xs px-2 py-1 rounded ${
+              finding.status === 'valid'
+                ? 'bg-green-100 text-green-700'
+                : finding.status === 'missing'
+                ? 'bg-red-100 text-red-700'
+                : 'bg-yellow-100 text-yellow-700'
+            }`}
+          >
+            {finding.status === 'valid'
+              ? 'Uploaded'
+              : finding.status === 'missing'
+              ? 'Missing'
+              : finding.status.replace('_', ' ').toUpperCase()}
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <p className="text-sm text-gray-600">Overall Score</p>
-            <p className="text-2xl font-bold text-blue-600">{selectedApplication.finalReview.aiRecommendation.overallScore}%</p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <p className="text-sm text-gray-600">Risk Level</p>
-            <p className={`text-2xl font-bold ${
-              selectedApplication.finalReview.aiRecommendation.riskLevel === 'low' ? 'text-green-600' :
-              selectedApplication.finalReview.aiRecommendation.riskLevel === 'medium' ? 'text-yellow-600' : 'text-red-600'
-            }`}>
-              {selectedApplication.finalReview.aiRecommendation.riskLevel.toUpperCase()}
-            </p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <p className="text-sm text-gray-600">Recommended Action</p>
-            <p className={`text-2xl font-bold ${
-              selectedApplication.finalReview.aiRecommendation.recommendedAction === 'approve' ? 'text-green-600' :
-              selectedApplication.finalReview.aiRecommendation.recommendedAction === 'reject' ? 'text-red-600' : 'text-yellow-600'
-            }`}>
-              {selectedApplication.finalReview.aiRecommendation.recommendedAction.toUpperCase()}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg mb-4">
-          <p className="text-sm text-gray-700">{selectedApplication.finalReview.aiRecommendation.summary}</p>
-        </div>
-
-        <h4 className="font-medium text-gray-800 mb-3">Document Findings</h4>
-        <div className="space-y-3">
-          {selectedApplication.finalReview.aiRecommendation.documentFindings.map((finding, index) => (
-            <div key={index} className="bg-white p-3 rounded-lg border border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center">
-                  <FileText className="w-4 h-4 text-gray-500 mr-2" />
-                  <span className="text-sm font-medium">{finding.fileName}</span>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded ${
-                  finding.status === 'valid' ? 'bg-green-100 text-green-700' :
-                  finding.status === 'invalid' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {finding.status.replace('_', ' ').toUpperCase()}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Confidence: {finding.confidence}%</span>
-                {finding.issues && finding.issues.length > 0 && (
-                  <span className="text-red-600">{finding.issues.length} issues found</span>
-                )}
-              </div>
-              {finding.issues && finding.issues.length > 0 && (
-                <ul className="mt-2 text-xs text-red-600 list-disc list-inside">
-                  {finding.issues.map((issue, i) => (
-                    <li key={i}>{issue}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Show a note if this is a historical report */}
-        {selectedApplication.status !== 'step4_documents_uploaded' && 
-         selectedApplication.status !== 'step5_under_final_review' && (
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-            <p className="text-xs text-blue-700">
-              This AI report was generated during the evaluation process and is part of the permanent record.
-            </p>
+        {finding.issues && finding.issues.length > 0 && (
+          <div className="mt-2">
+            {finding.issues.map((issue, i) => (
+              <p key={i} className="text-xs text-red-600">
+                {issue}
+              </p>
+            ))}
           </div>
         )}
       </div>
+    ))}
+  </div>
+
+  {selectedApplication.status !== 'step4_documents_uploaded' &&
+   selectedApplication.status !== 'step5_under_final_review' && (
+    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+      <p className="text-xs text-blue-700">
+        This draft AI evaluation report forms part of the application record.
+      </p>
+    </div>
+  )}
+</div>
     )}
   </div>
 )}
@@ -1015,30 +1395,87 @@ const generateAIRecommendation = (applicationId: string) => {
 {activeTab === 'final-evaluation' && (
   <div className="space-y-6">
     {selectedApplication.status === 'step5_under_final_review' ? (
-      // Editable view for ongoing review
       <>
         <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Final Evaluation Checklist</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+            Final Evaluation Checklist
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Verify all requested applicant documents and confirm the AI review before making the final decision.
+          </p>
+
           <div className="space-y-3">
-            {finalEvaluationCriteria.map((criteria) => (
-              <div key={criteria.id} className="flex items-center justify-between p-3 bg-white rounded border border-gray-200">
-                <span className="text-sm text-gray-700">{criteria.name}</span>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={finalChecklist.find(c => c.criteriaId === criteria.id)?.isMet || false}
-                    onChange={(e) => {
-                      setFinalChecklist(prev => prev.map(c => 
-                        c.criteriaId === criteria.id ? { ...c, isMet: e.target.checked } : c
-                      ));
-                    }}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-600">Met</span>
-                </label>
-              </div>
-            ))}
+            {finalChecklist.map((criteria) => {
+              const isAutoCalculated = criteria.criteriaId === 'all_requested_uploaded';
+
+              return (
+                <div
+                  key={criteria.criteriaId}
+                  className="flex items-start justify-between gap-4 p-3 bg-white rounded border border-gray-200"
+                >
+                  <span className="text-sm text-gray-700 leading-5">
+                    {criteria.criteriaName}
+                  </span>
+
+                  <label className="flex items-center space-x-2 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={criteria.isMet}
+                      disabled={isAutoCalculated}
+                      onChange={(e) => {
+                        setFinalChecklist((prev) =>
+                          prev.map((c) =>
+                            c.criteriaId === criteria.criteriaId
+                              ? { ...c, isMet: e.target.checked }
+                              : c
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-600">
+                      {isAutoCalculated ? 'Auto' : 'Met'}
+                    </span>
+                  </label>
+                </div>
+              );
+            })}
           </div>
+        </div>
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">
+            Uploaded Applicant Documents
+          </h4>
+
+          {selectedApplication.applicantRequiredUploads &&
+          selectedApplication.applicantRequiredUploads.length > 0 ? (
+            <div className="space-y-2">
+              {selectedApplication.applicantRequiredUploads.map((item) =>
+                item.document ? (
+                  <div
+                    key={item.requirementId}
+                    className="flex items-center justify-between p-2 bg-white rounded border border-gray-200"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">{item.label}</p>
+                      <p className="text-xs text-gray-500">{item.document.name}</p>
+                    </div>
+                    <a
+                      href={item.document.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      View
+                    </a>
+                  </div>
+                ) : null
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No applicant documents uploaded yet.</p>
+          )}
         </div>
 
         <div className="bg-gray-50 p-4 rounded-lg">
@@ -1053,12 +1490,11 @@ const generateAIRecommendation = (applicationId: string) => {
         </div>
       </>
     ) : (
-      // Read-only view for completed evaluations (shouldn't normally be seen, but just in case)
       <div className="bg-yellow-50 p-6 rounded-lg text-center">
         <History className="w-12 h-12 text-yellow-600 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Final Evaluation Completed</h3>
         <p className="text-sm text-gray-600">
-          The final evaluation for this application has been completed. 
+          The final evaluation for this application has been completed.
           You can view the evaluation details in the History tab.
         </p>
       </div>
@@ -1150,6 +1586,103 @@ const generateAIRecommendation = (applicationId: string) => {
           <p className="text-sm text-yellow-700">No proof of payment uploaded yet.</p>
         </div>
       )}
+      {selectedApplication.proofOfPayment && selectedApplication.proofOfPayment.length > 0 && (
+  <div className="mt-4">
+    {!selectedApplication.financeVerificationRequested ? (
+      <button
+        onClick={() => handleRequestFinanceVerification(selectedApplication.id)}
+        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+      >
+        Request Finance Department Verification
+      </button>
+    ) : (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <p className="text-sm font-medium text-blue-800">
+          Sent to Finance Department
+        </p>
+        <p className="text-xs text-blue-700 mt-1">
+          Requested by {selectedApplication.financeVerificationRequestedBy || userName}
+        </p>
+        <p className="text-xs text-blue-700">
+          {selectedApplication.financeVerificationRequestedAt
+            ? new Date(selectedApplication.financeVerificationRequestedAt).toLocaleString()
+            : ''}
+        </p>
+      </div>
+    )}
+  </div>
+)}
+      <div className="bg-white p-4 rounded-lg border border-gray-200">
+  <h4 className="font-medium text-gray-800 mb-3">Payment Attribution Verification</h4>
+
+  <div className="space-y-3">
+    <label className="flex items-center justify-between p-3 border border-gray-200 rounded bg-gray-50">
+      <span className="text-sm text-gray-700">
+        Payment reference matches this application
+      </span>
+      <input
+        type="checkbox"
+        checked={paymentVerificationChecks.referenceMatchesApplication}
+        onChange={() =>
+          setPaymentVerificationChecks(prev => ({
+            ...prev,
+            referenceMatchesApplication: !prev.referenceMatchesApplication
+          }))
+        }
+        className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+      />
+    </label>
+
+    <label className="flex items-center justify-between p-3 border border-gray-200 rounded bg-gray-50">
+      <span className="text-sm text-gray-700">
+        Payment amount matches this application
+      </span>
+      <input
+        type="checkbox"
+        checked={paymentVerificationChecks.amountMatchesApplication}
+        onChange={() =>
+          setPaymentVerificationChecks(prev => ({
+            ...prev,
+            amountMatchesApplication: !prev.amountMatchesApplication
+          }))
+        }
+        className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+      />
+    </label>
+
+    <label className="flex items-center justify-between p-3 border border-gray-200 rounded bg-gray-50">
+      <span className="text-sm text-gray-700">
+        Payment belongs to this application only
+      </span>
+      <input
+        type="checkbox"
+        checked={paymentVerificationChecks.paymentBelongsToThisApplication}
+        onChange={() =>
+          setPaymentVerificationChecks(prev => ({
+            ...prev,
+            paymentBelongsToThisApplication: !prev.paymentBelongsToThisApplication
+          }))
+        }
+        className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+      />
+    </label>
+  </div>
+
+  <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+    <p className="text-xs text-gray-600">Application ID</p>
+    <p className="text-sm font-medium text-gray-800">{selectedApplication.applicationId}</p>
+
+    <p className="text-xs text-gray-600 mt-2">Expected Payment Reference</p>
+    <p className="text-sm font-medium text-blue-600">
+      {selectedApplication.paymentNotification?.paymentReference}
+    </p>
+
+    <p className="text-xs text-gray-600 mt-2">Uploaded Payment Linked To</p>
+    <p className="text-sm font-medium text-gray-800">
+      {selectedApplication.paymentAllocatedToApplicationId || 'Not yet linked'}
+    </p>
+  </div>
+</div>
     </div>
   </div>
 )}
@@ -1212,29 +1745,37 @@ const generateAIRecommendation = (applicationId: string) => {
           </div>
         )}
 
-        {entry.stage === 'ai-evaluation' && entry.aiRecommendation && (
-          <div className="mt-3">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">AI Analysis:</h4>
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <p className="text-sm text-gray-700 mb-2">{entry.aiRecommendation.summary}</p>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="text-gray-500">Overall Score:</span>
-                  <span className="ml-1 font-medium text-blue-600">{entry.aiRecommendation.overallScore}%</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Recommended:</span>
-                  <span className={`ml-1 font-medium ${
-                    entry.aiRecommendation.recommendedAction === 'approve' ? 'text-green-600' :
-                    entry.aiRecommendation.recommendedAction === 'reject' ? 'text-red-600' : 'text-yellow-600'
-                  }`}>
-                    {entry.aiRecommendation.recommendedAction}
-                  </span>
-                </div>
-              </div>
-            </div>
+    {entry.stage === 'ai-evaluation' && entry.aiRecommendation && (
+  <div className="mt-3">
+    <h4 className="text-sm font-medium text-gray-700 mb-2">AI Draft Evaluation:</h4>
+    <div className="bg-white p-3 rounded border border-gray-200">
+      <p className="text-sm text-gray-700 mb-3">{entry.aiRecommendation.summary}</p>
+
+      <div className="space-y-2">
+        {entry.aiRecommendation.documentFindings.map((finding, i) => (
+          <div key={i} className="flex items-center justify-between text-sm">
+            <span className="text-gray-600">{finding.fileName}</span>
+            <span
+              className={`px-2 py-1 text-xs rounded ${
+                finding.status === 'valid'
+                  ? 'bg-green-100 text-green-700'
+                  : finding.status === 'missing'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-yellow-100 text-yellow-700'
+              }`}
+            >
+              {finding.status === 'valid'
+                ? 'Uploaded'
+                : finding.status === 'missing'
+                ? 'Missing'
+                : finding.status.replace('_', ' ').toUpperCase()}
+            </span>
           </div>
-        )}
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
         {entry.comments && (
           <div className="mt-3 p-2 bg-white rounded">
@@ -1271,7 +1812,9 @@ const generateAIRecommendation = (applicationId: string) => {
     {/* Show Approve/Reject buttons when on Initial Evaluation tab */}
     {selectedApplication.status === 'step2_under_initial_review' && 
      activeTab === 'initial-evaluation' && (
+      
       <>
+
         <button
           onClick={() => handleInitialReview(selectedApplication.id, 'rejected')}
           className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"

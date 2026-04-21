@@ -3,7 +3,7 @@ import { useApp } from '@/contexts/AppContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserCircle } from 'lucide-react';
 
-const roles: AppRole[] = ['Assessment Unit', 'Cert Admin', 'Supervisor', 'Printer', 'Finance'];
+const roles: AppRole[] = ['Assessment Unit', 'Certification Practitioner', 'Supervisor', 'Printer', 'Finance'];
 
 export const RoleSelector = () => {
   const { currentRole, setCurrentRole } = useApp();

@@ -28,7 +28,7 @@ import type {
 } from '@/types';
 
 const ROLES = {
-  CERT_ADMIN: 'Cert Admin' as AppRole,
+  CERT_ADMIN: 'Certification Practitioner' as AppRole,
   ASSESSMENT_UNIT: 'Assessment Unit' as AppRole,
   NAMB: 'NAMB' as AppRole,
   QP: 'QP' as AppRole,
@@ -72,7 +72,10 @@ export default function Corrections() {
 
   // Load correction records from submissions
 // Replace the getCorrectionRecords function in internalCorrections.tsx:
-
+const isCorrectionExpired = (correction: CorrectionRecord) => {
+  if (!correction.todoDate) return false;
+  return new Date(correction.todoDate).getTime() < Date.now();
+};
 // Load correction records from submissions
 const getCorrectionRecords = (): CorrectionRecord[] => {
   const corrections: CorrectionRecord[] = [];
@@ -308,8 +311,7 @@ const getVisibleCorrections = () => {
       recommendation_letter: 'Recommendation Letter',
       id_copy: 'ID Copy',
       file_3_4: 'File 3–4',
-      signed_result_approval: 'Signed Result Approval',
-      supporting_evidence: 'Supporting Evidence',
+    
       programme_approval_letter: 'Programme Approval Letter',
       learner_result_approval_sheet: 'Learner Result Approval Sheet',
       qualification_data_confirmation: 'Qualification/Programme Data Confirmation',
@@ -418,133 +420,109 @@ const getVisibleCorrections = () => {
       </div>
 
       {/* Corrections Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Correction Requests</CardTitle>
-          <CardDescription>
-            {corrections.length} total correction record(s)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Correction ID</TableHead>
-                <TableHead>Submission ID</TableHead>
-                <TableHead>Learner Name</TableHead>
-                <TableHead>Qualification</TableHead>
-                <TableHead>Pathway</TableHead>
-                <TableHead>Error Type</TableHead>
-                <TableHead>Origin</TableHead>
-                <TableHead>Responsible Unit</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Version</TableHead>
-                <TableHead>Date Created</TableHead>
-                <TableHead>Last Updated</TableHead>
-                <TableHead>Assigned To</TableHead>
-                <TableHead className="text-center">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {corrections.map((correction) => (
-                <TableRow key={correction.correctionId}>
-                  <TableCell className="font-mono text-xs">{correction.correctionId}</TableCell>
-                  <TableCell className="font-mono text-xs">{correction.submissionId}</TableCell>
-                  <TableCell className="font-medium">{correction.learnerName}</TableCell>
-                  <TableCell>{correction.qualification}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {correction.pathway}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={
-                      correction.errorType === 'integration_failure' ? 'destructive' :
-                      correction.errorType === 'missing_documentation' ? 'secondary' :
-                      'outline'
-                    }>
-                      {ERROR_TYPE_LABELS[correction.errorType]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {ORIGIN_LABELS[correction.origin]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{correction.responsibleUnit}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={
-                      correction.currentStatus === 'active' ? 'default' :
-                      correction.currentStatus === 'pending_review' ? 'secondary' :
-                      correction.currentStatus === 'resolved' ? 'outline' :
-                      'destructive'
-                    }>
-                      {CORRECTION_STATUS_LABELS[correction.currentStatus].label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">v{correction.version}</Badge>
-                  </TableCell>
-                  <TableCell>{new Date(correction.dateCreated).toLocaleDateString()}</TableCell>
-                  <TableCell>{new Date(correction.lastUpdated).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{correction.assignedTo}</Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex justify-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewCorrection(correction)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" /> View
-                      </Button>
-                      {correction.currentStatus === 'active' && 
-                       correction.responsibleUnit === currentRole && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleViewCorrection(correction)}
-                        >
-                          <Upload className="h-4 w-4 mr-1" /> Resubmit
-                        </Button>
-                      )}
-                      {correction.currentStatus === 'pending_review' && 
-                       currentRole === ROLES.CERT_ADMIN && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="bg-green-600"
-                            onClick={() => handleSupervisorDecision(correction, true)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleSupervisorDecision(correction, false)}
-                          >
-                            <AlertCircle className="h-4 w-4 mr-1" /> Reject
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {corrections.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
-                    No correction records found
-                  </TableCell>
-                </TableRow>
+    <Card>
+  <CardHeader>
+    <CardTitle>Correction Requests</CardTitle>
+    <CardDescription>
+      {corrections.length} total correction record(s)
+    </CardDescription>
+  </CardHeader>
+  <CardContent>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Learner Name</TableHead>
+          <TableHead>Submission ID</TableHead>
+          <TableHead>Error Type</TableHead>
+          <TableHead>Origin</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>To Do By</TableHead>
+          <TableHead>Last Updated</TableHead>
+          <TableHead className="text-center">Action</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {corrections.map((correction) => (
+          <TableRow key={correction.correctionId}>
+            <TableCell className="font-medium">{correction.learnerName}</TableCell>
+
+            <TableCell className="font-mono text-xs">
+              {correction.submissionId}
+            </TableCell>
+
+            <TableCell>
+              <Badge
+                variant={
+                  correction.errorType === 'integration_failure'
+                    ? 'destructive'
+                    : correction.errorType === 'missing_documentation'
+                    ? 'secondary'
+                    : 'outline'
+                }
+              >
+                {ERROR_TYPE_LABELS[correction.errorType]}
+              </Badge>
+            </TableCell>
+
+            <TableCell>
+              <Badge variant="outline">
+                {ORIGIN_LABELS[correction.origin]}
+              </Badge>
+            </TableCell>
+
+            <TableCell>
+              {isCorrectionExpired(correction) ? (
+                <Badge variant="destructive">Expired</Badge>
+              ) : (
+                <Badge
+                  variant={
+                    correction.currentStatus === 'active'
+                      ? 'default'
+                      : correction.currentStatus === 'pending_review'
+                      ? 'secondary'
+                      : correction.currentStatus === 'resolved'
+                      ? 'outline'
+                      : 'destructive'
+                  }
+                >
+                  {CORRECTION_STATUS_LABELS[correction.currentStatus].label}
+                </Badge>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </TableCell>
+
+            <TableCell>
+              {correction.todoDate
+                ? new Date(correction.todoDate).toLocaleDateString()
+                : '-'}
+            </TableCell>
+
+            <TableCell>
+              {new Date(correction.lastUpdated).toLocaleDateString()}
+            </TableCell>
+
+            <TableCell className="text-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleViewCorrection(correction)}
+              >
+                <Eye className="h-4 w-4 mr-1" /> View
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+
+        {corrections.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+              No correction records found
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  </CardContent>
+</Card>
 
       {/* Correction Detail Modal */}
       <Dialog open={isCorrectionModalOpen} onOpenChange={setIsCorrectionModalOpen}>
@@ -558,38 +536,61 @@ const getVisibleCorrections = () => {
           
           {selectedCorrection && selectedSubmission && (
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="mt-4">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="details">Correction Details</TabsTrigger>
-                <TabsTrigger value="documents">Documents</TabsTrigger>
-                <TabsTrigger value="history">History & Versions</TabsTrigger>
-              </TabsList>
+                 <TabsList className="grid w-full grid-cols-2">
+  <TabsTrigger value="details">Correction Details</TabsTrigger>
+  <TabsTrigger value="documents">Documents & Versions</TabsTrigger>
+</TabsList>
               
               <TabsContent value="details" className="space-y-4 mt-4">
                 {/* Error Information */}
                 <div className="bg-muted p-4 rounded-lg space-y-3">
                   <h4 className="font-medium">Error Information</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Error Type</p>
-                      <Badge variant={
-                        selectedCorrection.errorType === 'integration_failure' ? 'destructive' :
-                        selectedCorrection.errorType === 'missing_documentation' ? 'secondary' :
-                        'outline'
-                      }>
-                        {ERROR_TYPE_LABELS[selectedCorrection.errorType]}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Origin</p>
-                      <Badge variant="outline">{ORIGIN_LABELS[selectedCorrection.origin]}</Badge>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-xs text-muted-foreground">Return Reason</p>
-                      <p className="text-sm mt-1 p-2 bg-amber-50 rounded border border-amber-200">
-                        {selectedCorrection.returnReason}
-                      </p>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-2 gap-4">
+  <div>
+    <p className="text-xs text-muted-foreground">Error Type</p>
+    <Badge
+      variant={
+        selectedCorrection.errorType === 'integration_failure'
+          ? 'destructive'
+          : selectedCorrection.errorType === 'missing_documentation'
+          ? 'secondary'
+          : 'outline'
+      }
+    >
+      {ERROR_TYPE_LABELS[selectedCorrection.errorType]}
+    </Badge>
+  </div>
+
+  <div>
+    <p className="text-xs text-muted-foreground">Origin</p>
+    <Badge variant="outline">{ORIGIN_LABELS[selectedCorrection.origin]}</Badge>
+  </div>
+
+  <div>
+    <p className="text-xs text-muted-foreground">To Do By</p>
+    <p className="text-sm font-medium">
+      {selectedCorrection.todoDate
+        ? new Date(selectedCorrection.todoDate).toLocaleDateString()
+        : '-'}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-xs text-muted-foreground">Expiry Status</p>
+    {isCorrectionExpired(selectedCorrection) ? (
+      <Badge variant="destructive">Expired</Badge>
+    ) : (
+      <Badge variant="secondary">Still Active</Badge>
+    )}
+  </div>
+
+  <div className="col-span-2">
+    <p className="text-xs text-muted-foreground">Return Reason</p>
+    <p className="text-sm mt-1 p-2 bg-amber-50 rounded border border-amber-200">
+      {selectedCorrection.returnReason}
+    </p>
+  </div>
+</div>
                 </div>
 
                 {/* Integration Error Log */}
@@ -622,49 +623,35 @@ const getVisibleCorrections = () => {
                 )}
 
                 {/* Correction Notes Form */}
-                {selectedCorrection.currentStatus === 'active' && 
-                 selectedCorrection.responsibleUnit === currentRole && (
-                  <div className="border-t pt-4 space-y-4">
-                    <h4 className="font-medium">Correction Notes</h4>
-                    <div className="space-y-3">
-                      <div>
-                        <Label>What was corrected? <span className="text-red-500">*</span></Label>
-                        <Textarea
-                          value={correctionNotes.whatWasCorrected}
-                          onChange={(e) => setCorrectionNotes({...correctionNotes, whatWasCorrected: e.target.value})}
-                          placeholder="Describe what changes were made..."
-                          className="mt-1"
-                          rows={2}
-                        />
-                      </div>
-                      <div>
-                        <Label>Reason for change <span className="text-red-500">*</span></Label>
-                        <Textarea
-                          value={correctionNotes.reasonForChange}
-                          onChange={(e) => setCorrectionNotes({...correctionNotes, reasonForChange: e.target.value})}
-                          placeholder="Explain why these changes were necessary..."
-                          className="mt-1"
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+               
               </TabsContent>
 
               <TabsContent value="documents" className="space-y-4 mt-4">
                 <h4 className="font-medium">Document Versions</h4>
                 <div className="space-y-4">
-                  {selectedSubmission.documents.map((doc) => {
-                    const versions = getDocumentVersions(doc);
-                    const latestVersion = versions[versions.length - 1];
-                    const needsCorrection = !latestVersion.verified;
+              {selectedSubmission.documents.map((doc) => {
+  const versions = getDocumentVersions(doc);
+  const latestVersion = versions[versions.length - 1];
+
+  const intakeVerification =
+    selectedSubmission.assessmentData?.documentVerifications?.[doc.id];
+
+  const needsCorrection = intakeVerification === false;
+  const isApproved = intakeVerification === true;
                     
                     return (
                       <div key={doc.id} className="border rounded-lg p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <FileText className={`h-5 w-5 ${needsCorrection ? 'text-amber-500' : 'text-green-500'}`} />
+                            <FileText
+  className={`h-5 w-5 ${
+    needsCorrection
+      ? 'text-amber-500'
+      : isApproved
+      ? 'text-green-500'
+      : 'text-slate-500'
+  }`}
+/>
                             <div>
                               <p className="font-medium">{getDocumentLabel(doc.type)}</p>
                               <p className="text-xs text-muted-foreground">
@@ -672,15 +659,19 @@ const getVisibleCorrections = () => {
                               </p>
                             </div>
                           </div>
-                          {latestVersion.verified ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700">
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Verified
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-amber-50 text-amber-700">
-                              <AlertCircle className="h-3 w-3 mr-1" /> Needs Correction
-                            </Badge>
-                          )}
+                       {needsCorrection ? (
+  <Badge variant="outline" className="bg-amber-50 text-amber-700">
+    <AlertCircle className="h-3 w-3 mr-1" /> Needs Correction
+  </Badge>
+) : isApproved ? (
+  <Badge variant="outline" className="bg-green-50 text-green-700">
+    <CheckCircle2 className="h-3 w-3 mr-1" /> Verified
+  </Badge>
+) : (
+  <Badge variant="outline" className="bg-slate-50 text-slate-700">
+    Pending Review
+  </Badge>
+)}
                         </div>
 
                         {/* Version History */}
@@ -713,91 +704,22 @@ const getVisibleCorrections = () => {
                         </div>
 
                         {/* Upload New Version */}
-                        {selectedCorrection.currentStatus === 'active' && 
-                         selectedCorrection.responsibleUnit === currentRole &&
-                         needsCorrection && (
-                          <div className="ml-8 mt-2">
-                            <Label className="text-xs">Upload corrected version</Label>
-                            <Input
-                              type="file"
-                              accept=".pdf,.jpg,.png"
-                              className="mt-1 h-8 text-sm w-full"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  const fileUrl = URL.createObjectURL(file);
-                                  setUpdatedFiles(prev => ({
-                                    ...prev,
-                                    [doc.type]: {
-                                      file: fileUrl,
-                                      version: versions.length + 1
-                                    }
-                                  }));
-                                }
-                              }}
-                            />
-                            {updatedFiles[doc.type] && (
-                              <p className="text-xs text-green-600 mt-1">
-                                ✓ Ready to upload v{updatedFiles[doc.type]?.version}
-                              </p>
-                            )}
-                          </div>
-                        )}
+                   
                       </div>
                     );
                   })}
                 </div>
               </TabsContent>
 
-              <TabsContent value="history" className="space-y-4 mt-4">
-                <h4 className="font-medium">Correction History</h4>
-                <div className="space-y-4">
-                  {selectedCorrection.correctionNotes?.map((note, idx) => (
-                    <div key={note.id} className="border-l-2 border-blue-500 pl-4 py-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <History className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">v{note.version}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(note.correctedAt).toLocaleString()}
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {note.correctedBy}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 space-y-1">
-                        <p className="text-sm">
-                          <span className="font-medium">What was corrected:</span> {note.whatWasCorrected}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Reason:</span> {note.reasonForChange}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {(!selectedCorrection.correctionNotes || selectedCorrection.correctionNotes.length === 0) && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No correction history available
-                    </p>
-                  )}
-                </div>
-              </TabsContent>
+          
             </Tabs>
           )}
 
-          <DialogFooter className="pt-4 border-t mt-4">
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={() => setIsCorrectionModalOpen(false)}>
-                Close
-              </Button>
-              {selectedCorrection?.currentStatus === 'active' && 
-               selectedCorrection?.responsibleUnit === currentRole && (
-                <Button onClick={handleResubmitCorrection}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Resubmit for Review (v{selectedCorrection.version + 1})
-                </Button>
-              )}
-            </div>
-          </DialogFooter>
+   <DialogFooter className="pt-4 border-t mt-4">
+  <Button variant="outline" onClick={() => setIsCorrectionModalOpen(false)}>
+    Close
+  </Button>
+</DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
