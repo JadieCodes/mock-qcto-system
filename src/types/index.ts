@@ -1,4 +1,18 @@
 export type AppRole = 
+  // Assessment Internal Roles
+  | 'Deputy Director'
+  | 'CEO'
+  | 'Internal Assessment Committee'
+  | 'Director & Team'
+  | 'AIC'
+  | 'Qualifications Development'
+  | 'Assistant Director'
+  | 'Domain Director'
+  | 'Sub Domain Admin'
+  | 'Deputy & Assistant Director'
+  | 'Director'
+  | 'ASD'
+  // Existing roles
   | 'Assessment Unit' 
   | 'Certification Practitioner' 
   | 'Supervisor' 
@@ -7,8 +21,7 @@ export type AppRole =
   | 'QP'        // Quality Partner
   | 'SDP'       // Skills Development Provider
   | 'NAMB'
-    // Research Domain Roles
-    
+  // Research Domain Roles
   | 'Research Deputy Director'
   | 'Research Director'
   | 'Research Chief Director'
@@ -17,14 +30,12 @@ export type AppRole =
   | 'Research Legal Director'
   | 'Research Service Provider'
   | 'Research Graphic Designer'
-  |'Forum' 
-   // External Research Roles
-   
+  | 'Forum' 
+  // External Research Roles
   | 'Requester'
   | 'Applicant'
   | 'External Applicant'
-   // QA External Roles
-  | 'SDP'
+  // QA External Roles
   | 'Quality Partner'
   | 'Quality Partner (SETA)'
   // QA Internal Roles

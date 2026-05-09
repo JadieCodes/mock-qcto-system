@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Clock
 } from 'lucide-react';
+import type { Application } from '@/types';
 
 interface Phase {
   name: string;
@@ -24,6 +25,7 @@ interface Phase {
   endDate: string;
   responsibleRole: string;
   status: 'pending' | 'in-progress' | 'completed';
+  required?: boolean;
 }
 
 interface CyclePlan {
@@ -42,7 +44,9 @@ interface CyclePlanModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (planData: Partial<CyclePlan>) => void;
+  onPhaseComplete?: (planId: number, phaseIndex: number, phaseData: Partial<Phase>) => void;
   plan: CyclePlan | null;
+  application: Application | null;
   mode: 'create' | 'edit' | 'view';
 }
 
@@ -81,7 +85,7 @@ const industries = [
 
 const nqfLevels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
-export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: CyclePlanModalProps) {
+export default function CyclePlanModal({ isOpen, onClose, onSave, onPhaseComplete, plan, application, mode }: CyclePlanModalProps) {
   const [formData, setFormData] = useState<Partial<CyclePlan>>({
     title: '',
     qualificationCode: '',
@@ -98,12 +102,51 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
   useEffect(() => {
     if (plan) {
       setFormData(plan);
+    } else if (application) {
+      // Pre-fill with application data for new cycle plan
+      setFormData({
+        title: application.qualification,
+        qualificationCode: application.id,
+        industry: '',
+        nqfLevel: '',
+        startDate: '',
+        endDate: '',
+        status: 'Planning',
+        phases: [
+          {
+            name: 'Scoping',
+            startDate: '',
+            endDate: '',
+            responsibleRole: 'Curriculum Developer',
+            status: 'pending'
+          },
+          {
+            name: 'Profile',
+            startDate: '',
+            endDate: '',
+            responsibleRole: 'Subject Matter Expert',
+            status: 'pending'
+          },
+          {
+            name: 'Curriculum Specification',
+            startDate: '',
+            endDate: '',
+            responsibleRole: 'Instructional Designer',
+            status: 'pending'
+          },
+          {
+            name: 'Knowledge & Practice',
+            startDate: '',
+            endDate: '',
+            responsibleRole: 'Assessment Specialist',
+            status: 'pending'
+          }
+        ]
+      });
     } else {
-      // Generate a default qualification code for new plans
-      const defaultCode = `QUAL-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
       setFormData({
         title: '',
-        qualificationCode: defaultCode,
+        qualificationCode: '',
         industry: '',
         nqfLevel: '',
         startDate: '',
@@ -112,7 +155,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
         phases: []
       });
     }
-  }, [plan]);
+  }, [plan, application]);
 
   const handleAddPhase = () => {
     setFormData({
@@ -131,9 +174,15 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
   };
 
   const handleRemovePhase = (index: number) => {
+    const phases = formData.phases || [];
+    // Prevent removal of Final Verification phase if it exists and is required
+    if (phases[index]?.name === 'Final Verification') {
+      alert('Final Verification phase cannot be removed as it is required.');
+      return;
+    }
     setFormData({
       ...formData,
-      phases: formData.phases?.filter((_, i) => i !== index)
+      phases: phases.filter((_, i) => i !== index)
     });
   };
 
@@ -147,9 +196,43 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
     onSave({ ...formData, status: 'Planning' });
   };
 
-  const handlePublish = () => {
-    onSave({ ...formData, status: 'Published' });
-  };
+// In CyclePlanModal.tsx - Update the handlePublish function
+const handlePublish = () => {
+  // Get the current phases
+  const phases = formData.phases || [];
+  
+  // Check if Final Verification phase exists (required)
+  const hasFinalVerification = phases.some(p => p.name === 'Final Verification');
+  
+  let finalPhases = [...phases];
+  
+  // Add Final Verification only if it doesn't exist (as the last phase)
+  if (!hasFinalVerification && finalPhases.length > 0) {
+    // Get the last phase's end date to set a default start date
+    const lastPhase = finalPhases[finalPhases.length - 1];
+    const lastEndDate = lastPhase.endDate;
+    
+    // Calculate a default end date (3 months after start)
+    let defaultEndDate = '';
+    if (lastEndDate) {
+      const date = new Date(lastEndDate);
+      date.setMonth(date.getMonth() + 3);
+      defaultEndDate = date.toISOString().split('T')[0];
+    }
+    
+    finalPhases.push({
+      name: 'Final Verification',
+      startDate: lastEndDate || '',
+      endDate: defaultEndDate,
+      responsibleRole: 'Quality Assurer',
+      status: 'pending',
+      required: true
+    });
+  }
+  
+  // Save with all phases preserved
+  onSave({ ...formData, phases: finalPhases, status: 'Published' });
+};
 
   const handleUpdate = () => {
     onSave(formData);
@@ -168,12 +251,12 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
         <div className="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-blue-50 to-white">
           <div>
             <h2 className="text-xl font-semibold text-gray-800">
-              {isCreateMode && 'Create New Cycle Plan'}
+              {isCreateMode && 'Create Cycle Plan'}
               {isEditMode && 'Edit Cycle Plan'}
               {isViewMode && 'Cycle Plan Details'}
             </h2>
             {formData.qualificationCode && (
-              <p className="text-sm text-gray-500 mt-1">Code: {formData.qualificationCode}</p>
+              <p className="text-sm text-gray-500 mt-1">Qualification: {formData.title}</p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -218,7 +301,6 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'details' && (
             <div className="space-y-6">
-              {/* Qualification Details Form */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
@@ -229,7 +311,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                       type="text"
                       value={formData.title || ''}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      disabled={isViewMode}
+                      disabled={isViewMode || !isCreateMode}
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Enter qualification name"
                     />
@@ -242,14 +324,9 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                     <input
                       type="text"
                       value={formData.qualificationCode || ''}
-                      onChange={(e) => setFormData({ ...formData, qualificationCode: e.target.value })}
-                      disabled={isViewMode}
+                      disabled={true}
                       className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50"
-                      placeholder="Auto-generated"
                     />
-                    {isCreateMode && (
-                      <p className="text-xs text-gray-500 mt-1">Auto-generated if left empty</p>
-                    )}
                   </div>
 
                   <div>
@@ -322,7 +399,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                     <select
                       value={formData.status || 'Planning'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                      disabled={isViewMode}
+                      disabled={isViewMode || (plan?.status === 'Published')}
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="Planning">Planning</option>
@@ -334,7 +411,6 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                 </div>
               </div>
 
-              {/* Summary Preview */}
               {formData.phases && formData.phases.length > 0 && (
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <h4 className="font-medium text-sm mb-2">Phase Summary</h4>
@@ -369,7 +445,6 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
 
           {activeTab === 'phases' && (
             <div className="space-y-4">
-              {/* Phases Table */}
               <div className="border rounded-lg overflow-hidden">
                 <table className="min-w-full">
                   <thead className="bg-gray-50">
@@ -384,21 +459,28 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {formData.phases && formData.phases.map((phase, index) => (
+                    {(formData.phases || []).map((phase, index) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm">Phase {index + 1}</td>
                         <td className="px-4 py-3">
                           {isViewMode ? (
-                            <span className="text-sm">{phase.name}</span>
+                            <span className="text-sm">
+                              {phase.name}
+                              {phase.name === 'Final Verification' && (
+                                <span className="ml-2 text-xs text-purple-600">(Required)</span>
+                              )}
+                            </span>
                           ) : (
                             <select
                               value={phase.name}
                               onChange={(e) => handlePhaseChange(index, 'name', e.target.value)}
                               className="border rounded px-2 py-1 text-sm w-full"
+                              disabled={phase.name === 'Final Verification' || (plan?.status === 'Published')}
                             >
                               {phaseOptions.map((option) => (
                                 <option key={option} value={option}>{option}</option>
                               ))}
+                              <option value="Final Verification">Final Verification</option>
                             </select>
                           )}
                         </td>
@@ -411,6 +493,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                               value={phase.startDate}
                               onChange={(e) => handlePhaseChange(index, 'startDate', e.target.value)}
                               className="border rounded px-2 py-1 text-sm w-full"
+                              disabled={plan?.status === 'Published'}
                             />
                           )}
                         </td>
@@ -423,6 +506,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                               value={phase.endDate}
                               onChange={(e) => handlePhaseChange(index, 'endDate', e.target.value)}
                               className="border rounded px-2 py-1 text-sm w-full"
+                              disabled={plan?.status === 'Published'}
                             />
                           )}
                         </td>
@@ -434,6 +518,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                               value={phase.responsibleRole}
                               onChange={(e) => handlePhaseChange(index, 'responsibleRole', e.target.value)}
                               className="border rounded px-2 py-1 text-sm w-full"
+                              disabled={plan?.status === 'Published'}
                             >
                               {responsibleRoles.map((role) => (
                                 <option key={role} value={role}>{role}</option>
@@ -455,6 +540,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                               value={phase.status}
                               onChange={(e) => handlePhaseChange(index, 'status', e.target.value as any)}
                               className="border rounded px-2 py-1 text-sm"
+                              disabled={plan?.status === 'Published'}
                             >
                               <option value="pending">Pending</option>
                               <option value="in-progress">In Progress</option>
@@ -462,11 +548,13 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                             </select>
                           )}
                         </td>
-                        {!isViewMode && (
+                        {!isViewMode && plan?.status !== 'Published' && (
                           <td className="px-4 py-3">
                             <button
                               onClick={() => handleRemovePhase(index)}
                               className="text-red-600 hover:text-red-800"
+                              disabled={phase.name === 'Final Verification'}
+                              title={phase.name === 'Final Verification' ? 'Cannot remove required phase' : 'Remove phase'}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -478,8 +566,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                 </table>
               </div>
 
-              {/* Add Phase Button */}
-              {!isViewMode && (
+              {!isViewMode && plan?.status !== 'Published' && (
                 <button
                   onClick={handleAddPhase}
                   className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
@@ -489,16 +576,12 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                 </button>
               )}
 
-              {/* No Phases Message */}
               {(!formData.phases || formData.phases.length === 0) && (
                 <div className="text-center py-8 text-gray-500">
                   <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                   <p>No phases defined yet</p>
                   {!isViewMode && (
-                    <button
-                      onClick={handleAddPhase}
-                      className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
-                    >
+                    <button onClick={handleAddPhase} className="mt-2 text-blue-600 hover:text-blue-800 text-sm">
                       Add your first phase
                     </button>
                   )}
@@ -511,7 +594,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
         {/* Footer */}
         <div className="px-6 py-4 border-t bg-gray-50 flex justify-between items-center">
           <div className="flex gap-2">
-            {!isViewMode && (
+            {!isViewMode && plan?.status !== 'Published' && (
               <>
                 <button
                   onClick={handleSaveDraft}
@@ -531,7 +614,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
             )}
           </div>
           <div className="flex gap-2">
-            {isEditMode && (
+            {isEditMode && plan?.status !== 'Published' && (
               <button
                 onClick={handleUpdate}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2"
@@ -540,10 +623,7 @@ export default function CyclePlanModal({ isOpen, onClose, onSave, plan, mode }: 
                 Update Plan
               </button>
             )}
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border rounded-lg text-sm hover:bg-white"
-            >
+            <button onClick={onClose} className="px-4 py-2 border rounded-lg text-sm hover:bg-white">
               {isViewMode ? 'Close' : 'Cancel'}
             </button>
           </div>

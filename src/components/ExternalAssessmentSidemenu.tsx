@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { AssessmentRoleSelector } from '@/components/AssessmentRoleSelector';
 import {
   FileCheck,
   ShieldCheck,
@@ -58,21 +59,21 @@ export const ExternalAssessmentSidemenu = ({
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="shrink-0 border-b bg-card">
-        <div className="flex h-16 w-full items-center justify-between px-4">
+        <div className="flex h-16 w-full items-center justify-between px-6">
           <div>
-            <h1 className="text-xl font-bold text-primary">
-              Assessment Domain
-            </h1>
+            <h1 className="text-xl font-bold text-primary">Assessment Domain</h1>
             {userName && (
               <p className="text-sm text-muted-foreground">
                 {userName} {organizationName && `- ${organizationName}`}
               </p>
             )}
           </div>
+
+          <AssessmentRoleSelector />
         </div>
       </header>
 
-      <div className="flex flex-1 w-full px-4 py-6">
+      <div className="flex w-full flex-1 px-4 py-6">
         <aside className="mr-6 flex w-64 flex-col justify-between">
           <nav className="space-y-2 p-6">
             <div className="space-y-1">

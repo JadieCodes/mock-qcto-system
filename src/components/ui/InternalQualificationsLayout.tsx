@@ -31,14 +31,7 @@ const handleLogout = () => {
 };
   // Update paths to match the new route structure in App.tsx
   const navigationItems = [
-    {
-      path: "/departments/qualifications/dashboard",
-      label: "Dashboard",
-      icon: LayoutDashboard,
-      description: "Overview and statistics",
-      count: null,
-      color: "blue"
-    },
+ 
     {
       path: "/departments/qualifications/applications",
       label: "Applications",
@@ -79,14 +72,7 @@ const handleLogout = () => {
       count: 6,
       color: "indigo"
     },
-    {
-      path: "/departments/qualifications/reporting",
-      label: "Reporting",
-      icon: BarChart3,
-      description: "Reports and analytics",
-      count: null,
-      color: "red"
-    }
+   
   ];
 
   const isActive = (path: string) => location.pathname === path;

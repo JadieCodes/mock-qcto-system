@@ -14,7 +14,7 @@ export default function QualificationsDevelopment() {
 
       <Tabs defaultValue="cycle-plan" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="cycle-plan">Qualification Cycle Plan</TabsTrigger>
+          <TabsTrigger value="cycle-plan">Qualification Development Plan</TabsTrigger>
           <TabsTrigger value="phase-development">Phase Development (Design Tool)</TabsTrigger>
         </TabsList>
         <TabsContent value="cycle-plan">

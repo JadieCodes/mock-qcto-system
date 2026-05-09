@@ -6,13 +6,13 @@ import {
   FileText,
   Eye,
   CheckCircle2,
+  FolderOpen,
   CalendarClock,
-  Send,
-  PlusCircle,
+  ShieldCheck,
 } from 'lucide-react';
 
-type EisaRegistrationTab = 'trades' | 'nonTrades';
-type ExternalRole = 'SDP' | 'Quality Partner';
+type EisaTab = 'trades' | 'nonTrades';
+type InternalRole = 'Assistant Director';
 
 type RegistrationStage =
   | 'sdp_submission'
@@ -22,17 +22,18 @@ type RegistrationStage =
   | 'non_trades_prepared'
   | 'completed';
 
-interface EisaRegistrationRecord {
+interface EisaInternalRecord {
   id: string;
   stream: 'trades' | 'nonTrades';
   eisaRegNo: string;
   title: string;
   eisaDate: string;
   sourceFrom: string;
+  eisaRegDocument: boolean;
   leisaFile: boolean;
   sorAndQaReports: boolean;
-  eisaRegDocument: boolean;
   currentStage: RegistrationStage;
+  validationStatus: 'pending' | 'validated';
   registrationNumber?: string;
   file4Prepared: boolean;
   sdpListPrepared: boolean;
@@ -43,53 +44,13 @@ interface EisaRegistrationRecord {
 
 const STORAGE_KEY = 'eisa_registration_records';
 
-const INITIAL_EXTERNAL_RECORDS: EisaRegistrationRecord[] = [
-  {
-    id: 'ER-001',
-    stream: 'trades',
-    eisaRegNo: 'EISA-TR-001',
-    title: 'Boilermaker Trade Registration',
-    eisaDate: '2026-08-20',
-    sourceFrom: 'SDP',
-    leisaFile: true,
-    sorAndQaReports: true,
-    eisaRegDocument: true,
-    currentStage: 'sdp_submission',
-    registrationNumber: '',
-    file4Prepared: false,
-    sdpListPrepared: false,
-    submittedToQaAndQp: false,
-    submittedToQpTwoMonthsPrior: false,
-    createdAt: '2026-04-22',
-  },
-  {
-    id: 'ER-002',
-    stream: 'nonTrades',
-    eisaRegNo: 'EISA-NT-001',
-    title: 'Project Management Non-Trade Registration',
-    eisaDate: '2026-07-15',
-    sourceFrom: 'SDP',
-    leisaFile: true,
-    sorAndQaReports: true,
-    eisaRegDocument: true,
-    currentStage: 'sdp_submission',
-    registrationNumber: '',
-    file4Prepared: false,
-    sdpListPrepared: false,
-    submittedToQaAndQp: false,
-    submittedToQpTwoMonthsPrior: false,
-    createdAt: '2026-04-21',
-  },
-];
-
-export default function ExternalEisaRegistration() {
-  const [activeTab, setActiveTab] = useState<EisaRegistrationTab>('trades');
-  const [records, setRecords] = useState<EisaRegistrationRecord[]>([]);
-  const [selectedRecord, setSelectedRecord] = useState<EisaRegistrationRecord | null>(null);
+export default function InternalEisaPage() {
+  const [activeTab, setActiveTab] = useState<EisaTab>('trades');
+  const [records, setRecords] = useState<EisaInternalRecord[]>([]);
+  const [selectedRecord, setSelectedRecord] = useState<EisaInternalRecord | null>(null);
   const { currentRole } = useApp();
 
-  const activeExternalRole: ExternalRole =
-    currentRole === 'Quality Partner' ? 'Quality Partner' : 'SDP';
+  const activeInternalRole: InternalRole = 'Assistant Director';
 
   useEffect(() => {
     loadRecords();
@@ -105,122 +66,88 @@ export default function ExternalEisaRegistration() {
   const loadRecords = () => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_EXTERNAL_RECORDS));
-      setRecords(INITIAL_EXTERNAL_RECORDS);
+      setRecords([]);
       return;
     }
-    setRecords(JSON.parse(stored));
+
+    const parsed = JSON.parse(stored) as EisaInternalRecord[];
+    setRecords(parsed);
   };
 
-  const saveRecords = (updated: EisaRegistrationRecord[]) => {
+  const saveRecords = (updated: EisaInternalRecord[]) => {
     setRecords(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }));
   };
 
-  const filteredRecords = useMemo(() => {
+  const visibleRecords = useMemo(() => {
     return records.filter((record) => record.stream === activeTab);
   }, [records, activeTab]);
 
   const cards = useMemo(() => {
-    const registrations = filteredRecords.length;
-    const candidates = filteredRecords.length;
-    const uploadedFiles = filteredRecords.filter(
+    const registrations = visibleRecords.length;
+    const candidates = visibleRecords.length;
+    const files = visibleRecords.filter(
       (record) => record.eisaRegDocument && record.leisaFile && record.sorAndQaReports
     ).length;
 
     return [
       {
-        title: activeTab === 'trades' ? 'Trade Registrations' : 'Non-Trade Registrations',
+        title: 'Registrations',
         value: String(registrations),
         icon: <ClipboardList className="h-5 w-5" />,
       },
       {
-        title: 'Registered Candidates',
+        title: 'Candidates',
         value: String(candidates),
         icon: <Users className="h-5 w-5" />,
       },
       {
-        title: 'Uploaded Files',
-        value: String(uploadedFiles),
+        title: 'Supporting Files',
+        value: String(files),
         icon: <FileText className="h-5 w-5" />,
       },
     ];
-  }, [filteredRecords, activeTab]);
+  }, [visibleRecords]);
 
-  const handleNotifyAssessmentDomain = (recordId: string) => {
+  const handleTradesValidation = (recordId: string) => {
     const updated = records.map((record) =>
       record.id === recordId
         ? {
             ...record,
-            currentStage: 'assistant_director_validation' as RegistrationStage,
+            validationStatus: 'validated' as const,
+            registrationNumber: `REG-${record.eisaRegNo}`,
+            currentStage: 'trades_registered' as RegistrationStage,
           }
         : record
     );
     saveRecords(updated);
   };
 
-  const handleCreateNewSubmission = () => {
-    const timestamp = Date.now();
-    const prefix = activeTab === 'trades' ? 'TR' : 'NT';
-    const newRecord: EisaRegistrationRecord = {
-      id: `ER-${timestamp}`,
-      stream: activeTab,
-      eisaRegNo: `EISA-${prefix}-${String(timestamp).slice(-4)}`,
-      title:
-        activeTab === 'trades'
-          ? 'New Trade Registration'
-          : 'New Non-Trade Registration',
-      eisaDate: '2026-09-01',
-      sourceFrom: 'SDP',
-      leisaFile: true,
-      sorAndQaReports: true,
-      eisaRegDocument: true,
-      currentStage: 'sdp_submission',
-      registrationNumber: '',
-      file4Prepared: false,
-      sdpListPrepared: false,
-      submittedToQaAndQp: false,
-      submittedToQpTwoMonthsPrior: false,
-      createdAt: new Date().toISOString(),
-    };
-
-    saveRecords([newRecord, ...records]);
+  const handleNonTradesValidation = (recordId: string) => {
+    const updated = records.map((record) =>
+      record.id === recordId
+        ? {
+            ...record,
+            validationStatus: 'validated' as const,
+            file4Prepared: true,
+            sdpListPrepared: true,
+            submittedToQaAndQp: true,
+            submittedToQpTwoMonthsPrior: true,
+            currentStage: 'non_trades_prepared' as RegistrationStage,
+          }
+        : record
+    );
+    saveRecords(updated);
   };
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">EISA Registration</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Manage EISA registration submissions for trades and non-trades.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {activeExternalRole === 'SDP' && (
-              <button
-                type="button"
-                onClick={handleCreateNewSubmission}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700"
-              >
-                <PlusCircle className="h-4 w-4" />
-                New Submission
-              </button>
-            )}
-
-            <div className="inline-flex w-fit items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Current role
-              </span>
-              <span className="ml-3 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm">
-                {activeExternalRole}
-              </span>
-            </div>
-          </div>
-        </div>
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">EISA</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Manage EISA registration streams for trades and non-trades.
+        </p>
       </div>
 
       <div className="rounded-2xl border bg-white shadow-sm">
@@ -254,15 +181,26 @@ export default function ExternalEisaRegistration() {
 
         <div className="p-6">
           <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                {activeTab === 'trades' ? 'EISA Trades' : 'EISA Non Trades'}
-              </h2>
-              <p className="mt-1 text-sm text-gray-600">
-                {activeTab === 'trades'
-                  ? 'SDP notifies Assessment Domain with EISA Reg, LEISA File, and SOR & QA Reports for trade processing.'
-                  : 'SDP notifies Assessment Domain with EISA Reg, LEISA File, and SOR & QA Reports for non-trade processing.'}
-              </p>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {activeTab === 'trades' ? 'EISA Trades' : 'EISA Non Trades'}
+                </h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  {activeTab === 'trades'
+                    ? 'Assistant Director receives EISA Reg, LEISA File, and SOR & QA Reports, validates documentation, and creates registration number.'
+                    : "Assistant Director receives EISA Reg, LEISA File, and SOR & QA Reports, validates documentation, prepares file 4, and submits the SDP list to QA and QP's."}
+                </p>
+              </div>
+
+              <div className="inline-flex w-fit items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Current role
+                </span>
+                <span className="ml-3 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm">
+                  {currentRole || activeInternalRole}
+                </span>
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -278,9 +216,7 @@ export default function ExternalEisaRegistration() {
 
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
               <div className="border-b border-gray-200 bg-gray-50 px-5 py-4">
-                <h3 className="text-sm font-semibold text-gray-900">
-                  External EISA Submission Register
-                </h3>
+                <h4 className="text-sm font-semibold text-gray-900">EISA Registration Workspace</h4>
               </div>
 
               <div className="overflow-x-auto">
@@ -291,13 +227,13 @@ export default function ExternalEisaRegistration() {
                         Registration
                       </th>
                       <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        EISA Date
-                      </th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Documents
                       </th>
                       <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Stage
+                        Validation
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Outcome
                       </th>
                       <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Actions
@@ -306,14 +242,14 @@ export default function ExternalEisaRegistration() {
                   </thead>
 
                   <tbody>
-                    {filteredRecords.length === 0 ? (
+                    {visibleRecords.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-500">
-                          No EISA registrations available.
+                          No EISA records available.
                         </td>
                       </tr>
                     ) : (
-                      filteredRecords.map((record) => (
+                      visibleRecords.map((record) => (
                         <tr
                           key={record.id}
                           className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50/70"
@@ -321,10 +257,9 @@ export default function ExternalEisaRegistration() {
                           <td className="px-5 py-4 align-top">
                             <div className="font-semibold text-gray-900">{record.eisaRegNo}</div>
                             <div className="mt-1 text-sm text-gray-600">{record.title}</div>
-                          </td>
-
-                          <td className="px-5 py-4 align-top text-sm text-gray-700">
-                            {record.eisaDate}
+                            <div className="mt-1 text-xs text-gray-500">
+                              EISA Date: {record.eisaDate}
+                            </div>
                           </td>
 
                           <td className="px-5 py-4 align-top">
@@ -333,6 +268,14 @@ export default function ExternalEisaRegistration() {
                               <MiniDocBadge ok={record.leisaFile} label="LEISA File" />
                               <MiniDocBadge ok={record.sorAndQaReports} label="SOR & QA Reports" />
                             </div>
+                          </td>
+
+                          <td className="px-5 py-4 align-top">
+                            <StatusBadge
+                              status={record.validationStatus === 'validated' ? 'approved' : 'pending'}
+                              approvedLabel="Validated"
+                              pendingLabel="Pending"
+                            />
                           </td>
 
                           <td className="px-5 py-4 align-top">
@@ -349,13 +292,23 @@ export default function ExternalEisaRegistration() {
                                 View
                               </ActionButton>
 
-                              {activeExternalRole === 'SDP' &&
-                                record.currentStage === 'sdp_submission' && (
+                              {activeTab === 'trades' &&
+                                record.currentStage === 'assistant_director_validation' && (
                                   <ActionButton
-                                    icon={<Send className="h-4 w-4" />}
-                                    onClick={() => handleNotifyAssessmentDomain(record.id)}
+                                    icon={<CheckCircle2 className="h-4 w-4" />}
+                                    onClick={() => handleTradesValidation(record.id)}
                                   >
-                                    Notify Assessment Domain
+                                    Validation OK
+                                  </ActionButton>
+                                )}
+
+                              {activeTab === 'nonTrades' &&
+                                record.currentStage === 'assistant_director_validation' && (
+                                  <ActionButton
+                                    icon={<FolderOpen className="h-4 w-4" />}
+                                    onClick={() => handleNonTradesValidation(record.id)}
+                                  >
+                                    Prepare File 4
                                   </ActionButton>
                                 )}
                             </div>
@@ -369,7 +322,7 @@ export default function ExternalEisaRegistration() {
             </div>
 
             {selectedRecord && (
-              <ExternalEisaDetailsModal
+              <InternalEisaDetailsModal
                 record={selectedRecord}
                 onClose={() => setSelectedRecord(null)}
               />
@@ -381,11 +334,11 @@ export default function ExternalEisaRegistration() {
   );
 }
 
-function ExternalEisaDetailsModal({
+function InternalEisaDetailsModal({
   record,
   onClose,
 }: {
-  record: EisaRegistrationRecord;
+  record: EisaInternalRecord;
   onClose: () => void;
 }) {
   return (
@@ -396,7 +349,7 @@ function ExternalEisaDetailsModal({
             <h3 className="text-lg font-semibold text-gray-900">
               {record.eisaRegNo} - {record.title}
             </h3>
-            <p className="mt-1 text-sm text-gray-600">External EISA registration details</p>
+            <p className="mt-1 text-sm text-gray-600">Internal EISA registration details</p>
           </div>
 
           <button
@@ -416,24 +369,24 @@ function ExternalEisaDetailsModal({
               icon={<ClipboardList className="h-5 w-5" />}
             />
             <DetailStat
+              title="Validation"
+              value={record.validationStatus === 'validated' ? 'Validated' : 'Pending'}
+              icon={<ShieldCheck className="h-5 w-5" />}
+            />
+            <DetailStat
               title="EISA Date"
               value={record.eisaDate}
               icon={<CalendarClock className="h-5 w-5" />}
             />
             <DetailStat
-              title="Source"
-              value={record.sourceFrom}
-              icon={<Users className="h-5 w-5" />}
-            />
-            <DetailStat
-              title="Registration Number"
+              title="Registration No"
               value={record.registrationNumber || '-'}
               icon={<CheckCircle2 className="h-5 w-5" />}
             />
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-            <h4 className="text-sm font-semibold text-gray-900">Submitted Documents</h4>
+            <h4 className="text-sm font-semibold text-gray-900">Required Documents</h4>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <ChecklistBadge label="EISA Reg" checked={record.eisaRegDocument} />
               <ChecklistBadge label="LEISA File" checked={record.leisaFile} />
@@ -443,7 +396,7 @@ function ExternalEisaDetailsModal({
 
           {record.stream === 'nonTrades' && (
             <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-              <h4 className="text-sm font-semibold text-gray-900">Non-Trade Preparation Status</h4>
+              <h4 className="text-sm font-semibold text-gray-900">Non-Trade Outputs</h4>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <ChecklistBadge label="File 4 Prepared" checked={record.file4Prepared} />
                 <ChecklistBadge label="SDP List Prepared" checked={record.sdpListPrepared} />
@@ -455,28 +408,6 @@ function ExternalEisaDetailsModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoCard({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border bg-gray-50 p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
-        </div>
-        <div className="rounded-full bg-white p-3 text-gray-600">{icon}</div>
       </div>
     </div>
   );
@@ -508,14 +439,46 @@ function getStageLabel(stage: RegistrationStage) {
     case 'assistant_director_validation':
       return 'Assistant Director Validation';
     case 'trades_registered':
-      return 'Trades Registered';
+      return 'Registration No Created';
     case 'non_trades_prepared':
-      return 'Non-Trades Prepared';
+      return 'File 4 & Lists Prepared';
     case 'completed':
       return 'Completed';
     default:
       return stage;
   }
+}
+
+function StatusBadge({
+  status,
+  approvedLabel = 'Approved',
+  pendingLabel = 'Pending',
+}: {
+  status: 'pending' | 'in_progress' | 'approved';
+  approvedLabel?: string;
+  pendingLabel?: string;
+}) {
+  if (status === 'approved') {
+    return (
+      <span className="inline-flex h-8 items-center rounded-full bg-green-50 px-3 text-xs font-semibold text-green-700 ring-1 ring-inset ring-green-600/20">
+        {approvedLabel}
+      </span>
+    );
+  }
+
+  if (status === 'in_progress') {
+    return (
+      <span className="inline-flex h-8 items-center rounded-full bg-blue-50 px-3 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-600/20">
+        In Progress
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-8 items-center rounded-full bg-gray-100 px-3 text-xs font-semibold text-gray-700 ring-1 ring-inset ring-gray-200">
+      {pendingLabel}
+    </span>
+  );
 }
 
 function ActionButton({
@@ -589,6 +552,28 @@ function DetailStat({
           <p className="mt-2 text-sm font-semibold leading-6 text-gray-900">{value}</p>
         </div>
         <div className="rounded-2xl bg-gray-100 p-3 text-gray-600">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function InfoCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border bg-gray-50 p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-500">{title}</p>
+          <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+        </div>
+        <div className="rounded-full bg-white p-3 text-gray-600">{icon}</div>
       </div>
     </div>
   );

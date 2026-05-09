@@ -48,7 +48,7 @@ export default function InternalApplications() {
   const handleDocumentReviewComplete = (id: string, allDocsPresent: boolean, notes: string) => {
     console.log('Document Review Complete:', { id, allDocsPresent, notes });
     const updatedApp = updateApplication(id, {
-      status: allDocsPresent ? 'document_review' : 'submitted', // Changed from 'resolution' to 'document_review'
+      status: allDocsPresent ? 'document_review' : 'submitted',
       documentReview: {
         allDocumentsPresent: allDocsPresent,
         reviewedBy: 'Current User',
@@ -66,7 +66,7 @@ export default function InternalApplications() {
   const handleResolutionComplete = (id: string, checklist: any, completed: boolean) => {
     console.log('Resolution Complete:', { id, checklist, completed });
     const updatedApp = updateApplication(id, {
-      status: completed ? 'evaluation' : 'document_review', // This sends to evaluation when completed
+      status: completed ? 'evaluation' : 'document_review',
       resolution: {
         ...checklist,
         completed: completed,
@@ -232,7 +232,7 @@ export default function InternalApplications() {
             </button>
           </div>
 
-          {/* Document Review Table */}
+          {/* Document Review Table - Removed Documents Column */}
           <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
             <table className="min-w-full">
               <thead className="bg-gray-50">
@@ -242,7 +242,6 @@ export default function InternalApplications() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qualification</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submission Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Documents</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -255,14 +254,6 @@ export default function InternalApplications() {
                       <td className="px-4 py-3 text-sm max-w-[200px] truncate">{app.qualification}</td>
                       <td className="px-4 py-3 text-sm">{app.submissionDate}</td>
                       <td className="px-4 py-3">{getApplicationStatusBadge(app.status)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          {app.documents.applicationLetter && <span className="text-xs bg-green-100 text-green-700 px-1 rounded" title="Application Letter">AL</span>}
-                          {app.documents.motivation && <span className="text-xs bg-green-100 text-green-700 px-1 rounded" title="Motivation">M</span>}
-                          {app.documents.reference && <span className="text-xs bg-green-100 text-green-700 px-1 rounded" title="Reference">R</span>}
-                          {app.documents.acrLetter && <span className="text-xs bg-green-100 text-green-700 px-1 rounded" title="ACR Letter">ACR</span>}
-                        </div>
-                      </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button 
@@ -278,7 +269,7 @@ export default function InternalApplications() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                       <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                       <p>No applications pending document review</p>
                       <p className="text-sm">Applications submitted from the external portal will appear here</p>
@@ -310,7 +301,7 @@ export default function InternalApplications() {
             </button>
           </div>
 
-          {/* Resolution Table */}
+          {/* Resolution Table - Removed Documents Column */}
           <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
             <table className="min-w-full">
               <thead className="bg-gray-50">
@@ -320,7 +311,6 @@ export default function InternalApplications() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qualification</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submission Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Documents</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -333,14 +323,6 @@ export default function InternalApplications() {
                       <td className="px-4 py-3 text-sm max-w-[200px] truncate">{app.qualification}</td>
                       <td className="px-4 py-3 text-sm">{app.submissionDate}</td>
                       <td className="px-4 py-3">{getApplicationStatusBadge(app.status)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          {app.documents.applicationLetter && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">AL</span>}
-                          {app.documents.motivation && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">M</span>}
-                          {app.documents.reference && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">R</span>}
-                          {app.documents.acrLetter && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">ACR</span>}
-                        </div>
-                      </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button 
@@ -356,7 +338,7 @@ export default function InternalApplications() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                       <CheckCircle className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                       <p>No applications in resolution phase</p>
                       <p className="text-sm">Applications that pass document review will appear here</p>

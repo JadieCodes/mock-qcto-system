@@ -32,8 +32,9 @@ export default function QasaManagementPage() {
   const [activeTab, setActiveTab] = useState<QasaTab>('submission');
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen bg-gray-50">
+      <div className="space-y-6">
+        {/* Header */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h1 className="text-2xl font-bold text-gray-900">QASA Management</h1>
           <p className="mt-2 text-sm text-gray-600">
@@ -41,6 +42,7 @@ export default function QasaManagementPage() {
           </p>
         </div>
 
+        {/* Main content */}
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200">
             <div className="flex flex-wrap gap-2 p-4">
@@ -66,6 +68,7 @@ export default function QasaManagementPage() {
             </div>
           </div>
 
+          {/* Add padding here for the content area */}
           <div className="p-6">
             {activeTab === 'submission' && <QasaAddendumSubmission />}
             {activeTab === 'evaluation' && <QasaEvaluation />}

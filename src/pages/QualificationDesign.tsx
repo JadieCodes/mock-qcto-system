@@ -160,14 +160,10 @@ export default function QualificationDesign() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Documents
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-
             <tbody className="divide-y divide-gray-200">
               {applications.map((app) => (
                 <tr key={app.id} className="hover:bg-gray-50 transition-colors">
@@ -185,35 +181,6 @@ export default function QualificationDesign() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getStatusBadge(app.status)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex flex-wrap gap-1">
-                      {app.documents.applicationLetter && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                          AL
-                        </span>
-                      )}
-                      {app.documents.motivation && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                          M
-                        </span>
-                      )}
-                      {app.documents.reference && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                          R
-                        </span>
-                      )}
-                      {app.documents.acrLetter && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                          ACR
-                        </span>
-                      )}
-                      {app.documents.other && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                          OTHER
-                        </span>
-                      )}
-                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button

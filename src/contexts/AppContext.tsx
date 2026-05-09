@@ -152,6 +152,20 @@ rejectProjectReport: (
 // Mock user data based on roles
 const getUserDataByRole = (role: AppRole): User => {
   const userMap: Record<AppRole, User> = {
+    // Assessment Internal Roles (NEW)
+    'Deputy Director': { name: 'Dennis Deputy', email: 'dennis.deputy@qcto.gov.za', role: 'Deputy Director', businessUnit: 'Assessment' },
+    'CEO': { name: 'Catherine CEO', email: 'catherine.ceo@qcto.gov.za', role: 'CEO', businessUnit: 'Executive' },
+    'Internal Assessment Committee': { name: 'IAC Team', email: 'iac.committee@qcto.gov.za', role: 'Internal Assessment Committee', businessUnit: 'Assessment' },
+    'Director & Team': { name: 'Daniel Director', email: 'daniel.director@qcto.gov.za', role: 'Director & Team', businessUnit: 'Assessment' },
+    'AIC': { name: 'AIC Member', email: 'aic.member@qcto.gov.za', role: 'AIC', businessUnit: 'Assessment' },
+    'Qualifications Development': { name: 'Quinton Quals', email: 'quinton.quals@qcto.gov.za', role: 'Qualifications Development', businessUnit: 'Curriculum' },
+    'Assistant Director': { name: 'Andrea Assistant', email: 'andrea.assistant@qcto.gov.za', role: 'Assistant Director', businessUnit: 'Assessment' },
+    'Domain Director': { name: 'Dominic Domain', email: 'dominic.domain@qcto.gov.za', role: 'Domain Director', businessUnit: 'Domain Management' },
+    'Sub Domain Admin': { name: 'Susan SubDomain', email: 'susan.subdomain@qcto.gov.za', role: 'Sub Domain Admin', businessUnit: 'Domain Administration' },
+    'Deputy & Assistant Director': { name: 'Dual Role User', email: 'dual.role@qcto.gov.za', role: 'Deputy & Assistant Director', businessUnit: 'Assessment' },
+    'Director': { name: 'Diane Director', email: 'diane.director@qcto.gov.za', role: 'Director', businessUnit: 'Assessment' },
+    'ASD': { name: 'ASD Officer', email: 'asd.officer@qcto.gov.za', role: 'ASD', businessUnit: 'Assessment' },
+
     // Existing roles
     'Assessment Unit': { name: 'Alex Assessment', email: 'alex.assessment@qcto.gov.za', role: 'Assessment Unit', businessUnit: 'Assessment' },
     'Certification Practitioner': { name: 'Chris Certificate', email: 'chris.cert@qcto.gov.za', role: 'Certification Practitioner', businessUnit: 'Certification' },

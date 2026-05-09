@@ -30,8 +30,6 @@ export default function InternalEvaluations() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
 
-  
-
   useEffect(() => {
     setApplications(getApplications());
   }, []);
@@ -69,50 +67,58 @@ export default function InternalEvaluations() {
     }
   };
 
-const handleSummaryComplete = (
-  id: string,
-  resolution: string,
-  resolutionFile: string | null,
-  recommended: boolean
-) => {
-  const updatedApp = updateApplication(id, {
-    status: recommended ? 'development_workspace' : 'rejected',
-    evaluationSummary: {
-      resolution,
-      resolutionUploaded: resolutionFile,
-      recommended,
-      submitted: true,
-      approvalLetter: null,
-      approvalDate: new Date().toISOString(),
-      approvedBy: 'Current User'
-    }
-  });
-
-  if (updatedApp) {
-    setApplications(getApplications());
-  }
-};
-
- const handleApprovalLetterUpload = (id: string, file: string) => {
-  const app = applications.find(a => a.id === id);
-
-  if (app) {
-    updateApplication(id, {
+  const handleSummaryComplete = (
+    id: string,
+    resolution: string,
+    resolutionFile: string | null,
+    recommended: boolean,
+    approvalLetter: string | null
+  ) => {
+    const updatedApp = updateApplication(id, {
+      status: recommended ? 'development_workspace' : 'rejected',
       evaluationSummary: {
-        resolution: app.evaluationSummary?.resolution || '',
-        resolutionUploaded: app.evaluationSummary?.resolutionUploaded || null,
-        recommended: app.evaluationSummary?.recommended || false,
-        approvalDate: app.evaluationSummary?.approvalDate || new Date().toISOString(),
-        approvedBy: app.evaluationSummary?.approvedBy || 'Current User',
-
-        approvalLetter: file,
-        submitted: true
+        resolution: resolution || '',
+        resolutionUploaded: resolutionFile,
+        recommended: recommended,
+        submitted: true,
+        approvalLetter: approvalLetter,
+        approvalDate: new Date().toISOString(),
+        approvedBy: 'Current User'
       }
     });
 
-    setApplications(getApplications());
-  }
-};
+    if (updatedApp) {
+      setApplications(getApplications());
+    }
+  };
+
+  const handleApprovalLetterUpload = (id: string, file: string) => {
+    const app = applications.find(a => a.id === id);
+    if (app && app.evaluationSummary) {
+      updateApplication(id, {
+        evaluationSummary: {
+          ...app.evaluationSummary,
+          approvalLetter: file,
+          submitted: true
+        }
+      });
+      setApplications(getApplications());
+    } else if (app) {
+      // If evaluationSummary doesn't exist yet, create it with defaults
+      updateApplication(id, {
+        evaluationSummary: {
+          resolution: '',
+          resolutionUploaded: null,
+          recommended: false,
+          submitted: true,
+          approvalLetter: file,
+          approvalDate: new Date().toISOString(),
+          approvedBy: 'Current User'
+        }
+      });
+      setApplications(getApplications());
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch(status) {
@@ -223,27 +229,27 @@ const handleSummaryComplete = (
           getStatusColor={getStatusColor}
         />
       ) : (
-       <EvaluationSummary 
-  applications={summaryApps}
-  onViewApplication={handleViewApplication}
-  onApprovalLetterUpload={handleApprovalLetterUpload}
-/>
+        <EvaluationSummary 
+          applications={summaryApps}
+          onViewApplication={handleViewApplication}
+          onApprovalLetterUpload={handleApprovalLetterUpload}
+        />
       )}
 
       {/* Evaluation Details Modal */}
-     <EvaluationDetailsModal
-  isOpen={isModalOpen}
-  onClose={handleCloseModal}
-  application={selectedApplication}
-  onEvaluationComplete={handleEvaluationComplete}
-  onSummaryComplete={handleSummaryComplete}
-  onApprovalLetterUpload={handleApprovalLetterUpload}
-/>
+      <EvaluationDetailsModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        application={selectedApplication}
+        onEvaluationComplete={handleEvaluationComplete}
+        onSummaryComplete={handleSummaryComplete}
+        onApprovalLetterUpload={handleApprovalLetterUpload}
+      />
     </div>
   );
 }
 
-// Initial Evaluation Component
+// Initial Evaluation Component - Removed Documents Column
 function InitialEvaluation({ applications, onViewApplication, getStatusColor }: any) {
   return (
     <div className="space-y-6">
@@ -263,7 +269,7 @@ function InitialEvaluation({ applications, onViewApplication, getStatusColor }: 
         </button>
       </div>
 
-      {/* Evaluations Table */}
+      {/* Evaluations Table - Removed Documents Column */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
@@ -273,7 +279,6 @@ function InitialEvaluation({ applications, onViewApplication, getStatusColor }: 
               <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Qualification</th>
               <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Submission Date</th>
               <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Status</th>
-              <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Documents</th>
               <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
@@ -291,14 +296,6 @@ function InitialEvaluation({ applications, onViewApplication, getStatusColor }: 
                     </span>
                   </td>
                   <td className="py-4 px-6">
-                    <div className="flex gap-1">
-                      {app.documents.applicationLetter && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">AL</span>}
-                      {app.documents.motivation && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">M</span>}
-                      {app.documents.reference && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">R</span>}
-                      {app.documents.acrLetter && <span className="text-xs bg-green-100 text-green-700 px-1 rounded">ACR</span>}
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
                     <button 
                       onClick={() => onViewApplication(app)}
                       className="p-1 hover:bg-purple-50 rounded text-purple-600"
@@ -310,7 +307,7 @@ function InitialEvaluation({ applications, onViewApplication, getStatusColor }: 
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-gray-500">
+                <td colSpan={6} className="py-8 text-center text-gray-500">
                   <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                   <p>No applications pending initial evaluation</p>
                 </td>
@@ -323,7 +320,7 @@ function InitialEvaluation({ applications, onViewApplication, getStatusColor }: 
   );
 }
 
-// Evaluation Summary Component
+// Evaluation Summary Component - Removed Recommendation and Approval Letter columns
 function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUpload }: any) {
   return (
     <div className="space-y-6">
@@ -370,7 +367,7 @@ function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUp
         </div>
       </div>
 
-      {/* Better Table */}
+      {/* Table - Removed Recommendation and Approval Letter columns */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
@@ -388,12 +385,6 @@ function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUp
                 Resolution Status
               </th>
               <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Recommendation
-              </th>
-              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Approval Letter
-              </th>
-              <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
@@ -408,7 +399,6 @@ function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUp
                   <td className="py-4 px-6 text-sm text-gray-700 max-w-[260px] truncate">
                     {app.qualification}
                   </td>
-
                   <td className="py-4 px-6">
                     {app.evaluationSummary?.submitted ? (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
@@ -420,35 +410,6 @@ function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUp
                       </span>
                     )}
                   </td>
-
-                  <td className="py-4 px-6">
-                    {app.evaluationSummary?.submitted ? (
-                      app.evaluationSummary.recommended ? (
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                          Recommended
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                          Not Recommended
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-
-                  <td className="py-4 px-6">
-                    {app.evaluationSummary?.submitted ? (
-                      app.evaluationSummary.approvalLetter ? (
-                        <span className="text-sm text-green-700 font-medium">Uploaded</span>
-                      ) : (
-                        <span className="text-sm text-gray-400">Pending</span>
-                      )
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-
                   <td className="py-4 px-6">
                     <button
                       onClick={() => onViewApplication(app)}
@@ -462,7 +423,7 @@ function EvaluationSummary({ applications, onViewApplication, onApprovalLetterUp
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-gray-500">
+                <td colSpan={5} className="py-10 text-center text-gray-500">
                   <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                   <p>No applications in evaluation summary</p>
                 </td>

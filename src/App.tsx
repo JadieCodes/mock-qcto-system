@@ -39,6 +39,9 @@ import CenterManagement from "./pages/assessment/CenterManagement";
 import CandidateRegistration from "./pages/assessment/CandidateRegistration";
 import QualityAssurance from "./pages/assessment/QualityAssurance";
 import ResultsManagement from "./pages/assessment/ResultsManagement";
+import InternalFisaPage from "./pages/assessment/Internal/InternalFisaPage";
+import InternalEisaPage from "./pages/assessment/Internal/InternalEisaPage";
+import InternalSiteVisitsAndMonitoringPage from "./pages/assessment/Internal/InternalSiteVisitsAndMonitoringPage";
 
 import InternalDashboard from "./pages/qualifications/internal/InternalDashboard";
 import InternalApplications from "./pages/qualifications/internal/InternalApplications";
@@ -137,7 +140,34 @@ const App = () => {
               
               <Route path="/departments" element={<DepartmentsLanding />} />
 
-             
+             <Route
+  path="/departments/accreditation/*"
+  element={
+    <ProtectedDepartmentRoute department="accreditation">
+      <AccreditationLayout>
+        <Routes>
+          <Route
+            path=""
+            element={<Navigate to="/departments/accreditation/applications" replace />}
+          />
+          <Route
+            path="applications"
+            element={<AccreditationInternalDashboard />}
+          />
+          <Route
+            path="site-visits"
+            element={<SiteVisitManagement />}
+          />
+          <Route
+            path="outcome-letters"
+            element={<OutcomeLettersPage />}
+          />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AccreditationLayout>
+    </ProtectedDepartmentRoute>
+  }
+/>
    {/* NEW: Internal Qualifications Domain Routes */}
                       {/* UPDATED: Internal Qualifications Domain Routes - now the main qualifications domain */}
               {/* Protected Internal Qualifications Domain Routes */}
@@ -164,54 +194,74 @@ const App = () => {
 
               {/* Certification domain - wrapped with Layout */}
             {/* Protected Certification domain */}
+{/* Protected Assessment domain */}
 <Route
   path="/departments/assessment/*"
   element={
     <ProtectedDepartmentRoute department="assessment">
-      <AssessmentLayout 
-        userName="John Doe" 
+      <AssessmentLayout
+        userName="John Doe"
         organizationName="ABC Training Institute"
       >
         <Routes>
           <Route
             path=""
             element={
-              <Navigate
-                to="/departments/assessment/qasa-management"
-                replace
-              />
+              <Navigate to="/departments/assessment/qasa-management" replace />
             }
           />
+
           <Route
             path="qasa-management"
             element={<QasaManagementPage />}
           />
+
+          {/* FISA Routes */}
           <Route
-            path="assessor-management"
-            element={
-              <AssessorManagement
-                userRole="quality_partner"
-                userName="John Doe"
-                organizationName="ABC Training Institute"
-              />
-            }
+            path="fisa/standards"
+            element={<InternalFisaPage />}
           />
           <Route
-            path="standards-management"
-            element={<StandardsManagement />}
+            path="fisa/validation"
+            element={<InternalFisaPage />}
+          />
+
+          {/* EISA Routes */}
+          <Route
+            path="eisa/trades"
+            element={<InternalEisaPage />}
           />
           <Route
-            path="candidate-registration"
-            element={<CandidateRegistration />}
+            path="eisa/non-trades"
+            element={<InternalEisaPage />}
+          />
+
+          {/* Site Visits & Monitoring Routes */}
+          <Route
+            path="site-visits/incoming-requests"
+            element={<InternalSiteVisitsAndMonitoringPage />}
           />
           <Route
-            path="quality-assurance"
-            element={<QualityAssurance />}
+            path="site-visits/planning-scheduling"
+            element={<InternalSiteVisitsAndMonitoringPage />}
           />
           <Route
-            path="results-management"
-            element={<ResultsManagement />}
+            path="site-visits/execution"
+            element={<InternalSiteVisitsAndMonitoringPage />}
           />
+          <Route
+            path="site-visits/evaluation-reports"
+            element={<InternalSiteVisitsAndMonitoringPage />}
+          />
+          <Route
+            path="site-visits/approvals-outcomes"
+            element={<InternalSiteVisitsAndMonitoringPage />}
+          />
+          <Route
+            path="site-visits/monitoring-dashboard"
+            element={<InternalSiteVisitsAndMonitoringPage />}
+          />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AssessmentLayout>
