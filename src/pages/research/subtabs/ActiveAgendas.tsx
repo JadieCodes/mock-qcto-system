@@ -24,6 +24,7 @@ type AgendaTableRow = Agenda & {
   mainStatus: Agenda['status'];
 };
 
+
 const ActiveAgendas = () => {
   const { agendas, projects, updateAgenda } = useApp();
 
@@ -186,6 +187,7 @@ const ActiveAgendas = () => {
       />
     );
   }
+  
 
   return (
     <div className="space-y-6">

@@ -3,6 +3,7 @@ import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useAuditTrail } from '@/context/AuditTrailContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -10,33 +11,48 @@ import { Progress } from '@/components/ui/progress';
 import { AlertCircle, CheckCircle2, Eye, FileText, Download, Server, RefreshCw, Package } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type { ProcessType, Submission, DocumentType, AppRole, ErrorType,           // Add this
-  OriginType,          // Add this
-  CorrectionRecord,    // Add this
-  IntegrationErrorLog, // Add this
-  DocumentVersion  } from '@/types';
+import { Checkbox } from '@/components/ui/checkbox';
+import type { ProcessType, Submission, DocumentType, AppRole, ErrorType, OriginType, CorrectionRecord, IntegrationErrorLog, DocumentVersion } from '@/types';
 import { Input } from '@/components/ui/input';
 
 const ROLES = {
   CERT_ADMIN: 'Certification Practitioner' as AppRole,
 } as const;
-const getCorrectionTodoDate = (days = 7) => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
-};
-// System check types
-interface SystemCheck {
+
+// Rejection options for Send Back to Intake
+type RejectionCategory = 'internal' | 'external';
+
+interface RejectionOption {
   id: string;
   label: string;
-  status: 'pending' | 'processing' | 'passed' | 'failed';
-  message?: string;
+  category: RejectionCategory;
 }
 
+const SEND_BACK_OPTIONS: RejectionOption[] = [
+  // Internal reasons
+  { id: 'missing_doc', label: 'Missing required document(s)', category: 'internal' },
+  { id: 'unverified_doc', label: 'Document(s) could not be verified', category: 'internal' },
+  { id: 'checklist_incomplete', label: 'Review checklist not fully completed', category: 'internal' },
+  { id: 'duplicate_submission', label: 'Duplicate submission detected', category: 'internal' },
+  { id: 'incorrect_process_type', label: 'Incorrect process type selected', category: 'internal' },
+  { id: 'pathway_mismatch', label: 'Pathway does not match documentation', category: 'internal' },
+  // External reasons
+  { id: 'id_mismatch', label: 'Learner ID number mismatch', category: 'external' },
+  { id: 'name_mismatch', label: 'Learner name does not match records', category: 'external' },
+  { id: 'qualification_invalid', label: 'Qualification code is invalid or unrecognised', category: 'external' },
+  { id: 'approval_code_expired', label: 'Approval code is expired or invalid', category: 'external' },
+  { id: 'issuing_body_not_registered', label: 'Issuing body is not registered in CVS', category: 'external' },
+  { id: 'payment_invalid', label: 'Proof of payment is invalid or insufficient', category: 'external' },
+  { id: 'affidavit_invalid', label: 'Affidavit is incomplete or not commissioner-signed', category: 'external' },
+  { id: 'bio_data_mismatch', label: 'Bio data in File 3–4 does not match CVS records', category: 'external' },
+  { id: 'signature_missing', label: 'Required signature(s) missing on document', category: 'external' },
+  { id: 'other_external', label: 'Other external reason (specify in comments)', category: 'external' },
+];
 
 export default function Integration() {
   const { profileSubmissions, updateSubmission, currentRole } = useApp();
   const { toast } = useToast();
+  const { logAction } = useAuditTrail();
   
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
@@ -51,74 +67,263 @@ export default function Integration() {
   });
   const [showDoubleCapture, setShowDoubleCapture] = useState(false);
   const [todoDate, setTodoDate] = useState('');
-  const [sendBackToIntakeReason, setSendBackToIntakeReason] = useState('');
-const [showSendBackToIntake, setShowSendBackToIntake] = useState(false);
+  
+  // Send Back to Intake modal state
+  const [showSendBackToIntakeModal, setShowSendBackToIntakeModal] = useState(false);
+  const [sendBackSelectedRejectionIds, setSendBackSelectedRejectionIds] = useState<string[]>([]);
+  const [sendBackRejectionComments, setSendBackRejectionComments] = useState('');
+  const [sendBackRejectionCategory, setSendBackRejectionCategory] = useState<RejectionCategory | 'both'>('both');
 
+  const handleSendBackToIntake = () => {
+    if (!selectedSubmission) return;
 
-const handleSendBackToIntake = () => {
-  if (!selectedSubmission) return;
-
-  if (!sendBackToIntakeReason.trim()) {
-    toast({
-      title: 'Reason Required',
-      description: 'Please provide a reason for sending the submission back to Intake.',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  const updatedSubmission: Submission = {
-    ...selectedSubmission,
-    status: 'submitted',
-    assessmentData: {
-      ...selectedSubmission.assessmentData,
-
-      // Clear integration workflow
-      integrationStatus: 'pending',
-      integrationError: undefined,
-      integrationFailedAt: undefined,
-      integrationCompletedAt: undefined,
-      integratedBy: undefined,
-      integratedSystem: undefined,
-      systemChecks: undefined,
-
-      // Add send-back tracking
-      sentBackToIntake: true,
-      sentBackToIntakeAt: new Date().toISOString(),
-      sentBackToIntakeBy: currentRole,
-      sentBackToIntakeReason: sendBackToIntakeReason,
+    if (sendBackSelectedRejectionIds.length === 0) {
+      toast({
+        title: 'Select a Reason',
+        description: 'Please select at least one reason for sending back to Intake.',
+        variant: 'destructive',
+      });
+      return;
     }
+
+    // Build a human-readable return reason from selected options + comments
+    const selectedLabels = SEND_BACK_OPTIONS
+      .filter(o => sendBackSelectedRejectionIds.includes(o.id))
+      .map(o => `• ${o.label}`);
+    const returnReason = [
+      ...selectedLabels,
+      sendBackRejectionComments.trim() ? `Additional comments: ${sendBackRejectionComments.trim()}` : '',
+    ].filter(Boolean).join('\n');
+
+    // Build structured rejection details for Intake to display
+    const rejectionDetails = {
+      selectedReasonIds: sendBackSelectedRejectionIds,
+      selectedReasons: SEND_BACK_OPTIONS
+        .filter(o => sendBackSelectedRejectionIds.includes(o.id))
+        .map(o => ({ id: o.id, label: o.label, category: o.category as string })),
+      comments: sendBackRejectionComments.trim() || undefined,
+      returnedBy: currentRole,
+      returnedAt: new Date().toISOString(),
+    };
+
+    const updatedSubmission: Submission = {
+      ...selectedSubmission,
+      status: 'submitted', // Send back to submitted so it appears in Intake
+      assessmentData: {
+        ...selectedSubmission.assessmentData,
+
+        // Clear integration workflow
+        integrationStatus: 'pending',
+        integrationError: undefined,
+        integrationFailedAt: undefined,
+        integrationCompletedAt: undefined,
+        integratedBy: undefined,
+        integratedSystem: undefined,
+        systemChecks: undefined,
+
+        // Reset review states
+        reviewCompleted: false,
+        reviewDecision: undefined,
+        reviewedBy: undefined,
+        reviewedAt: undefined,
+
+        // Add send-back tracking with full details
+        sentBackToIntake: true,
+        sentBackToIntakeAt: new Date().toISOString(),
+        sentBackToIntakeBy: currentRole,
+        sentBackToIntakeReason: returnReason,
+        sentBackRejectionDetails: rejectionDetails,
+      }
+    };
+
+    updateSubmission(selectedSubmission.id, updatedSubmission);
+
+    toast({
+      title: 'Sent Back to Intake',
+      description: 'Submission has been returned to Intake for re-review with the rejection details.',
+    });
+    logAction({ user: currentRole, module: 'Integrations', action: `Sent submission ${selectedSubmission.id} back to Intake`, status: 'Success', details: selectedSubmission.candidateName });
+
+    // Reset state and close
+    setShowSendBackToIntakeModal(false);
+    setSendBackSelectedRejectionIds([]);
+    setSendBackRejectionComments('');
+    setSendBackRejectionCategory('both');
+    setIsDocumentModalOpen(false);
+    setSelectedSubmission(null);
   };
 
-  updateSubmission(selectedSubmission.id, updatedSubmission);
+  const toggleSendBackOption = (id: string) => {
+    setSendBackSelectedRejectionIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
-  toast({
-    title: 'Sent Back to Intake',
-    description: 'Submission has been returned to Intake for re-review.',
-  });
+  // Render Send Back to Intake rejection modal
+  const renderSendBackModal = () => {
+    const internalOptions = SEND_BACK_OPTIONS.filter(o => o.category === 'internal');
+    const externalOptions = SEND_BACK_OPTIONS.filter(o => o.category === 'external');
 
-  setIsDocumentModalOpen(false);
-  setSelectedSubmission(null);
-  setSendBackToIntakeReason('');
-  setShowSendBackToIntake(false);
-};
+    const filteredInternal = sendBackRejectionCategory === 'external' ? [] : internalOptions;
+    const filteredExternal = sendBackRejectionCategory === 'internal' ? [] : externalOptions;
+
+    return (
+      <Dialog open={showSendBackToIntakeModal} onOpenChange={setShowSendBackToIntakeModal}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+              Send Back to Intake
+            </DialogTitle>
+            <DialogDescription>
+              Select the reason(s) for sending this submission back to Intake. Intake will see these details when re-reviewing.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 mt-2">
+
+            {/* Category filter */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Rejection Category</Label>
+              <p className="text-xs text-muted-foreground">Filter reasons by whether the issue is internal (process/admin) or external (submitter's documents/data).</p>
+              <div className="flex gap-2 mt-1">
+                {(['both', 'internal', 'external'] as const).map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSendBackRejectionCategory(cat)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                      sendBackRejectionCategory === cat
+                        ? cat === 'internal' ? 'bg-blue-600 text-white border-blue-600'
+                          : cat === 'external' ? 'bg-orange-500 text-white border-orange-500'
+                          : 'bg-gray-800 text-white border-gray-800'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {cat === 'both' ? 'All Reasons' : cat === 'internal' ? '🔒 Internal' : '📤 External'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Internal reasons */}
+            {filteredInternal.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Internal Reasons</span>
+                  <span className="text-xs text-muted-foreground">(process / admin issues)</span>
+                </div>
+                <div className="rounded-lg border border-blue-100 bg-blue-50 divide-y divide-blue-100">
+                  {filteredInternal.map(option => (
+                    <label key={option.id} className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-blue-100 transition-colors">
+                      <Checkbox
+                        checked={sendBackSelectedRejectionIds.includes(option.id)}
+                        onCheckedChange={() => toggleSendBackOption(option.id)}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* External reasons */}
+            {filteredExternal.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-orange-700">External Reasons</span>
+                  <span className="text-xs text-muted-foreground">(submitter's documents / data)</span>
+                </div>
+                <div className="rounded-lg border border-orange-100 bg-orange-50 divide-y divide-orange-100">
+                  {filteredExternal.map(option => (
+                    <label key={option.id} className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-orange-100 transition-colors">
+                      <Checkbox
+                        checked={sendBackSelectedRejectionIds.includes(option.id)}
+                        onCheckedChange={() => toggleSendBackOption(option.id)}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Selected summary */}
+            {sendBackSelectedRejectionIds.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-medium text-amber-800 mb-2">Selected reasons ({sendBackSelectedRejectionIds.length}):</p>
+                <ul className="space-y-1">
+                  {SEND_BACK_OPTIONS.filter(o => sendBackSelectedRejectionIds.includes(o.id)).map(o => (
+                    <li key={o.id} className="text-xs text-amber-900 flex items-center gap-1.5">
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${o.category === 'internal' ? 'bg-blue-500' : 'bg-orange-500'}`} />
+                      {o.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Comments */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Additional Comments</Label>
+              <p className="text-xs text-muted-foreground">Add any specific details or instructions for Intake.</p>
+              <Textarea
+                value={sendBackRejectionComments}
+                onChange={e => setSendBackRejectionComments(e.target.value)}
+                placeholder="Describe specifically what needs to be corrected or re-reviewed..."
+                rows={4}
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+            <Button variant="outline" onClick={() => setShowSendBackToIntakeModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleSendBackToIntake}
+              disabled={sendBackSelectedRejectionIds.length === 0}
+            >
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Confirm Send Back to Intake
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
+  // System check types
+  interface SystemCheck {
+    id: string;
+    label: string;
+    status: 'pending' | 'processing' | 'passed' | 'failed';
+    message?: string;
+  }
+
   const getCorrectionTodoDate = (days = 7) => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
-};
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString();
+  };
+  
   // Reset state when opening a new submission
   useEffect(() => {
-if (selectedSubmission && isDocumentModalOpen) {
-  setSystemChecks([]);
-  setProgress(0);
-  setIntegrationStatus('idle');
-  setIntegrationError('');
-  setShowDoubleCapture(false);
-  setTodoDate('');
-  setSendBackToIntakeReason('');
-  setShowSendBackToIntake(false);
-}
+    if (selectedSubmission && isDocumentModalOpen) {
+      setSystemChecks([]);
+      setProgress(0);
+      setIntegrationStatus('idle');
+      setIntegrationError('');
+      setShowDoubleCapture(false);
+      setTodoDate('');
+      setSendBackSelectedRejectionIds([]);
+      setSendBackRejectionComments('');
+      setSendBackRejectionCategory('both');
+    }
   }, [selectedSubmission, isDocumentModalOpen]);
 
   // ONLY CRT Admin can access this page
@@ -328,114 +533,112 @@ if (selectedSubmission && isDocumentModalOpen) {
     return { success: true };
   };
 
-  
   const [integrationTestMode, setIntegrationTestMode] = useState<'pass' | 'fail'>('pass');
   
-const createCorrectionRecord = (
-  submission: Submission,
-  errorType: ErrorType,
-  origin: OriginType,
-  returnReason: string,
-  integrationErrorLog?: IntegrationErrorLog
-): CorrectionRecord => {
-  const existingRecord = submission.assessmentData?.correctionRecord;
-  const currentVersion = existingRecord?.version || 0;
-  
-  return {
-    correctionId: `COR-${Date.now()}`,
-    submissionId: submission.id,
-    learnerName: submission.candidateName,
-    qualification: submission.certificateType,
-    pathway: submission.pathway || 'occupational',
-    errorType,
-    origin,
-    responsibleUnit: submission.createdBy as AppRole,
-    currentStatus: 'active',
-    version: currentVersion + 1,
-    dateCreated: existingRecord?.dateCreated || new Date().toISOString(),
-    lastUpdated: new Date().toISOString(),
-    assignedTo: submission.createdBy as AppRole,
-    returnReason,
-    correctionNotes: existingRecord?.correctionNotes || [],
-    integrationErrorLog,
-      // ✅ NEW
-  todoDate: getCorrectionTodoDate(7),
-  expired: false,
-  };
-};
-
-// In Integrations.tsx, replace the entire handleSendToCorrections function:
-
-const handleSendToCorrections = () => {
-  if (!selectedSubmission) return;
-
-  if (!todoDate) {
-    toast({
-      title: 'To Do Date Required',
-      description: 'Please set a to do date before sending back for correction.',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  // Create integration error log
-  const integrationErrorLog: IntegrationErrorLog = {
-    errorMessage: integrationError || 'System verification failed',
-    errorResponse: integrationError || 'Integration failed during system checks',
-    errorTimestamp: new Date().toISOString(),
-    system: selectedSubmission.pathway === 'legacy' ? 'Apprentice' : 'CVS',
-    revalidationStatus: 'failed'
+  const createCorrectionRecord = (
+    submission: Submission,
+    errorType: ErrorType,
+    origin: OriginType,
+    returnReason: string,
+    integrationErrorLog?: IntegrationErrorLog
+  ): CorrectionRecord => {
+    const existingRecord = submission.assessmentData?.correctionRecord;
+    const currentVersion = existingRecord?.version || 0;
+    
+    return {
+      correctionId: `COR-${Date.now()}`,
+      submissionId: submission.id,
+      learnerName: submission.candidateName,
+      qualification: submission.certificateType,
+      pathway: submission.pathway || 'occupational',
+      errorType,
+      origin,
+      responsibleUnit: submission.createdBy as AppRole,
+      currentStatus: 'active',
+      version: currentVersion + 1,
+      dateCreated: existingRecord?.dateCreated || new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      assignedTo: submission.createdBy as AppRole,
+      returnReason,
+      correctionNotes: existingRecord?.correctionNotes || [],
+      integrationErrorLog,
+      todoDate: getCorrectionTodoDate(7),
+      expired: false,
+    };
   };
 
-  // Create correction record
-  const correctionRecord: CorrectionRecord = {
-    correctionId: `COR-${Date.now()}`,
-  submissionId: selectedSubmission.id,
-  learnerName: selectedSubmission.candidateName,
-  qualification: selectedSubmission.certificateType,
-  pathway: selectedSubmission.pathway || 'occupational',
-  errorType: 'integration_failure',
-  origin: 'integration',
-  responsibleUnit: selectedSubmission.createdBy as AppRole,
-  currentStatus: 'active',
-  version: 1,
-  dateCreated: new Date().toISOString(),
-  lastUpdated: new Date().toISOString(),
-  assignedTo: selectedSubmission.createdBy as AppRole,
-  returnReason: `Integration Failure: ${integrationError || 'System verification failed'}`,
-  correctionNotes: [],
-  integrationErrorLog,
-   todoDate: new Date(todoDate).toISOString(),
-  expired: false,
-  };
+  const handleSendToCorrections = () => {
+    if (!selectedSubmission) return;
 
-  // Send back to corrections with integration failure reason
-  const updatedSubmission: Submission = {
-    ...selectedSubmission,
-    status: 'pending_correction', // CRITICAL: Must be pending_correction!
-    assessmentData: {
-      ...selectedSubmission.assessmentData,
-      reviewDecision: 'returned',
-      returnReason: `Integration Failure: ${integrationError || 'System verification failed'}`,
-      returnedBy: currentRole,
-      returnedAt: new Date().toISOString(),
-      integrationStatus: 'failed',
-      correctionRecord // CRITICAL: This must be set!
+    if (!todoDate) {
+      toast({
+        title: 'To Do Date Required',
+        description: 'Please set a to do date before sending back for correction.',
+        variant: 'destructive',
+      });
+      return;
     }
+
+    // Create integration error log
+    const integrationErrorLog: IntegrationErrorLog = {
+      errorMessage: integrationError || 'System verification failed',
+      errorResponse: integrationError || 'Integration failed during system checks',
+      errorTimestamp: new Date().toISOString(),
+      system: selectedSubmission.pathway === 'legacy' ? 'Apprentice' : 'CVS',
+      revalidationStatus: 'failed'
+    };
+
+    // Create correction record
+    const correctionRecord: CorrectionRecord = {
+      correctionId: `COR-${Date.now()}`,
+      submissionId: selectedSubmission.id,
+      learnerName: selectedSubmission.candidateName,
+      qualification: selectedSubmission.certificateType,
+      pathway: selectedSubmission.pathway || 'occupational',
+      errorType: 'integration_failure',
+      origin: 'integration',
+      responsibleUnit: selectedSubmission.createdBy as AppRole,
+      currentStatus: 'active',
+      version: 1,
+      dateCreated: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      assignedTo: selectedSubmission.createdBy as AppRole,
+      returnReason: `Integration Failure: ${integrationError || 'System verification failed'}`,
+      correctionNotes: [],
+      integrationErrorLog,
+      todoDate: new Date(todoDate).toISOString(),
+      expired: false,
+    };
+
+    // Send back to corrections with integration failure reason
+    const updatedSubmission: Submission = {
+      ...selectedSubmission,
+      status: 'pending_correction',
+      assessmentData: {
+        ...selectedSubmission.assessmentData,
+        reviewDecision: 'returned',
+        returnReason: `Integration Failure: ${integrationError || 'System verification failed'}`,
+        returnedBy: currentRole,
+        returnedAt: new Date().toISOString(),
+        integrationStatus: 'failed',
+        correctionRecord
+      }
+    };
+
+    console.log('Sending to corrections from integration:', updatedSubmission.id, updatedSubmission.status, updatedSubmission.assessmentData.correctionRecord);
+    
+    updateSubmission(selectedSubmission.id, updatedSubmission);
+    
+    toast({
+      title: 'Sent to Corrections',
+      description: 'Submission returned for integration failure',
+    });
+    logAction({ user: currentRole, module: 'Integrations', action: `Sent submission ${selectedSubmission.id} to Corrections`, status: 'Failed', details: integrationError || 'System verification failed' });
+
+    setIsDocumentModalOpen(false);
+    setSelectedSubmission(null);
   };
 
-  console.log('Sending to corrections from integration:', updatedSubmission.id, updatedSubmission.status, updatedSubmission.assessmentData.correctionRecord);
-  
-  updateSubmission(selectedSubmission.id, updatedSubmission);
-  
-  toast({
-    title: 'Sent to Corrections',
-    description: 'Submission returned for integration failure',
-  });
-
-  setIsDocumentModalOpen(false);
-  setSelectedSubmission(null);
-};
   const handleIntegrate = async () => {
     if (!selectedSubmission) return;
 
@@ -451,33 +654,39 @@ const handleSendToCorrections = () => {
     // Run the system checks
     const result = await runSystemChecks(selectedSubmission, checks);
     
- // In the success state section, make sure you're not setting status to 'integrated' twice
-// Just keep it as is - it's already setting status to 'integrated'
-if (result.success) {
-  // ALL CHECKS PASSED - Integration successful
-  const pathway = selectedSubmission.pathway;
-  const processType = selectedSubmission.processType;
-  const targetSystem = pathway === 'legacy' ? 'Apprentice' : 'CVS';
-  
-  // SUCCESSFUL INTEGRATION - status is 'integrated'
-  const updatedSubmission: Submission = {
-    ...selectedSubmission,
-    status: 'integrated', // This is correct - Batches will show it
-    assessmentData: {
-      ...selectedSubmission.assessmentData,
-      integrationStatus: 'completed',
-      integrationCompletedAt: new Date().toISOString(),
-      integratedBy: currentRole,
-      integratedSystem: targetSystem,
-      // ... rest of the code
-    }
-  };
+    if (result.success) {
+      // ALL CHECKS PASSED - Integration successful
+      const pathway = selectedSubmission.pathway;
+      const targetSystem = pathway === 'legacy' ? 'Apprentice' : 'CVS';
+      
+      // SUCCESSFUL INTEGRATION - status is 'integrated'
+      const updatedSubmission: Submission = {
+        ...selectedSubmission,
+        status: 'integrated',
+        assessmentData: {
+          ...selectedSubmission.assessmentData,
+          integrationStatus: 'completed',
+          integrationCompletedAt: new Date().toISOString(),
+          integratedBy: currentRole,
+          integratedSystem: targetSystem,
+          integrationAttempts: (selectedSubmission.assessmentData?.integrationAttempts || 0) + 1,
+          systemChecks: systemChecks.map(check => ({
+            name: check.label,
+            passed: check.status === 'passed',
+            error: check.message
+          }))
+        }
+      };
 
-  updateSubmission(selectedSubmission.id, updatedSubmission);
-  
-  setIntegrationStatus('success');
-  // Don't close modal here - let user click "Send to Batches"
-} else {
+      updateSubmission(selectedSubmission.id, updatedSubmission);
+      
+      setIntegrationStatus('success');
+      toast({
+        title: 'Integration Successful',
+        description: `Successfully integrated into ${targetSystem}`,
+      });
+      logAction({ user: currentRole, module: 'Integrations', action: `Integrated submission ${selectedSubmission.id} into ${targetSystem}`, status: 'Success', details: selectedSubmission.candidateName });
+    } else {
       // SYSTEM CHECKS FAILED
       setIntegrationStatus('failed');
       setIntegrationError(result.error || 'System verification failed');
@@ -506,41 +715,40 @@ if (result.success) {
         description: result.error || 'System verification failed',
         variant: 'destructive',
       });
+      logAction({ user: currentRole, module: 'Integrations', action: `Integration failed for submission ${selectedSubmission.id}`, status: 'Failed', details: result.error });
     }
   };
 
- 
+  const handleSendToBatches = () => {
+    if (!selectedSubmission) return;
 
- const handleSendToBatches = () => {
-  if (!selectedSubmission) return;
+    const updatedSubmission: Submission = {
+      ...selectedSubmission,
+      status: 'integrated',
+      assessmentData: {
+        ...selectedSubmission.assessmentData,
+        readyForBatch: true,
+        readyForBatchAt: new Date().toISOString(),
+        integrationStatus: 'completed',
+        integratedBy: currentRole,
+        integratedSystem: selectedSubmission.pathway === 'legacy' ? 'Apprentice' : 'CVS',
+        integrationCompletedAt: selectedSubmission.assessmentData?.integrationCompletedAt || new Date().toISOString()
+      }
+    };
 
-  // Send to batches section - status should be 'integrated', NOT 'in_batch'
-  const updatedSubmission: Submission = {
-    ...selectedSubmission,
-    status: 'integrated', // Changed from 'in_batch' to 'integrated'
-    assessmentData: {
-      ...selectedSubmission.assessmentData,
-      readyForBatch: true,
-      readyForBatchAt: new Date().toISOString(),
-      integrationStatus: 'completed', // Make sure this is set
-      integratedBy: currentRole,
-      integratedSystem: selectedSubmission.pathway === 'legacy' ? 'Apprentice' : 'CVS',
-      integrationCompletedAt: selectedSubmission.assessmentData?.integrationCompletedAt || new Date().toISOString()
-    }
+    console.log('Sending to batches section:', updatedSubmission.id, 'status:', updatedSubmission.status);
+    
+    updateSubmission(selectedSubmission.id, updatedSubmission);
+    
+    toast({
+      title: 'Sent to Batches',
+      description: 'Submission is now ready for batch creation',
+    });
+    logAction({ user: currentRole, module: 'Integrations', action: `Sent submission ${selectedSubmission.id} to Batches`, status: 'Success', details: selectedSubmission.candidateName });
+
+    setIsDocumentModalOpen(false);
+    setSelectedSubmission(null);
   };
-
-  console.log('Sending to batches section:', updatedSubmission.id, 'status:', updatedSubmission.status);
-  
-  updateSubmission(selectedSubmission.id, updatedSubmission);
-  
-  toast({
-    title: 'Sent to Batches',
-    description: 'Submission is now ready for batch creation',
-  });
-
-  setIsDocumentModalOpen(false);
-  setSelectedSubmission(null);
-};
 
   const handleStartDoubleCapture = () => {
     setShowDoubleCapture(true);
@@ -573,17 +781,6 @@ if (result.success) {
     handleIntegrate();
   };
 
-  const generateReissueNumber = (submission: Submission): string => {
-    // Count previous re-issues for this certificate
-    const previousReissues = profileSubmissions.filter(
-      s => s.originalCertificateNumber === submission.originalCertificateNumber && 
-           s.processType === 'reissue' &&
-           s.status === 'integrated'
-    ).length;
-    
-    return `R${previousReissues + 1}`;
-  };
-
   const getDocumentLabel = (type: DocumentType): string => {
     const labels: Record<DocumentType, string> = {
       application_form: 'Application Form',
@@ -594,7 +791,6 @@ if (result.success) {
       recommendation_letter: 'Recommendation Letter',
       id_copy: 'ID Copy',
       file_3_4: 'File 3–4',
-   
       programme_approval_letter: 'Programme Approval Letter',
       learner_result_approval_sheet: 'Learner Result Approval Sheet',
       qualification_data_confirmation: 'Qualification/Programme Data Confirmation',
@@ -644,13 +840,11 @@ if (result.success) {
                 <TableHead>Pathway</TableHead>
                 <TableHead>Target System</TableHead>
                 <TableHead>Approved</TableHead>
-                
                 <TableHead className="text-center">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {pendingSubmissions.map((sub) => {
-               
                 return (
                   <TableRow key={sub.id}>
                     <TableCell className="font-mono text-xs">{sub.id}</TableCell>
@@ -672,7 +866,6 @@ if (result.success) {
                       {sub.assessmentData?.reviewedAt ? 
                         new Date(sub.assessmentData.reviewedAt).toLocaleDateString() : '-'}
                     </TableCell>
-                
                     <TableCell className="text-center">
                       <Button 
                         size="sm" 
@@ -691,7 +884,7 @@ if (result.success) {
               })}
               {pendingSubmissions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No submissions waiting for integration
                   </TableCell>
                 </TableRow>
@@ -737,70 +930,49 @@ if (result.success) {
                     <p className="font-medium">{selectedSubmission.assessmentData?.integrationAttempts || 0}</p>
                   </div>
                 </div>
-               <div className="mt-2 space-y-2">
- <div className="mt-2 text-sm text-muted-foreground bg-blue-50 p-2 rounded">
-  <strong>Demo Mode:</strong> Use the Force Pass / Force Fail controls in the integration modal.
-</div>
-
-  <div className="flex gap-2">
-    <Button
-      type="button"
-      variant={integrationTestMode === 'pass' ? 'default' : 'outline'}
-      onClick={() => setIntegrationTestMode('pass')}
-    >
-      Force Pass
-    </Button>
-
-    <Button
-      type="button"
-      variant={integrationTestMode === 'fail' ? 'destructive' : 'outline'}
-      onClick={() => setIntegrationTestMode('fail')}
-    >
-      Force Fail
-    </Button>
-  </div>
-</div>
+                <div className="mt-2 space-y-2">
+                  <div className="mt-2 text-sm text-muted-foreground bg-blue-50 p-2 rounded">
+                    <strong>Demo Mode:</strong> Use the Force Pass / Force Fail controls.
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={integrationTestMode === 'pass' ? 'default' : 'outline'}
+                      onClick={() => setIntegrationTestMode('pass')}
+                    >
+                      Force Pass
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={integrationTestMode === 'fail' ? 'destructive' : 'outline'}
+                      onClick={() => setIntegrationTestMode('fail')}
+                    >
+                      Force Fail
+                    </Button>
+                  </div>
+                </div>
               </div>
+
+              {/* Send Back to Intake Section */}
               <div className="border rounded-lg p-4 bg-amber-50 border-amber-200 space-y-3">
-  <div className="flex items-center justify-between">
-    <div>
-      <h4 className="font-medium text-amber-800">Send Back to Intake</h4>
-      <p className="text-sm text-amber-700">
-        Use this if the submission must go back to Intake for re-review before integration continues.
-      </p>
-    </div>
-
-    <Button
-      type="button"
-      variant="outline"
-      onClick={() => setShowSendBackToIntake((prev) => !prev)}
-    >
-      {showSendBackToIntake ? 'Cancel' : 'Send Back to Intake'}
-    </Button>
-  </div>
-
-  {showSendBackToIntake && (
-    <div className="space-y-3">
-      <div>
-        <Label htmlFor="send-back-intake-reason">Reason</Label>
-        <Textarea
-          id="send-back-intake-reason"
-          value={sendBackToIntakeReason}
-          onChange={(e) => setSendBackToIntakeReason(e.target.value)}
-          placeholder="Explain why this submission must go back to Intake..."
-          rows={3}
-          className="mt-1"
-        />
-      </div>
-
-      <div className="flex justify-end">
-        <Button variant="destructive" onClick={handleSendBackToIntake}>
-          Send Back to Intake
-        </Button>
-      </div>
-    </div>
-  )}
-</div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-amber-800">Send Back to Intake</h4>
+                    <p className="text-sm text-amber-700">
+                      Use this if the submission must go back to Intake for re-review before integration continues.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowSendBackToIntakeModal(true)}
+                    className="border-amber-300 hover:bg-amber-100"
+                  >
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    Send Back to Intake
+                  </Button>
+                </div>
+              </div>
 
               {/* Re-Issue Double Capture */}
               {selectedSubmission.processType === 'reissue' && selectedSubmission.reissueReason === 'administrative_error' && integrationStatus === 'idle' && (
@@ -909,145 +1081,147 @@ if (result.success) {
               )}
 
               {/* Failure State - Send to Corrections */}
-         {integrationStatus === 'failed' && (
-  <div className="bg-red-50 border border-red-200 rounded-lg p-6 space-y-4">
-    <div className="flex items-start gap-3">
-      <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
-      <div className="flex-1">
-        <h4 className="font-semibold text-red-800">Integration Failed</h4>
-        <p className="text-sm text-red-700 mt-1">{integrationError}</p>
+              {integrationStatus === 'failed' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-red-800">Integration Failed</h4>
+                      <p className="text-sm text-red-700 mt-1">{integrationError}</p>
 
-        <div className="mt-4">
-          <Label htmlFor="integration-todo-date">To Do Date</Label>
-          <Input
-            id="integration-todo-date"
-            type="date"
-            value={todoDate}
-            onChange={(e) => setTodoDate(e.target.value)}
-            className="mt-1 max-w-xs"
-          />
-        </div>
+                      <div className="mt-4">
+                        <Label htmlFor="integration-todo-date">To Do Date</Label>
+                        <Input
+                          id="integration-todo-date"
+                          type="date"
+                          value={todoDate}
+                          onChange={(e) => setTodoDate(e.target.value)}
+                          className="mt-1 max-w-xs"
+                        />
+                      </div>
 
-        <div className="flex gap-2 mt-4">
-          <Button onClick={handleIntegrate} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retry Verification
-          </Button>
-          <Button onClick={handleSendToCorrections} variant="destructive" size="sm">
-            Send to Corrections
-          </Button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-{selectedSubmission?.assessmentData?.preIntakeValidationStatus && (
-  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
-    <div>
-      <h4 className="font-medium text-blue-900">External CVS Pre-Validation</h4>
-      <p className="text-sm text-blue-700">
-        Validation completed before the submission was sent to Internal Intake.
-      </p>
-    </div>
-
-    <div className="flex items-center gap-2 flex-wrap">
-      <Badge
-        variant={
-          selectedSubmission.assessmentData.preIntakeValidationStatus === 'passed'
-            ? 'outline'
-            : selectedSubmission.assessmentData.preIntakeValidationStatus === 'failed'
-            ? 'destructive'
-            : 'secondary'
-        }
-      >
-        {selectedSubmission.assessmentData.preIntakeValidationStatus}
-      </Badge>
-
-      {selectedSubmission.assessmentData.preIntakeValidationAt && (
-        <span className="text-xs text-muted-foreground">
-          Checked: {new Date(selectedSubmission.assessmentData.preIntakeValidationAt).toLocaleString()}
-        </span>
-      )}
-
-      {selectedSubmission.assessmentData.preIntakeValidatedBy && (
-        <span className="text-xs text-muted-foreground">
-          By: {selectedSubmission.assessmentData.preIntakeValidatedBy}
-        </span>
-      )}
-    </div>
-
-    {selectedSubmission.assessmentData.preIntakeValidationError && (
-      <div className="rounded-md border border-red-200 bg-red-50 p-3">
-        <p className="text-sm font-medium text-red-800">Validation Error</p>
-        <p className="text-sm text-red-700 mt-1">
-          {selectedSubmission.assessmentData.preIntakeValidationError}
-        </p>
-      </div>
-    )}
-
-    {selectedSubmission.assessmentData.preIntakeValidationSummary && (
-      <div className="space-y-3">
-        <p className="text-sm font-medium">File 3 to 4 Learner Summary</p>
-
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <div className="rounded-md border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Total Learners</p>
-            <p className="font-semibold">
-              {selectedSubmission.assessmentData.preIntakeValidationSummary.totalLearners}
-            </p>
-          </div>
-
-          <div className="rounded-md border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Passed</p>
-            <p className="font-semibold text-green-600">
-              {selectedSubmission.assessmentData.preIntakeValidationSummary.passedLearners}
-            </p>
-          </div>
-
-          <div className="rounded-md border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Failed</p>
-            <p className="font-semibold text-red-600">
-              {selectedSubmission.assessmentData.preIntakeValidationSummary.failedLearners}
-            </p>
-          </div>
-        </div>
-
-        {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows &&
-          selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Failed Learners / Rows</p>
-              {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-md border border-red-200 bg-red-50 p-2 text-xs"
-                >
-                  <span className="font-medium">{row.learnerIdentifier}:</span> {row.reason}
+                      <div className="flex gap-2 mt-4">
+                        <Button onClick={handleIntegrate} variant="outline" size="sm">
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry Verification
+                        </Button>
+                        <Button onClick={handleSendToCorrections} variant="destructive" size="sm">
+                          Send to Corrections
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-      </div>
-    )}
+              )}
 
-    {selectedSubmission.assessmentData.preIntakeSystemChecks &&
-      selectedSubmission.assessmentData.preIntakeSystemChecks.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Validation Checks</p>
-          {selectedSubmission.assessmentData.preIntakeSystemChecks.map((check, idx) => (
-            <div key={idx} className="flex items-start gap-2 text-sm">
-              <span>{check.passed ? '✅' : '❌'}</span>
-              <div>
-                <p>{check.name}</p>
-                {check.error && (
-                  <p className="text-xs text-red-600">{check.error}</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-  </div>
-)}
+              {/* CVS Pre-Validation Results */}
+              {selectedSubmission?.assessmentData?.preIntakeValidationStatus && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
+                  <div>
+                    <h4 className="font-medium text-blue-900">External CVS Pre-Validation</h4>
+                    <p className="text-sm text-blue-700">
+                      Validation completed before the submission was sent to Internal Intake.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      variant={
+                        selectedSubmission.assessmentData.preIntakeValidationStatus === 'passed'
+                          ? 'outline'
+                          : selectedSubmission.assessmentData.preIntakeValidationStatus === 'failed'
+                          ? 'destructive'
+                          : 'secondary'
+                      }
+                    >
+                      {selectedSubmission.assessmentData.preIntakeValidationStatus}
+                    </Badge>
+
+                    {selectedSubmission.assessmentData.preIntakeValidationAt && (
+                      <span className="text-xs text-muted-foreground">
+                        Checked: {new Date(selectedSubmission.assessmentData.preIntakeValidationAt).toLocaleString()}
+                      </span>
+                    )}
+
+                    {selectedSubmission.assessmentData.preIntakeValidatedBy && (
+                      <span className="text-xs text-muted-foreground">
+                        By: {selectedSubmission.assessmentData.preIntakeValidatedBy}
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedSubmission.assessmentData.preIntakeValidationError && (
+                    <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                      <p className="text-sm font-medium text-red-800">Validation Error</p>
+                      <p className="text-sm text-red-700 mt-1">
+                        {selectedSubmission.assessmentData.preIntakeValidationError}
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedSubmission.assessmentData.preIntakeValidationSummary && (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium">File 3 to 4 Learner Summary</p>
+
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div className="rounded-md border bg-white p-3">
+                          <p className="text-xs text-muted-foreground">Total Learners</p>
+                          <p className="font-semibold">
+                            {selectedSubmission.assessmentData.preIntakeValidationSummary.totalLearners}
+                          </p>
+                        </div>
+
+                        <div className="rounded-md border bg-white p-3">
+                          <p className="text-xs text-muted-foreground">Passed</p>
+                          <p className="font-semibold text-green-600">
+                            {selectedSubmission.assessmentData.preIntakeValidationSummary.passedLearners}
+                          </p>
+                        </div>
+
+                        <div className="rounded-md border bg-white p-3">
+                          <p className="text-xs text-muted-foreground">Failed</p>
+                          <p className="font-semibold text-red-600">
+                            {selectedSubmission.assessmentData.preIntakeValidationSummary.failedLearners}
+                          </p>
+                        </div>
+                      </div>
+
+                      {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows &&
+                        selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">Failed Learners / Rows</p>
+                            {selectedSubmission.assessmentData.preIntakeValidationSummary.failedRows.map((row, idx) => (
+                              <div
+                                key={idx}
+                                className="rounded-md border border-red-200 bg-red-50 p-2 text-xs"
+                              >
+                                <span className="font-medium">{row.learnerIdentifier}:</span> {row.reason}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  )}
+
+                  {selectedSubmission.assessmentData.preIntakeSystemChecks &&
+                    selectedSubmission.assessmentData.preIntakeSystemChecks.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Validation Checks</p>
+                        {selectedSubmission.assessmentData.preIntakeSystemChecks.map((check, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-sm">
+                            <span>{check.passed ? '✅' : '❌'}</span>
+                            <div>
+                              <p>{check.name}</p>
+                              {check.error && (
+                                <p className="text-xs text-red-600">{check.error}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
+              )}
 
               {/* Document Preview */}
               <div>
@@ -1090,6 +1264,9 @@ if (result.success) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Send Back to Intake Modal */}
+      {renderSendBackModal()}
     </div>
   );
 }

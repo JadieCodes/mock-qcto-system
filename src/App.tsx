@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route ,Navigate} from "react-router-dom";
 import { AppProvider } from "@/contexts/AppContext";
+import { AuditTrailProvider } from "./context/AuditTrailContext";
 import { Layout } from "@/components/ui/Layout";
 import { AssessmentLayout } from "@/components/AssessmentLayout";
 
@@ -15,6 +16,8 @@ import Batches from "./pages/Batches";
 import Integrations from "./pages/Integrations";
 import Printing from "./pages/Printing";
 import InternalCorrections from "./pages/internalCorrections";
+import TariffInvoicing from "./pages/TariffInvoicing";
+import AuditTrail from "./pages/AuditTrail";
 import NotFound from "./pages/NotFound";
 
 // Profiles flow pages
@@ -104,6 +107,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppProvider>
+          <AuditTrailProvider>
           <Toaster />
           <Sonner />
           <BrowserRouter>
@@ -193,6 +197,69 @@ const App = () => {
   />
 
               {/* Certification domain - wrapped with Layout */}
+
+              // Add this after your other domain routes (around line 200, before the catch-all route)
+
+{/* Protected Certification Domain */}
+{/* Redirect old certification paths to new paths */}
+<Route 
+  path="/certification" 
+  element={<Navigate to="/departments/certification/dashboard" replace />} 
+/>
+<Route 
+  path="/certification/*" 
+  element={<Navigate to="/departments/certification/dashboard" replace />} 
+/>
+
+{/* Protected Certification Domain */}
+<Route
+  path="/departments/certification/*"
+  element={
+    <ProtectedDepartmentRoute department="certification">
+      <Layout>
+        <Routes>
+          <Route 
+            path="" 
+            element={<Navigate to="/departments/certification/dashboard" replace />} 
+          />
+          <Route 
+            path="dashboard" 
+            element={<Dashboard />} 
+          />
+          <Route 
+            path="intake" 
+            element={<Intake />} 
+          />
+          <Route 
+            path="batches" 
+            element={<Batches />} 
+          />
+          <Route 
+            path="integrations" 
+            element={<Integrations />} 
+          />
+          <Route 
+            path="printing" 
+            element={<Printing />} 
+          />
+          <Route
+            path="corrections"
+            element={<InternalCorrections />}
+          />
+          <Route
+            path="tariff-invoicing"
+            element={<TariffInvoicing />}
+          />
+          <Route
+            path="audit-trail"
+            element={<AuditTrail />}
+          />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Layout>
+    </ProtectedDepartmentRoute>
+  }
+/>
             {/* Protected Certification domain */}
 {/* Protected Assessment domain */}
 <Route
@@ -367,6 +434,7 @@ const App = () => {
   <Route path="*" element={<NotFound />} />
 </Routes>
           </BrowserRouter>
+          </AuditTrailProvider>
         </AppProvider>
       </TooltipProvider>
     </QueryClientProvider>

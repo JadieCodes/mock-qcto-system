@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useAuditTrail } from '@/context/AuditTrailContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,6 +37,7 @@ interface PaperInventory {
 export default function Batches() {
   const { profileSubmissions, batches, addBatch, currentRole, updateBatchStatus, addPrintJob } = useApp();
   const { toast } = useToast();
+  const { logAction } = useAuditTrail();
   
   // Batch creation state
   const [selectedSubmissions, setSelectedSubmissions] = useState<string[]>([]);
@@ -79,6 +81,7 @@ const handleCreatePrintJob = (batch: Batch) => {
     title: 'Print Job Created',
     description: `Batch ${batch.batchName} has been sent to Printing`,
   });
+  logAction({ user: currentRole, module: 'Batches', action: `Created print job for batch ${batch.batchName}`, status: 'Success', details: batch.batchUuid });
 };
   // Get integrated submissions ready for batching (status = 'integrated')
   const getIntegratedSubmissions = () => {
@@ -285,6 +288,7 @@ const handleCreatePrintJob = (batch: Batch) => {
     title: '✅ Batch Created Successfully',
     description: `Batch ${batchId} created with ${selectedSubmissions.length} certificates. Ready for printing.`,
   });
+  logAction({ user: currentRole, module: 'Batches', action: `Created batch ${batchId}`, status: 'Success', details: `${selectedSubmissions.length} certificate(s)` });
 
   // Reset form
   setSelectedSubmissions([]);

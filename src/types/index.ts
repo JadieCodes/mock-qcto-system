@@ -21,6 +21,8 @@ export type AppRole =
   | 'QP'        // Quality Partner
   | 'SDP'       // Skills Development Provider
   | 'NAMB'
+  | 'Learner' 
+  
   // Research Domain Roles
   | 'Research Deputy Director'
   | 'Research Director'
@@ -264,6 +266,36 @@ preIntakeValidationSummary?: {
 sentBackToIntakeAt?: string;
 sentBackToIntakeBy?: string;
 sentBackToIntakeReason?: string;
+  sentBackRejectionDetails?: {
+    selectedReasonIds: string[];
+    selectedReasons: Array<{
+      id: string;
+      label: string;
+      category: string;
+    }>;
+    comments?: string;
+    returnedBy: string;
+    returnedAt: string;
+  };
+// Per-document CVS validation results (new format)
+documentValidations?: Record<string, {
+  status: 'idle' | 'processing' | 'passed' | 'failed';
+  checks: Array<{ name: string; passed: boolean; error?: string }>;
+  error?: string;
+  summary?: {
+    totalLearners: number;
+    passedLearners: number;
+    failedLearners: number;
+    failedRows?: Array<{ learnerIdentifier: string; reason: string }>;
+  } | null;
+}>;
+rejectionDetails?: {
+  selectedReasonIds: string[];
+  selectedReasons: Array<{ id: string; label: string; category: string }>;
+  comments?: string;
+  returnedBy: string;
+  returnedAt: string;
+};
   };
   createdBy: string;
   processType: ProcessType;

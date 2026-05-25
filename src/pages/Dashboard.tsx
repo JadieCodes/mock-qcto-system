@@ -1,16 +1,20 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
+import { useAuditTrail } from '@/context/AuditTrailContext';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { DashboardReportBuilder } from '@/components/ui/DashboardReportBuilder';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { 
-  FileText, 
-  Package, 
-  CheckCircle, 
-  Clock, 
-  RefreshCw, 
+import {
+  FileText,
+  Package,
+  CheckCircle,
+  Clock,
+  RefreshCw,
   Replace,
   AlertCircle,
   CheckCircle2,
@@ -21,13 +25,18 @@ import {
   TrendingUp,
   Users,
   Layers,
-  Archive
+  Archive,
+  Receipt,
+  Network,
+  ClipboardList
 } from 'lucide-react';
 import type { ProcessType, Pathway, SubmissionStatus, BatchStatus } from '@/types';
 
 export default function Dashboard() {
-  const { profileSubmissions, batches, printJobs, currentRole } = useApp();
+  const { profileSubmissions, batches, printJobs, currentRole, sdpInvoices } = useApp();
+  const { entries: auditEntries } = useAuditTrail();
   
+  const [showReportBuilder, setShowReportBuilder] = useState(false);
   const [processTypeFilter, setProcessTypeFilter] = useState<ProcessType | 'all'>('all');
   const [pathwayFilter, setPathwayFilter] = useState<Pathway | 'all'>('all');
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'all'>('week');
@@ -140,6 +149,22 @@ export default function Dashboard() {
         .reduce((acc, batch) => acc + (batch.paperAllocation?.quantity || 0), 0),
     },
     
+    // SDP Invoices
+    invoices: {
+      pending: sdpInvoices.filter(i => i.status === 'Pending').length,
+      sent: sdpInvoices.filter(i => i.status === 'Sent').length,
+      total: sdpInvoices.length,
+    },
+
+    // Integration queue
+    integrationQueue: {
+      awaitingIntegration: profileSubmissions.filter(s => s.status === 'approved').length,
+      integrated: profileSubmissions.filter(s => s.status === 'integrated').length,
+      failed: profileSubmissions.filter(s =>
+        s.assessmentData?.integrationStatus === 'failed'
+      ).length,
+    },
+
     // Corrections tracking
     corrections: {
       active: profileSubmissions.filter(s => 
@@ -208,6 +233,10 @@ export default function Dashboard() {
         
         {/* Filters */}
         <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setShowReportBuilder(true)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Create Report
+          </Button>
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v as any)}>
             <SelectTrigger className="w-[140px] bg-card">
               <SelectValue placeholder="Time Range" />
@@ -295,7 +324,7 @@ export default function Dashboard() {
       </div>
 
       {/* Main Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Submissions</CardTitle>
@@ -332,16 +361,54 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={stats.corrections.active > 0 ? 'border-amber-200 bg-amber-50/40' : ''}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Corrections</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Pending Corrections</CardTitle>
+            <AlertCircle className={`h-4 w-4 ${stats.corrections.active > 0 ? 'text-amber-500' : 'text-muted-foreground'}`} />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.corrections.active}</div>
+            <div className={`text-2xl font-bold ${stats.corrections.active > 0 ? 'text-amber-700' : ''}`}>
+              {stats.corrections.active}
+            </div>
             <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-              <span>Pending Review: {stats.corrections.pendingReview}</span>
+              <span>Under Review: {stats.corrections.pendingReview}</span>
               <span>Resolved: {stats.corrections.resolved}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={stats.integrationQueue.awaitingIntegration > 0 ? 'border-blue-200 bg-blue-50/40' : ''}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Integration Queue</CardTitle>
+            <Network className={`h-4 w-4 ${stats.integrationQueue.awaitingIntegration > 0 ? 'text-blue-500' : 'text-muted-foreground'}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${stats.integrationQueue.awaitingIntegration > 0 ? 'text-blue-700' : ''}`}>
+              {stats.integrationQueue.awaitingIntegration}
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+              <span>Integrated: {stats.integrationQueue.integrated}</span>
+              {stats.integrationQueue.failed > 0 && (
+                <Badge variant="destructive" className="text-xs h-4 px-1">
+                  {stats.integrationQueue.failed} failed
+                </Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={stats.invoices.pending > 0 ? 'border-orange-200 bg-orange-50/40' : ''}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
+            <Receipt className={`h-4 w-4 ${stats.invoices.pending > 0 ? 'text-orange-500' : 'text-muted-foreground'}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${stats.invoices.pending > 0 ? 'text-orange-700' : ''}`}>
+              {stats.invoices.pending}
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+              <span>Sent: {stats.invoices.sent}</span>
+              <span>Total: {stats.invoices.total}</span>
             </div>
           </CardContent>
         </Card>
@@ -439,6 +506,97 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity + SDP Invoices */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Recent Activity */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardList className="h-4 w-4" />
+              Recent Activity
+            </CardTitle>
+            <Link
+              to="/departments/certification/audit-trail"
+              className="text-xs text-primary hover:underline"
+            >
+              View all
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {auditEntries.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <ClipboardList className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No recent activity yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {auditEntries.slice(0, 7).map(entry => (
+                  <div key={entry.id} className="flex items-start gap-3 text-sm">
+                    <div className="mt-0.5 shrink-0">
+                      {entry.status === 'Success' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                      {entry.status === 'Failed' && <XCircle className="h-4 w-4 text-red-500" />}
+                      {entry.status === 'Pending' && <Clock className="h-4 w-4 text-amber-500" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="secondary" className="text-xs h-4 px-1.5">{entry.module}</Badge>
+                        <span className="text-xs text-muted-foreground truncate">{entry.action}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {entry.user} · {new Date(entry.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* SDP Invoices Summary */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Receipt className="h-4 w-4" />
+              SDP Invoices
+            </CardTitle>
+            <Link
+              to="/departments/certification/tariff-invoicing"
+              className="text-xs text-primary hover:underline"
+            >
+              View all
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {sdpInvoices.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No SDP invoices yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {sdpInvoices.slice(0, 5).map(inv => (
+                  <div key={inv.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{inv.sdpName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {inv.processType} · {new Date(inv.submissionDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={inv.status === 'Sent' ? 'outline' : 'default'}
+                      className={`shrink-0 ml-2 ${inv.status === 'Pending' ? 'bg-orange-100 text-orange-700 border-orange-200' : ''}`}
+                    >
+                      {inv.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -634,6 +792,16 @@ export default function Dashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {showReportBuilder && (
+        <DashboardReportBuilder
+          stats={stats}
+          sdpInvoices={sdpInvoices}
+          auditEntries={auditEntries}
+          currentRole={currentRole}
+          onClose={() => setShowReportBuilder(false)}
+        />
+      )}
 
       {/* System Health Summary */}
       <Card className="bg-muted/50">

@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Lock, Building2 } from "lucide-react";
 
 // Define the 6 departments with their login credentials
+// Update the departmentCredentials object in DepartmentLogin.tsx
+
 const departmentCredentials = {
   research: {
     username: "Research",
@@ -13,7 +15,7 @@ const departmentCredentials = {
   certification: {
     username: "Certification",
     password: "CertificationDomain",
-    redirectPath: "/certification",
+    redirectPath: "/departments/certification/dashboard", // ✅ CHANGE THIS
     displayName: "Certification Domain"
   },
   qualifications: {
