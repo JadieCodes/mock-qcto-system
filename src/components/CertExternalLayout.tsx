@@ -38,7 +38,19 @@ export const CertExternalLayout = ({
             {isExternalPath ? 'External Certification Portal' : 'Certification Portal'}
           </h1>
 
-          
+          <div className="flex items-center gap-3">
+            <CerExternalRoleSelector />
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="flex items-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 

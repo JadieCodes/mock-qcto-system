@@ -10,7 +10,7 @@ export default function DepartmentsLanding() {
       title: "Certification Domain",
       description: "Manage certification batches, intakes, integrations & printing",
       icon: CheckCircle,
-      route: "/certification",
+      route: "/departments/certification",
     },
     {
       id: "qualifications",

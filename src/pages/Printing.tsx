@@ -3,6 +3,7 @@ import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useAuditTrail } from '@/context/AuditTrailContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -14,6 +15,7 @@ import type { Batch, PrintJob } from '@/types';
 export default function Printing() {
   const { batches, printJobs, addPrintJob, updatePrintJob, updateBatchStatus, currentRole } = useApp();
   const { toast } = useToast();
+  const { logAction } = useAuditTrail();
   
   const [selectedBatch, setSelectedBatch] = useState<string>('');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -65,6 +67,7 @@ export default function Printing() {
       title: '✅ Print Job Created',
       description: `Batch ${batch.batchName} sent to printing queue`,
     });
+    logAction({ user: currentRole, module: 'Printing', action: `Created print job for batch ${batch.batchName}`, status: 'Success', details: `${batch.totalCertificates} certificate(s)` });
 
     setSelectedBatch('');
   };

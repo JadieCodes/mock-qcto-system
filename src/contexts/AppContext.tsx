@@ -30,6 +30,18 @@ export interface AuditEntry {
     actualCost?: number; // Add this line
   };
 }
+export interface SdpInvoiceEntry {
+  id: string;
+  sdpName: string;
+  processType: string;
+  submissionDate: string;
+  status: 'Pending' | 'Sent';
+  candidateName: string;
+  certificateType: string;
+  invoiceAmount?: string;
+  notes?: string;
+}
+
 // Add User interface
 interface User {
   name: string;
@@ -134,6 +146,10 @@ rejectProjectReport: (
   acceptProfileSubmission: (id: string) => void;
   clearExpiredCorrections: (submissions: Submission[]) => Submission[];
 
+  sdpInvoices: SdpInvoiceEntry[];
+  addSdpInvoice: (entry: Omit<SdpInvoiceEntry, 'id'>) => void;
+  updateSdpInvoice: (id: string, updates: Partial<SdpInvoiceEntry>) => void;
+
   batches: Batch[];
   addBatch: (batch: Omit<Batch, 'batchUuid'>) => void;
   updateBatchStatus: (batchId: string, status: Batch['status']) => void;
@@ -175,6 +191,7 @@ const getUserDataByRole = (role: AppRole): User => {
     'QP': { name: 'Quinton Quality', email: 'quinton.qp@qcto.gov.za', role: 'QP', businessUnit: 'Quality Assurance' },
     'SDP': { name: 'Sarah SDP', email: 'sarah.sdp@qcto.gov.za', role: 'SDP', businessUnit: 'Skills Development' },
     'NAMB': { name: 'Nathan NAMB', email: 'nathan.namb@qcto.gov.za', role: 'NAMB', businessUnit: 'NAMB' },
+    'Learner': { name: 'Lerato Learner', email: 'lerato.learner@email.com', role: 'Learner', businessUnit: 'Learner' },
 
     // Research Domain Roles
     'Research Deputy Director': { name: 'David Deputy', email: 'david.deputy@research.qcto.gov.za', role: 'Research Deputy Director', businessUnit: 'Research' },
@@ -1747,6 +1764,26 @@ useEffect(() => {
   };
   // --- END PROFILE SUBMISSIONS ---
 
+  const [sdpInvoices, setSdpInvoices] = useState<SdpInvoiceEntry[]>(() => {
+    const stored = localStorage.getItem('sdp_invoices');
+    if (stored) {
+      try { return JSON.parse(stored); } catch { return []; }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sdp_invoices', JSON.stringify(sdpInvoices));
+  }, [sdpInvoices]);
+
+  const addSdpInvoice = (entry: Omit<SdpInvoiceEntry, 'id'>) => {
+    setSdpInvoices(prev => [{ ...entry, id: `INV-${Date.now()}` }, ...prev]);
+  };
+
+  const updateSdpInvoice = (id: string, updates: Partial<SdpInvoiceEntry>) => {
+    setSdpInvoices(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+  };
+
   const addBatch = (batch: Omit<Batch, 'batchUuid'>) => {
     const newBatch: Batch = {
       ...batch,
@@ -1865,8 +1902,10 @@ rejectProjectReport,
         addAuditEntry,
          deleteMilestone,
   deleteTask,
-  clearExpiredCorrections
-  
+  clearExpiredCorrections,
+  sdpInvoices,
+  addSdpInvoice,
+  updateSdpInvoice,
       }}
     >
       {children}

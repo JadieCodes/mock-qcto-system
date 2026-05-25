@@ -2,12 +2,12 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RoleSelector } from './RoleSelector';
 import { cn } from '@/lib/utils';
-import { 
-  FileText, 
-  Package, 
-  Network, 
-  Printer, 
-  LayoutDashboard, 
+import {
+  FileText,
+  Package,
+  Network,
+  Printer,
+  LayoutDashboard,
   FileEdit,
   LogOut,
   UserCog,
@@ -17,7 +17,9 @@ import {
   Shield,
   Award,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Receipt,
+  ClipboardList
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,13 +28,16 @@ interface LayoutProps {
 }
 
 // Certification nav items
+// Update the certificationNavItems to use the correct paths
 const certificationNavItems = [
-  { path: '/certification', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/certification/intake', label: 'Intake', icon: FileText },
-  { path: '/certification/corrections', label: 'Corrections', icon: FileEdit },
-  { path: '/certification/batches', label: 'Batches', icon: Package },
-  { path: '/certification/integrations', label: 'Integrations', icon: Network },
-  { path: '/certification/printing', label: 'Printing', icon: Printer },
+  { path: '/departments/certification/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/departments/certification/intake', label: 'Intake', icon: FileText },
+   { path: '/departments/certification/integrations', label: 'Integrations', icon: Network },
+    { path: '/departments/certification/batches', label: 'Batches', icon: Package },
+    { path: '/departments/certification/printing', label: 'Printing', icon: Printer },
+  { path: '/departments/certification/corrections', label: 'Corrections', icon: FileEdit },
+  { path: '/departments/certification/tariff-invoicing', label: 'Tariff & Invoicing', icon: Receipt },
+  { path: '/departments/certification/audit-trail', label: 'Audit Trail', icon: ClipboardList },
 ];
 
 

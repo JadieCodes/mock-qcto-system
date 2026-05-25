@@ -1,6 +1,8 @@
 // screens/DashboardResearch.tsx
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
+import { Button } from '@/components/ui/button';
+import { ResearchReportBuilder, type ResearchStats } from '@/components/ui/ResearchReportBuilder';
 import {
   ResponsiveContainer,
   PieChart,
@@ -21,6 +23,7 @@ import {
   FolderOpen,
   Flag,
   BarChart3,
+  FileText,
 } from 'lucide-react';
 
 type ProjectWithMeta = {
@@ -61,9 +64,20 @@ const TASK_STATUS_COLORS: Record<string, string> = {
 };
 
 const DashboardResearch = () => {
-  const { agendas, projects } = useApp();
+  const {
+    agendas,
+    projects,
+    requests,
+    approvedRequests,
+    researchApprovedRequests,
+    bulletinCalls,
+    bulletinSubmissions,
+    externalApplications,
+    currentUser,
+  } = useApp();
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [ganttMode, setGanttMode] = useState<GanttMode>('time');
+  const [showReportBuilder, setShowReportBuilder] = useState(false);
 
   const currentTimelineWidth =
     ganttMode === 'cost' ? TIMELINE_WIDTH_COST : TIMELINE_WIDTH_TIME;
@@ -72,6 +86,125 @@ const DashboardResearch = () => {
     () => agendas.filter((agenda) => agenda.status === 'approved'),
     [agendas]
   );
+
+  const researchStats = useMemo((): ResearchStats => {
+    const uniqueProjects = projects.filter(
+      (project, index, arr) =>
+        index === arr.findIndex(
+          (p) => p.agendaId === project.agendaId && p.agendaItemId === project.agendaItemId
+        )
+    );
+
+    const totalMilestones = uniqueProjects.reduce(
+      (sum, p) => sum + (p.milestones?.length || 0),
+      0
+    );
+    const totalTasks = uniqueProjects.reduce(
+      (sum, p) =>
+        sum +
+        (p.milestones || []).reduce(
+          (ms: number, m: { tasks?: unknown[] }) => ms + (m.tasks?.length || 0),
+          0
+        ),
+      0
+    );
+
+    return {
+      overview: {
+        totalAgendas: agendas.length,
+        approvedAgendas: agendas.filter((a) => a.status === 'approved').length,
+        totalProjects: uniqueProjects.length,
+        completedProjects: uniqueProjects.filter((p) => p.status === 'completed').length,
+        totalMilestones,
+        totalTasks,
+      },
+      agendaPipeline: {
+        total: agendas.length,
+        draft: agendas.filter((a) => a.status === 'draft').length,
+        forumReview: agendas.filter((a) =>
+          ['forum_review', 'chief_director_review'].includes(a.status)
+        ).length,
+        ceoPending: agendas.filter((a) => a.status === 'ceo_approval_pending').length,
+        approved: agendas.filter((a) => a.status === 'approved').length,
+        rejected: agendas.filter((a) => a.status === 'rejected').length,
+      },
+      projectStatus: {
+        total: uniqueProjects.length,
+        notStarted: uniqueProjects.filter((p) => p.status === 'not_started').length,
+        inProgress: uniqueProjects.filter((p) => p.status === 'in_progress').length,
+        awaitingReport: uniqueProjects.filter(
+          (p) => p.status === 'awaiting_report_submission'
+        ).length,
+        underReview: uniqueProjects.filter((p) => p.status === 'under_review').length,
+        completed: uniqueProjects.filter((p) => p.status === 'completed').length,
+      },
+      internalRequests: {
+        total: requests.length,
+        pendingReview: requests.filter(
+          (r) => !r.internalStatus || r.internalStatus.startsWith('Pending')
+        ).length,
+        underReview: requests.filter((r) =>
+          r.internalStatus?.startsWith('Under')
+        ).length,
+        approved: approvedRequests.length,
+      },
+      externalApplications: {
+        total: externalApplications.length,
+        submitted: externalApplications.filter((a) =>
+          ['Submitted', 'Pending Directors Review'].includes(a.status)
+        ).length,
+        underReview: externalApplications.filter((a) =>
+          [
+            'Under Directors Review',
+            'Under DD Review',
+            'Pending Review Director',
+            'Under Review Director',
+            'Pending CEO Approval',
+            'Under CEO Approval',
+          ].includes(a.status)
+        ).length,
+        allocated: externalApplications.filter((a) =>
+          [
+            'Link Generation Pending',
+            'Link Generation In Progress',
+            'Application Link Sent',
+          ].includes(a.status)
+        ).length,
+        approved: externalApplications.filter((a) => a.status === 'Approved').length,
+      },
+      callManagement: {
+        totalCalls: bulletinCalls.length,
+        draftCalls: bulletinCalls.filter((c) => c.status === 'Call Draft').length,
+        pendingCalls: bulletinCalls.filter((c) => c.status === 'Call Pending').length,
+        openCalls: bulletinCalls.filter((c) => c.status === 'Call Open').length,
+        closedCalls: bulletinCalls.filter((c) => c.status === 'Call Closed').length,
+        totalSubmissions: bulletinSubmissions.length,
+        approvedSubmissions: bulletinSubmissions.filter(
+          (s) => s.status === 'Approved – Final Submission'
+        ).length,
+      },
+      publishing: {
+        readyForPublishing: researchApprovedRequests.filter(
+          (r) =>
+            (r.internalStatus === 'Approved' || r.internalStatus === 'Ready for Publishing') &&
+            !r.publishingDoc
+        ).length,
+        researchPublished: researchApprovedRequests.filter((r) => !!r.publishingDoc).length,
+        bulletinReadyForPublishing: bulletinSubmissions.filter(
+          (s) => s.status === 'Approved – Final Submission'
+        ).length,
+      },
+    };
+  }, [
+    agendas,
+    projects,
+    requests,
+    approvedRequests,
+    researchApprovedRequests,
+    bulletinCalls,
+    bulletinSubmissions,
+    externalApplications,
+  ]);
 
   const parseDate = (value?: string | Date | null) => {
     if (!value) return null;
@@ -536,14 +669,20 @@ const DashboardResearch = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-3">
-          <BarChart3 className="h-7 w-7 text-primary" />
-          <h1 className="text-2xl font-bold text-gray-900">Research Dashboard</h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <BarChart3 className="h-7 w-7 text-primary" />
+            <h1 className="text-2xl font-bold text-gray-900">Research Dashboard</h1>
+          </div>
+          <p className="text-gray-600 mt-1">
+            Agenda, project, milestone, task and cost performance overview
+          </p>
         </div>
-        <p className="text-gray-600 mt-1">
-          Agenda, project, milestone, task and cost performance overview
-        </p>
+        <Button variant="outline" onClick={() => setShowReportBuilder(true)}>
+          <FileText className="h-4 w-4 mr-2" />
+          Create Report
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1065,6 +1204,14 @@ const DashboardResearch = () => {
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
+
+      {showReportBuilder && (
+        <ResearchReportBuilder
+          stats={researchStats}
+          currentRole={currentUser.role}
+          onClose={() => setShowReportBuilder(false)}
+        />
+      )}
     </div>
   );
 };

@@ -11,6 +11,7 @@ import {
 import { UserCircle } from 'lucide-react';
 
 const certificationExternalRoles: AppRole[] = [
+  'Learner',
   'Assessment Unit',
   'NAMB',
   'QP',
