@@ -12,6 +12,15 @@ interface ApplicationDashboardProps {
   onRefreshApplications: () => void;
 }
 
+const getDeadlineInfo = (resubmissionDeadline: string) => {
+  const deadline = new Date(resubmissionDeadline);
+  const now = new Date();
+  const daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const isExpired = daysRemaining <= 0;
+  const formattedDeadline = deadline.toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' });
+  return { daysRemaining, isExpired, formattedDeadline };
+};
+
 export default function ApplicationDashboard({
   applications,
   onViewApplication,
@@ -23,17 +32,21 @@ export default function ApplicationDashboard({
   const [selectedApplication, setSelectedApplication] = useState<ApplicationStatus | null>(null);
   const [modalActiveTab, setModalActiveTab] = useState<'details' | 'documents' | 'site-visit' | 'report'>('details');
   const [rescheduleReason, setRescheduleReason] = useState('');
+  const [resubmitDocUploads, setResubmitDocUploads] = useState<Record<string, boolean>>({});
+  const [showRejectionLetterModal, setShowRejectionLetterModal] = useState(false);
+  const [showResubmitConfirm, setShowResubmitConfirm] = useState(false);
+  const [showFinalRejectionLetterModal, setShowFinalRejectionLetterModal] = useState(false);
   
   const getStatusBadge = (status: ApplicationStatus['status']) => {
     const statusConfig: Record<string, { color: string; label: string }> = {
       'step1_initial_submitted': { color: 'bg-blue-100 text-blue-800', label: 'Submitted' },
       'step2_under_initial_review': { color: 'bg-yellow-100 text-yellow-800', label: 'Under Review' },
       'step3_initial_approved': { color: 'bg-green-100 text-green-800', label: 'Initial Approved' },
-      'step3_initial_rejected': { color: 'bg-red-100 text-red-800', label: 'Rejected' },
+      'step3_initial_rejected': { color: 'bg-red-100 text-red-800', label: 'Initial Rejected' },
       'step4_documents_uploaded': { color: 'bg-purple-100 text-purple-800', label: 'Documents Uploaded' },
       'step5_under_final_review': { color: 'bg-orange-100 text-orange-800', label: 'Final Review' },
       'step6_final_approved': { color: 'bg-green-100 text-green-800', label: 'Approved' },
-      'step6_final_rejected': { color: 'bg-red-100 text-red-800', label: 'Rejected' },
+      'step6_final_rejected': { color: 'bg-rose-100 text-rose-800', label: 'Final Rejected' },
       'step7_payment_pending': { color: 'bg-yellow-100 text-yellow-800', label: 'Payment Pending' },
       'step8_payment_uploaded': { color: 'bg-blue-100 text-blue-800', label: 'Payment Uploaded' },
       'step9_completed': { color: 'bg-green-100 text-green-800', label: 'Completed' },
@@ -154,30 +167,161 @@ const handleSubmitRequiredDocuments = () => {
   const uploadedRequiredDocs =
     selectedApplication.applicantRequiredUploads
       ?.filter((item) => item.document)
-      .map((item) => item.document!) || [];
+      .map((item) => {
+        // Create a clean version of the document without large file data
+        const doc = item.document!;
+        const cleanDoc: any = {
+          id: doc.id,
+          type: doc.type,
+          name: doc.name,
+          fileUrl: doc.fileUrl,
+          uploadedAt: doc.uploadedAt,
+          fileSize: doc.fileSize,
+          verified: doc.verified || false,
+        };
+        // Remove fileData if it exists to prevent storage issues
+        if ('fileData' in doc) {
+          delete (doc as any).fileData;
+        }
+        return cleanDoc;
+      }) || [];
 
   const existingDocs = selectedApplication.applicationData?.documents || [];
 
-const updatedApp = mockAccreditationService.updateApplication(selectedApplication.id, {
-  status: 'step4_documents_uploaded',
-  applicationData: {
-    ...selectedApplication.applicationData!,
-    documents: [...existingDocs, ...uploadedRequiredDocs]
-  },
-  lastUpdated: new Date().toISOString()
-});
+  // Ensure all documents have required properties
+  const allDocs = [...existingDocs, ...uploadedRequiredDocs].map(doc => ({
+    id: doc.id || `doc-${Date.now()}-${Math.random()}`,
+    type: doc.type || 'other',
+    name: doc.name || 'Uploaded Document',
+    fileUrl: doc.fileUrl || '',
+    uploadedAt: doc.uploadedAt || new Date().toISOString(),
+    fileSize: doc.fileSize || 0,
+    verified: doc.verified || false,
+  }));
 
-onRefreshApplications();
+  const updatedApp = mockAccreditationService.updateApplication(selectedApplication.id, {
+    status: 'step4_documents_uploaded',
+    applicationData: {
+      ...selectedApplication.applicationData!,
+      documents: allDocs
+    },
+    lastUpdated: new Date().toISOString()
+  });
 
-if (updatedApp) {
-  setSelectedApplication(updatedApp);
-}
+  onRefreshApplications();
 
-  if (updatedApp) {
-    setSelectedApplication(updatedApp);
-  }
-
+  // Close the modal
+  setSelectedApplication(null);
+  
+  // Show success message
   alert('Documents submitted successfully. The application has been sent back for internal review.');
+};
+
+const handleResubmit = () => {
+  if (!selectedApplication) return;
+  mockAccreditationService.updateApplication(selectedApplication.id, {
+    status: 'step1_initial_submitted',
+    resubmittedAt: new Date().toISOString(),
+    resubmissionCount: (selectedApplication.resubmissionCount || 0) + 1,
+    missingDocuments: [],
+  });
+  onRefreshApplications();
+  setSelectedApplication(null);
+  setResubmitDocUploads({});
+  setShowResubmitConfirm(false);
+};
+
+const handlePrintFinalRejectionLetterSdp = (app: ApplicationStatus) => {
+  const rejDate = app.finalRejectionDate
+    ? new Date(app.finalRejectionDate).toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' })
+    : 'N/A';
+  const criteriaList = (app.finalRejectionCriteria || []).map(c => `<li>${c}</li>`).join('');
+
+  const html = `<!DOCTYPE html><html><head>
+    <title>Final Evaluation Rejection Notice</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a1a; }
+      .header { border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 24px; }
+      .title { font-size: 22px; font-weight: bold; color: #dc2626; }
+      .subtitle { color: #6b7280; font-size: 14px; margin-top: 4px; }
+      .section { margin: 16px 0; }
+      .label { font-weight: bold; font-size: 13px; color: #374151; }
+      .value { margin-top: 4px; font-size: 14px; }
+      ul { margin: 8px 0 0 0; padding-left: 20px; }
+      li { margin-bottom: 4px; font-size: 14px; }
+      .notice { background: #fef2f2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; margin: 16px 0; }
+      .footer { border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 24px; font-size: 13px; color: #6b7280; font-style: italic; }
+      @media print { body { margin: 20px; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div class="title">Final Evaluation Rejection Notice</div>
+      <div class="subtitle">QCTO Accreditation Division</div>
+    </div>
+    <div class="section"><div class="label">Applicant</div><div class="value">${app.applicationData?.applicantInfo.fullName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Organisation</div><div class="value">${app.applicationData?.applicantInfo.organisationName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Application Reference</div><div class="value">${app.applicationId}</div></div>
+    <div class="section"><div class="label">Date of Rejection</div><div class="value">${rejDate}</div></div>
+    <div class="section"><div class="label">Rejection Reason</div><div class="value">${app.finalRejectionReason || 'N/A'}</div></div>
+    ${criteriaList ? `<div class="section"><div class="label">Unmet Evaluation Criteria</div><ul>${criteriaList}</ul></div>` : ''}
+    <div class="notice"><p style="margin:0;font-size:14px;">This application has been assessed and does not meet the required criteria for final accreditation. For further information, please contact the accreditation office.</p></div>
+    <div class="footer">This is an official communication from the QCTO Accreditation Division. Resubmission is not available for final evaluation rejections.</div>
+  </body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 400);
+  }
+};
+
+const handlePrintRejectionLetterSdp = (app: ApplicationStatus) => {
+  const deadline = app.resubmissionDeadline
+    ? new Date(app.resubmissionDeadline).toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' })
+    : 'N/A';
+  const rejDate = app.rejectionDate
+    ? new Date(app.rejectionDate).toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' })
+    : 'N/A';
+  const missingList = (app.missingDocuments || []).map(d => `<li>${d}</li>`).join('');
+
+  const html = `<!DOCTYPE html><html><head>
+    <title>Application Rejection Notice</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a1a; }
+      .header { border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 24px; }
+      .title { font-size: 22px; font-weight: bold; color: #dc2626; }
+      .subtitle { color: #6b7280; font-size: 14px; margin-top: 4px; }
+      .section { margin: 16px 0; }
+      .label { font-weight: bold; font-size: 13px; color: #374151; }
+      .value { margin-top: 4px; font-size: 14px; }
+      ul { margin: 8px 0 0 0; padding-left: 20px; }
+      li { margin-bottom: 4px; font-size: 14px; }
+      .deadline { background: #fef2f2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; margin: 16px 0; }
+      .footer { border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 24px; font-size: 13px; color: #6b7280; font-style: italic; }
+      @media print { body { margin: 20px; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div class="title">Application Rejection Notice</div>
+      <div class="subtitle">QCTO Accreditation Division</div>
+    </div>
+    <div class="section"><div class="label">Applicant</div><div class="value">${app.applicationData?.applicantInfo.fullName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Organisation</div><div class="value">${app.applicationData?.applicantInfo.organisationName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Application Reference</div><div class="value">${app.applicationId}</div></div>
+    <div class="section"><div class="label">Date of Rejection</div><div class="value">${rejDate}</div></div>
+    <div class="section"><div class="label">Rejection Reason</div><div class="value">${app.rejectionReason || 'N/A'}</div></div>
+    ${missingList ? `<div class="section"><div class="label">Missing / Required Documents</div><ul>${missingList}</ul></div>` : ''}
+    <div class="deadline"><div class="label">Resubmission Deadline</div><div class="value" style="margin-top:6px;font-weight:bold;">${deadline}</div></div>
+    <div class="footer">Please address all noted deficiencies and resubmit within the specified timeframe.</div>
+  </body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 400);
+  }
 };
 
 const uploadProgress = selectedApplication
@@ -515,7 +659,119 @@ const handleViewDetails = (app: ApplicationStatus) => {
         </div>
       </div>
 
+      {/* Final Rejection Letter Modal (SDP) */}
+      {showFinalRejectionLetterModal && selectedApplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Final Evaluation Rejection Notice</h2>
+              <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId}</p>
+            </div>
+            <div className="p-6 space-y-4 text-sm">
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500">Applicant</p>
+                  <p className="font-medium">{selectedApplication.applicationData?.applicantInfo.fullName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Rejection Reason</p>
+                  <p className="text-gray-700">{selectedApplication.finalRejectionReason || '—'}</p>
+                </div>
+                {selectedApplication.finalRejectionCriteria && selectedApplication.finalRejectionCriteria.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Unmet Evaluation Criteria</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {selectedApplication.finalRejectionCriteria.map(c => (
+                        <li key={c} className="text-gray-700 text-xs">{c}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 italic">
+                This application has not met the required criteria for accreditation. Resubmission is not available at this stage.
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowFinalRejectionLetterModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handlePrintFinalRejectionLetterSdp(selectedApplication)}
+                className="px-6 py-2 bg-rose-600 text-white rounded-md hover:bg-rose-700 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download / Print Letter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Application Details Modal */}
+      {/* Rejection Letter Modal (SDP) */}
+      {showRejectionLetterModal && selectedApplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Application Rejection Notice</h2>
+              <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId}</p>
+            </div>
+            <div className="p-6 space-y-4 text-sm">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500">Applicant</p>
+                  <p className="font-medium">{selectedApplication.applicationData?.applicantInfo.fullName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Rejection Reason</p>
+                  <p className="text-gray-700">{selectedApplication.rejectionReason || '—'}</p>
+                </div>
+                {selectedApplication.missingDocuments && selectedApplication.missingDocuments.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Missing Documents</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {selectedApplication.missingDocuments.map(doc => (
+                        <li key={doc} className="text-gray-700 text-xs">{doc}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {selectedApplication.resubmissionDeadline && (
+                  <div>
+                    <p className="text-xs text-gray-500">Resubmission Deadline</p>
+                    <p className="font-medium text-red-700">
+                      {getDeadlineInfo(selectedApplication.resubmissionDeadline).formattedDeadline}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 italic">
+                Please address all noted deficiencies and resubmit within the specified timeframe.
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowRejectionLetterModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handlePrintRejectionLetterSdp(selectedApplication)}
+                className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download / Print Letter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedApplication && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -579,6 +835,190 @@ const handleViewDetails = (app: ApplicationStatus) => {
             <div className="p-6 space-y-6">
               {modalActiveTab === 'details' && (
                 <>
+                  {/* Rejection Notice */}
+                  {selectedApplication.status === 'step3_initial_rejected' && (
+                    <div className="bg-red-50 border border-red-300 rounded-lg p-5 space-y-4">
+                      <div className="flex items-start gap-3">
+                        <XCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h3 className="text-base font-bold text-red-800">Your application has been rejected</h3>
+                          {selectedApplication.rejectionDate && (
+                            <p className="text-xs text-red-600 mt-0.5">
+                              Rejected on {new Date(selectedApplication.rejectionDate).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setShowRejectionLetterModal(true)}
+                          className="px-3 py-1.5 text-xs border border-red-300 text-red-700 rounded-md hover:bg-red-100 whitespace-nowrap"
+                        >
+                          View Rejection Letter
+                        </button>
+                      </div>
+
+                      {selectedApplication.rejectionReason && (
+                        <div>
+                          <p className="text-xs font-semibold text-red-700 mb-1">Reason</p>
+                          <p className="text-sm text-red-800 bg-white rounded border border-red-200 p-3">{selectedApplication.rejectionReason}</p>
+                        </div>
+                      )}
+
+                      {selectedApplication.missingDocuments && selectedApplication.missingDocuments.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-red-700 mb-2">Missing / Required Documents</p>
+                          <ul className="space-y-1">
+                            {selectedApplication.missingDocuments.map(doc => (
+                              <li key={doc} className="text-sm text-red-800 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                                {doc}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {selectedApplication.resubmissionDeadline && (() => {
+                        const { daysRemaining, isExpired, formattedDeadline } = getDeadlineInfo(selectedApplication.resubmissionDeadline);
+                        return (
+                          <div className={`rounded-lg p-3 border ${isExpired ? 'bg-red-100 border-red-400' : 'bg-amber-50 border-amber-300'}`}>
+                            <p className="text-xs font-semibold text-gray-700 mb-1">Resubmission Deadline: {formattedDeadline}</p>
+                            {isExpired ? (
+                              <p className="text-sm font-medium text-red-700">Resubmission deadline has passed</p>
+                            ) : (
+                              <p className={`text-sm font-medium ${daysRemaining <= 7 ? 'text-red-700' : 'text-amber-700'}`}>
+                                {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining to resubmit
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {selectedApplication.missingDocuments && selectedApplication.missingDocuments.length > 0 && (
+                        <div className="space-y-3 pt-2 border-t border-red-200">
+                          <p className="text-xs font-semibold text-red-700">Upload Corrected Documents</p>
+                          {selectedApplication.missingDocuments.map(docLabel => (
+                            <div key={docLabel} className="flex items-center justify-between p-3 bg-white rounded border border-red-200">
+                              <div>
+                                <p className="text-sm font-medium text-gray-700">{docLabel} <span className="text-red-500">*</span></p>
+                                <p className="text-xs text-gray-500">{resubmitDocUploads[docLabel] ? 'Uploaded' : 'Pending upload'}</p>
+                              </div>
+                              {resubmitDocUploads[docLabel] ? (
+                                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                                  <CheckCircle className="w-4 h-4" /> Uploaded
+                                </span>
+                              ) : (
+                                <label className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer font-medium">
+                                  Upload
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg"
+                                    className="hidden"
+                                    onChange={e => {
+                                      if (e.target.files?.[0]) {
+                                        setResubmitDocUploads(prev => ({ ...prev, [docLabel]: true }));
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(() => {
+                        const missingDocs = selectedApplication.missingDocuments || [];
+                        const allUploaded = missingDocs.length === 0 || missingDocs.every(d => resubmitDocUploads[d]);
+                        const isExpired = selectedApplication.resubmissionDeadline
+                          ? getDeadlineInfo(selectedApplication.resubmissionDeadline).isExpired
+                          : false;
+
+                        return (
+                          <div className="pt-2">
+                            {!showResubmitConfirm ? (
+                              <button
+                                onClick={() => setShowResubmitConfirm(true)}
+                                disabled={!allUploaded || isExpired}
+                                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                              >
+                                Resubmit Application
+                              </button>
+                            ) : (
+                              <div className="bg-white border border-blue-300 rounded-lg p-4 space-y-3">
+                                <p className="text-sm font-medium text-gray-800">Are you sure you want to resubmit your application?</p>
+                                <p className="text-xs text-gray-500">Your application will be sent back for initial review.</p>
+                                <div className="flex gap-3">
+                                  <button
+                                    onClick={() => setShowResubmitConfirm(false)}
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={handleResubmit}
+                                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                                  >
+                                    Yes, Resubmit
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Final Rejection Notice */}
+                  {selectedApplication.status === 'step6_final_rejected' && (
+                    <div className="bg-rose-50 border border-rose-300 rounded-lg p-5 space-y-4">
+                      <div className="flex items-start gap-3">
+                        <XCircle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h3 className="text-base font-bold text-rose-800">Your application was not successful at the Final Evaluation stage</h3>
+                          {selectedApplication.finalRejectionDate && (
+                            <p className="text-xs text-rose-600 mt-0.5">
+                              Rejected on {new Date(selectedApplication.finalRejectionDate).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setShowFinalRejectionLetterModal(true)}
+                          className="px-3 py-1.5 text-xs border border-rose-300 text-rose-700 rounded-md hover:bg-rose-100 whitespace-nowrap"
+                        >
+                          View Rejection Letter
+                        </button>
+                      </div>
+
+                      {selectedApplication.finalRejectionReason && (
+                        <div>
+                          <p className="text-xs font-semibold text-rose-700 mb-1">Reason</p>
+                          <p className="text-sm text-rose-800 bg-white rounded border border-rose-200 p-3">{selectedApplication.finalRejectionReason}</p>
+                        </div>
+                      )}
+
+                      {selectedApplication.finalRejectionCriteria && selectedApplication.finalRejectionCriteria.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-rose-700 mb-2">Unmet Evaluation Criteria</p>
+                          <ul className="space-y-1">
+                            {selectedApplication.finalRejectionCriteria.map(c => (
+                              <li key={c} className="text-sm text-rose-800 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                                {c}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="bg-rose-100 border border-rose-200 rounded-lg p-3">
+                        <p className="text-sm text-rose-800">
+                          For further information or to discuss this outcome, please contact the accreditation office.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Applicant Information */}
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">Applicant Information</h3>
