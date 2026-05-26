@@ -635,6 +635,17 @@ siteVisitAssignedBy?: string;
   scheduleSent?: boolean;
   scheduleStatus?: SiteVisitStatus;
   siteVisitReport?: SiteVisitReport;
+
+  rejectionReason?: string;
+  rejectionDate?: string;
+  resubmissionDeadline?: string;
+  missingDocuments?: string[];
+  rejectionLetterUrl?: string;
+  resubmittedAt?: string;
+  resubmissionCount?: number;
+  finalRejectionReason?: string;
+  finalRejectionDate?: string;
+  finalRejectionCriteria?: string[];
 }
 export type SiteVisitStatus =
  'pending_confirmation'

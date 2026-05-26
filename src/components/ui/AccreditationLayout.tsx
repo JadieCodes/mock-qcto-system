@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  XCircle,
 } from 'lucide-react';
 
 interface AccreditationLayoutProps {
@@ -25,10 +26,11 @@ export function AccreditationLayout({
   const navigate = useNavigate();
 
   const navigation = [
-   
+   { name: 'Dashboard', href: '/departments/accreditation/applications-dashboard', icon: ClipboardList },
     { name: 'Applications', href: '/departments/accreditation/applications', icon: ClipboardList },
     { name: 'Site Visits', href: '/departments/accreditation/site-visits', icon: Calendar },
     { name: 'Outcome Letters', href: '/departments/accreditation/outcome-letters', icon: FileText },
+    { name: 'Rejected Applications', href: '/departments/accreditation/rejected-history', icon: XCircle },
    
   ];
 

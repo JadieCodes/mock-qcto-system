@@ -64,6 +64,7 @@ import VerifierDashboard from './pages/accreditation/VerifierDashboard';
 import UserRoleSwitcher from "./components/ui/UserRoleSwitcher";
 import { useState } from 'react';
 import OutcomeLettersPage from "./pages/accreditation/OutcomeLettersPage";
+import AccreditationMainDashboard from "./pages/accreditation/AccreditationMainDashboard";
 
 // Research domain pages
 // Research domain pages
@@ -85,6 +86,7 @@ import InternalHistoricalQualifications from "./pages/QA/QAInternal/InternalHist
 import ResearchAuditTrail from "./pages/research/internal/ResearchAuditTrail";
 
 import ProtectedDepartmentRoute from "@/components/ProtectedDepartmentRoute";
+import RejectedApplicationsHistory from "./pages/accreditation/RejectedApplicationsHistory";
 
 const App = () => {
   const [userRole, setUserRole] = useState('applicant');
@@ -158,6 +160,10 @@ const App = () => {
             path="applications"
             element={<AccreditationInternalDashboard />}
           />
+            <Route
+            path="applications-dashboard"
+            element={<AccreditationMainDashboard />}
+          />
           <Route
             path="site-visits"
             element={<SiteVisitManagement />}
@@ -165,6 +171,10 @@ const App = () => {
           <Route
             path="outcome-letters"
             element={<OutcomeLettersPage />}
+          />
+          <Route
+            path="rejected-history"
+            element={<RejectedApplicationsHistory />}
           />
           <Route path="*" element={<NotFound />} />
         </Routes>

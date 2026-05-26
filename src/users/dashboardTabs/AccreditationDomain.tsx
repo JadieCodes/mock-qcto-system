@@ -20,9 +20,22 @@ export default function AccreditationDomain() {
   const [applications, setApplications] = useState<ApplicationStatus[]>([]);
   const [currentDocuments, setCurrentDocuments] = useState<AccreditationDocument[]>([]);
 
-  useEffect(() => {
+ useEffect(() => {
+  const loadApps = () => {
+    console.log('Loading applications due to data change');
     setApplications(mockAccreditationService.getApplications());
-  }, []);
+  };
+  
+  // Load initial data
+  loadApps();
+  
+  // Listen for data changes
+  window.addEventListener('accreditation-data-changed', loadApps);
+  
+  return () => {
+    window.removeEventListener('accreditation-data-changed', loadApps);
+  };
+}, []);
 
   const refreshApplications = () => {
     setApplications(mockAccreditationService.getApplications());

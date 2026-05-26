@@ -14,6 +14,13 @@ import {
   Phone,
   MapPin,
   ClipboardCheck,
+  DollarSign,
+  Calendar,
+  Zap,
+  History,
+  Shield,
+  CheckSquare,
+  BarChart2,
 } from 'lucide-react';
 import type { ApplicationStatus } from '@/types';
 import { mockAccreditationService } from '@/services/mockAccreditationService';
@@ -58,7 +65,42 @@ interface OutcomeLetterData {
   letterBody: string;
 }
 
-type ModalTab = 'details' | 'site-visit-report' | 'outcome-letter';
+// Desktop evaluation types (mirrors SiteVisitManagement)
+interface DesktopEvaluationData {
+  qualificationVerification: {
+    qualificationTitle: { isCorrect: boolean; comments: string };
+    saqaId: { isCorrect: boolean; comments: string };
+    curriculumCode: { isCorrect: boolean; comments: string };
+    nqfLevel: { isCorrect: boolean; comments: string };
+    credits: { isCorrect: boolean; comments: string };
+  };
+  allDocumentsUploaded: { value: string; comments: string };
+  applicationType: {
+    newApplication: boolean;
+    extensionOfScope: boolean;
+    amendmentOfContactDetails: boolean;
+    changeOfSiteAddress: boolean;
+  };
+  annexures: Record<string, { included: boolean; comments: string }>;
+  recommendation: {
+    recommendedForVerification: string;
+    name: string;
+    signature: string;
+    date: string;
+    comments: string;
+  };
+  isComplete: boolean;
+  completedAt: string | null;
+}
+
+type ModalTab =
+  | 'details'
+  | 'acknowledgement'
+  | 'ai-report'
+  | 'history'
+  | 'desktop-evaluation'
+  | 'site-visit-report'
+  | 'outcome-letter';
 
 const STAGE_LABELS: Record<ApprovalStage, string> = {
   pending_assistant_director_review: 'Pending Assistant Director Review',
@@ -84,6 +126,20 @@ const STAGE_BADGES: Record<ApprovalStage, string> = {
   declined: 'bg-red-100 text-red-800 border border-red-200',
 };
 
+const ANNEXURE_LABELS: Record<string, string> = {
+  annexure1: 'Valid OHS Audit Report',
+  annexure2: 'Proof of Ownership or Lease Agreement',
+  annexure3a: 'Comprehensive CVs of facilitators',
+  annexure3b: 'Certified ID copies of individual facilitators',
+  annexure3c: 'Certified Facilitator qualifications',
+  annexure4a: 'Financial sustainability – Business plan',
+  annexure4b: 'Audited Financial Statement',
+  annexure5: 'Valid Tax compliance pin / exemption proof',
+  annexure6: 'Proof of Registration',
+  annexure7: 'Signed MoU / SLA / Declaration / Letter of Intent',
+  annexure8: 'Learning material matrix',
+};
+
 export default function OutcomeLettersPage({
   userName = 'Assistant Director',
   userRole = 'Assistant Director',
@@ -97,10 +153,30 @@ export default function OutcomeLettersPage({
   const [draftLetterTitle, setDraftLetterTitle] = useState('');
   const [draftLetterBody, setDraftLetterBody] = useState('');
   const [modalTab, setModalTab] = useState<ModalTab>('details');
+  const [desktopEvaluation, setDesktopEvaluation] = useState<DesktopEvaluationData | null>(null);
 
   useEffect(() => {
     loadApplications();
   }, []);
+
+  // Load desktop evaluation from localStorage whenever selected application changes
+  useEffect(() => {
+    if (!selectedApplication) {
+      setDesktopEvaluation(null);
+      return;
+    }
+    const storageKey = `desktopEvaluation_${selectedApplication.id}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        setDesktopEvaluation(JSON.parse(saved));
+      } catch {
+        setDesktopEvaluation(null);
+      }
+    } else {
+      setDesktopEvaluation(null);
+    }
+  }, [selectedApplication]);
 
   const loadApplications = () => {
     const apps = mockAccreditationService.getApplications();
@@ -125,7 +201,6 @@ export default function OutcomeLettersPage({
     return completedVisitApps.map((app) => {
       const workflow = getWorkflow(app);
       if (workflow) return app;
-
       return {
         ...app,
         outcomeLetterWorkflow: {
@@ -140,9 +215,7 @@ export default function OutcomeLettersPage({
 
   const filteredApplications = useMemo(() => {
     return normalizedApplications.filter((app) => {
-      const workflow =
-        (app as any).outcomeLetterWorkflow as OutcomeLetterWorkflow | undefined;
-
+      const workflow = (app as any).outcomeLetterWorkflow as OutcomeLetterWorkflow | undefined;
       const matchesSearch =
         searchTerm === '' ||
         app.applicationId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -150,10 +223,7 @@ export default function OutcomeLettersPage({
           .toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
         app.applicationData?.qualification.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesStatus =
-        statusFilter === 'all' || workflow?.status === statusFilter;
-
+      const matchesStatus = statusFilter === 'all' || workflow?.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [normalizedApplications, searchTerm, statusFilter]);
@@ -170,14 +240,12 @@ export default function OutcomeLettersPage({
       approved: [],
       declined: [],
     };
-
     filteredApplications.forEach((app) => {
-      const status =
-        ((app as any).outcomeLetterWorkflow?.status ||
-          'pending_assistant_director_review') as ApprovalStage;
+      const status = (
+        (app as any).outcomeLetterWorkflow?.status || 'pending_assistant_director_review'
+      ) as ApprovalStage;
       groups[status].push(app);
     });
-
     return groups;
   }, [filteredApplications]);
 
@@ -188,12 +256,9 @@ export default function OutcomeLettersPage({
     const sourceList = normalizedApplications.length > 0 ? normalizedApplications : applications;
     const target = sourceList.find((a) => a.id === applicationId);
     if (!target) return;
-
     const updated = updater(target);
     mockAccreditationService.updateApplication(applicationId, updated);
-
     setApplications((prev) => prev.map((app) => (app.id === applicationId ? updated : app)));
-
     if (selectedApplication?.id === applicationId) {
       setSelectedApplication(updated);
     }
@@ -204,7 +269,6 @@ export default function OutcomeLettersPage({
       status: 'pending_assistant_director_review',
       comments: [],
     }) as OutcomeLetterWorkflow;
-
     const nextComments = [...(workflow.comments || [])];
     if (text.trim()) {
       nextComments.push(
@@ -212,21 +276,6 @@ export default function OutcomeLettersPage({
       );
     }
     return nextComments;
-  };
-
-  const handleStartWorkflow = (app: ApplicationStatus) => {
-    updateApplicationWorkflow(app.id, (current) => ({
-      ...current,
-      outcomeLetterWorkflow: {
-        status: 'pending_assistant_director_review',
-        updatedAt: new Date().toISOString(),
-        updatedBy: userName,
-        comments: addWorkflowComment(
-          current,
-          'Sent completed site visit report into outcome workflow.'
-        ),
-      },
-    } as any));
   };
 
   const handleAssistantDirectorReview = (app: ApplicationStatus) => {
@@ -299,10 +348,7 @@ export default function OutcomeLettersPage({
         ...current,
         outcomeLetterWorkflow: {
           ...(existing || {}),
-          status:
-            resolution === 'approved'
-              ? 'pending_outcome_letter_generation'
-              : 'declined',
+          status: resolution === 'approved' ? 'pending_outcome_letter_generation' : 'declined',
           resolution,
           iacReviewedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -320,45 +366,23 @@ export default function OutcomeLettersPage({
 
   const openLetterEditor = (app: ApplicationStatus) => {
     const resolution =
-      ((getWorkflow(app)?.resolution as 'approved' | 'declined' | undefined) ||
-        'approved');
-
+      ((getWorkflow(app)?.resolution as 'approved' | 'declined' | undefined) || 'approved');
     const org = app.applicationData?.applicantInfo.organisationName || 'Applicant';
     const qualification = app.applicationData?.qualification || 'Qualification';
-
     setSelectedApplication(app);
     setDraftLetterTitle(`Outcome Letter - ${app.applicationId}`);
     setDraftLetterBody(
       resolution === 'approved'
-        ? `Dear ${org},
-
-We are pleased to inform you that, following the completed site visit and internal approval workflow, your accreditation outcome for ${qualification} has been approved.
-
-Please review the official outcome and comply with any conditions communicated by the Accreditation Domain.
-
-Regards,
-${userName}
-${userRole}`
-        : `Dear ${org},
-
-Following the completed site visit and internal approval workflow, the outcome for ${qualification} has not been approved at this stage.
-
-Please review the feedback and any conditions or gaps identified in the evaluation report.
-
-Regards,
-${userName}
-${userRole}`
+        ? `Dear ${org},\n\nWe are pleased to inform you that, following the completed site visit and internal approval workflow, your accreditation outcome for ${qualification} has been approved.\n\nPlease review the official outcome and comply with any conditions communicated by the Accreditation Domain.\n\nRegards,\n${userName}\n${userRole}`
+        : `Dear ${org},\n\nFollowing the completed site visit and internal approval workflow, the outcome for ${qualification} has not been approved at this stage.\n\nPlease review the feedback and any conditions or gaps identified in the evaluation report.\n\nRegards,\n${userName}\n${userRole}`
     );
     setShowLetterEditor(true);
   };
 
   const handleGenerateOutcomeLetter = () => {
     if (!selectedApplication) return;
-
     const workflow = getWorkflow(selectedApplication);
-    const resolution =
-      (workflow?.resolution as 'approved' | 'declined' | undefined) || 'approved';
-
+    const resolution = (workflow?.resolution as 'approved' | 'declined' | undefined) || 'approved';
     updateApplicationWorkflow(selectedApplication.id, (current) => {
       const existing = getWorkflow(current);
       return {
@@ -384,7 +408,6 @@ ${userRole}`
         },
       } as any;
     });
-
     setShowLetterEditor(false);
     setDraftLetterTitle('');
     setDraftLetterBody('');
@@ -468,209 +491,272 @@ ${userRole}`
     setCommentInput('');
   };
 
-  const renderStageActions = (app: ApplicationStatus) => {
-    const workflow = getWorkflow(app);
-    const status = workflow?.status || 'pending_assistant_director_review';
-
-    return (
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Review Notes
-          </label>
-          <textarea
-            rows={3}
-            value={commentInput}
-            onChange={(e) => setCommentInput(e.target.value)}
-            placeholder="Add notes / review comments..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {status === 'pending_assistant_director_review' && (
-            <button
-              onClick={() => handleAssistantDirectorReview(app)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-            >
-              Review & Forward
-            </button>
-          )}
-
-          {status === 'pending_deputy_director_review' && (
-            <button
-              onClick={() => handleDeputyDirectorRecommend(app)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
-            >
-              Recommend
-            </button>
-          )}
-
-          {status === 'pending_domains_officer_review' && (
-            <button
-              onClick={() => handleDomainsOfficerRecommendReport(app)}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
-            >
-              Recommend for IAC
-            </button>
-          )}
-
-          {status === 'pending_iac_approval' && (
-            <>
-              <button
-                onClick={() => handleIacResolution(app, 'approved')}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-              >
-                Approve Report
-              </button>
-              <button
-                onClick={() => handleIacResolution(app, 'declined')}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
-              >
-                Decline Report
-              </button>
-            </>
-          )}
-
-          {status === 'pending_outcome_letter_generation' && (
-            <button
-              onClick={() => openLetterEditor(app)}
-              className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-sm"
-            >
-              Generate Outcome Letter
-            </button>
-          )}
-
-          {status === 'pending_domains_officer_outcome_review' && (
-            <button
-              onClick={() => handleDomainsOfficerOutcomeRecommend(app)}
-              className="px-4 py-2 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 text-sm"
-            >
-              Recommend Outcome Letter
-            </button>
-          )}
-
-          {status === 'pending_chief_director_approval' && (
-            <>
-              <button
-                onClick={() => handleChiefDirectorFinal(app, 'approved')}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-              >
-                Approve Outcome Letter
-              </button>
-              <button
-                onClick={() => handleChiefDirectorFinal(app, 'declined')}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
-              >
-                Decline Outcome Letter
-              </button>
-            </>
-          )}
-
-          {status === 'approved' && !workflow?.communicatedAt && (
-            <button
-              onClick={() => handleCommunicateOutcome(app)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm flex items-center"
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              Communicate Outcome
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
+  // ─── TAB RENDERERS ───────────────────────────────────────────────────────────
 
   const renderDetailsTab = () => {
     if (!selectedApplication) return null;
-
     const workflow = getWorkflow(selectedApplication);
     const report = selectedApplication.siteVisitReport as any;
 
     return (
       <div className="space-y-4">
+        {/* Applicant Information */}
         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-          <h4 className="text-sm font-semibold text-gray-800 mb-3">Application Information</h4>
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+            <User className="w-4 h-4 mr-2 text-blue-600" />
+            Applicant Information
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { label: 'Full Name', value: selectedApplication.applicationData?.applicantInfo.fullName },
+              { label: 'ID Number', value: selectedApplication.applicationData?.applicantInfo.idNumber },
+              { label: 'Email', value: selectedApplication.applicationData?.applicantInfo.email },
+              { label: 'Phone', value: selectedApplication.applicationData?.applicantInfo.phone },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <p className="text-sm font-semibold text-gray-800">{value || 'N/A'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Organisation Information */}
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+            <Building2 className="w-4 h-4 mr-2 text-purple-600" />
+            Organisation Information
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { label: 'Organisation Name', value: selectedApplication.applicationData?.applicantInfo.organisationName },
+              { label: 'Company Name', value: selectedApplication.applicationData?.applicantInfo.companyName },
+              { label: 'Company Registration', value: selectedApplication.applicationData?.applicantInfo.companyRegistration || 'N/A' },
+              { label: 'Region', value: selectedApplication.applicationData?.applicantInfo.region },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <p className="text-sm font-semibold text-gray-800">{value || 'N/A'}</p>
+              </div>
+            ))}
+            <div className="bg-white p-3 rounded-lg border border-gray-200 md:col-span-2">
+              <p className="text-xs text-gray-500 mb-1">Training Location</p>
+              <p className="text-sm font-semibold text-gray-800">
+                {selectedApplication.applicationData?.applicantInfo.trainingLocation || 'N/A'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Application Details */}
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+            <ClipboardCheck className="w-4 h-4 mr-2 text-green-600" />
+            Application Details
+          </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white p-3 rounded-lg border border-gray-200">
               <p className="text-xs text-gray-500 mb-1">Application ID</p>
               <p className="text-sm font-semibold text-gray-800">{selectedApplication.applicationId}</p>
             </div>
-
             <div className="bg-white p-3 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Current Workflow Status</p>
-              <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${STAGE_BADGES[workflow?.status || 'pending_assistant_director_review']}`}>
-                {STAGE_LABELS[workflow?.status || 'pending_assistant_director_review']}
-              </span>
-            </div>
-
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Organisation</p>
+              <p className="text-xs text-gray-500 mb-1">Application Type</p>
               <p className="text-sm font-semibold text-gray-800">
-                {selectedApplication.applicationData?.applicantInfo.organisationName}
+                {selectedApplication.applicationData?.applicationType}
               </p>
             </div>
-
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
+            <div className="bg-white p-3 rounded-lg border border-gray-200 md:col-span-2">
               <p className="text-xs text-gray-500 mb-1">Qualification</p>
               <p className="text-sm font-semibold text-gray-800">
                 {selectedApplication.applicationData?.qualification}
               </p>
             </div>
-
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Applicant Name</p>
-              <p className="text-sm font-semibold text-gray-800">
-                {selectedApplication.applicationData?.applicantInfo.fullName}
-              </p>
-            </div>
-
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Phone</p>
-              <p className="text-sm font-semibold text-gray-800">
-                {selectedApplication.applicationData?.applicantInfo.phone}
-              </p>
-            </div>
-
-            <div className="bg-white p-3 rounded-lg border border-gray-200 md:col-span-2">
-              <p className="text-xs text-gray-500 mb-1">Training Location</p>
-              <p className="text-sm font-semibold text-gray-800">
-                {selectedApplication.applicationData?.applicantInfo.trainingLocation}
-              </p>
-            </div>
           </div>
         </div>
 
+        {/* Payment Information */}
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+            <DollarSign className="w-4 h-4 mr-2 text-green-600" />
+            Payment Information
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-3 rounded-lg border border-gray-200">
+              <p className="text-xs text-gray-500 mb-1">Payment Status</p>
+              <span
+                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                  selectedApplication.paymentStatus === 'verified'
+                    ? 'bg-green-100 text-green-800'
+                    : selectedApplication.paymentStatus === 'paid'
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                }`}
+              >
+                {selectedApplication.paymentStatus}
+              </span>
+            </div>
+            {selectedApplication.paymentDate && (
+              <div className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">Payment Date</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {new Date(selectedApplication.paymentDate).toLocaleDateString()}
+                </p>
+              </div>
+            )}
+          </div>
+          {selectedApplication.paymentNotification && (
+            <div className="mt-3 bg-white p-3 rounded-lg border border-gray-200">
+              <p className="text-xs font-medium text-gray-700 mb-2">Payment Notification</p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <p className="text-gray-600">Amount:</p>
+                <p className="font-semibold">R{selectedApplication.paymentNotification.amount}</p>
+                <p className="text-gray-600">Due Date:</p>
+                <p className="font-semibold">
+                  {new Date(selectedApplication.paymentNotification.dueDate).toLocaleDateString()}
+                </p>
+                <p className="text-gray-600">Reference:</p>
+                <p className="font-semibold text-blue-600">
+                  {selectedApplication.paymentNotification.paymentReference}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Application Documents */}
+        {selectedApplication.applicationData?.documents &&
+          selectedApplication.applicationData.documents.length > 0 && (
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                <FileText className="w-4 h-4 mr-2 text-gray-600" />
+                Application Documents
+              </h4>
+              <div className="space-y-2">
+                {selectedApplication.applicationData.documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between p-2 bg-white rounded border border-gray-200"
+                  >
+                    <div className="flex items-center">
+                      <FileText className="w-4 h-4 text-gray-500 mr-2" />
+                      <span className="text-sm text-gray-600">{doc.name}</span>
+                    </div>
+                    <a
+                      href={doc.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      View
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        {/* Applicant Required Uploads */}
+        {selectedApplication.applicantRequiredUploads &&
+          selectedApplication.applicantRequiredUploads.some((i) => i.document) && (
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                <FileText className="w-4 h-4 mr-2 text-blue-600" />
+                Applicant Uploaded Required Documents
+              </h4>
+              <div className="space-y-2">
+                {selectedApplication.applicantRequiredUploads.map((item) =>
+                  item.document ? (
+                    <div
+                      key={item.requirementId}
+                      className="flex items-center justify-between p-2 bg-white rounded border border-blue-200"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">{item.label}</p>
+                        <p className="text-xs text-gray-500">{item.document.name}</p>
+                      </div>
+                      <a
+                        href={item.document.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        View
+                      </a>
+                    </div>
+                  ) : null
+                )}
+              </div>
+            </div>
+          )}
+
+        {/* Site Visit Schedule */}
+        {selectedApplication.siteVisitSchedule && (
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
+              <Calendar className="w-4 h-4 mr-2 text-orange-600" />
+              Site Visit Schedule
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">Date</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {new Date(selectedApplication.siteVisitSchedule.scheduledDate).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">Time</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedApplication.siteVisitSchedule.scheduledTime}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-lg border border-gray-200 md:col-span-2">
+                <p className="text-xs text-gray-500 mb-1">Venue</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedApplication.siteVisitSchedule.venue}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-lg border border-gray-200 md:col-span-2">
+                <p className="text-xs text-gray-500 mb-1">Assessor</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedApplication.siteVisitSchedule.assessorName || 'Not assigned'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Approval Timeline */}
         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">Approval Timeline</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              Assistant Director: {workflow?.assistantDirectorReviewedAt ? new Date(workflow.assistantDirectorReviewedAt).toLocaleString() : 'Pending'}
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              Deputy Director: {workflow?.deputyDirectorReviewedAt ? new Date(workflow.deputyDirectorReviewedAt).toLocaleString() : 'Pending'}
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              Domains Officer: {workflow?.domainsOfficerReviewedAt ? new Date(workflow.domainsOfficerReviewedAt).toLocaleString() : 'Pending'}
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              IAC: {workflow?.iacReviewedAt ? new Date(workflow.iacReviewedAt).toLocaleString() : 'Pending'}
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              Outcome Letter Generated: {workflow?.outcomeLetterGeneratedAt ? new Date(workflow.outcomeLetterGeneratedAt).toLocaleString() : 'Pending'}
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-gray-200">
-              Chief Director: {workflow?.chiefDirectorReviewedAt ? new Date(workflow.chiefDirectorReviewedAt).toLocaleString() : 'Pending'}
-            </div>
+            {[
+              { label: 'Assistant Director', value: workflow?.assistantDirectorReviewedAt },
+              { label: 'Deputy Director', value: workflow?.deputyDirectorReviewedAt },
+              { label: 'Domains Officer', value: workflow?.domainsOfficerReviewedAt },
+              { label: 'IAC', value: workflow?.iacReviewedAt },
+              { label: 'Outcome Letter Generated', value: workflow?.outcomeLetterGeneratedAt },
+              { label: 'Chief Director', value: workflow?.chiefDirectorReviewedAt },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <p className="font-medium text-gray-800">
+                  {value ? new Date(value).toLocaleString() : 'Pending'}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Workflow Notes */}
         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">Workflow Notes</h4>
           {workflow?.comments && workflow.comments.length > 0 ? (
             <div className="space-y-2">
               {workflow.comments.map((comment, idx) => (
-                <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 text-sm text-gray-700">
+                <div
+                  key={idx}
+                  className="bg-white p-3 rounded-lg border border-gray-200 text-sm text-gray-700"
+                >
                   {comment}
                 </div>
               ))}
@@ -680,27 +766,28 @@ ${userRole}`
           )}
         </div>
 
-        {report?.visitExecution && (
+        {/* Visit Execution Summary */}
+        {(report as any)?.visitExecution && (
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
             <h4 className="text-sm font-semibold text-gray-800 mb-3">Visit Execution Summary</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="bg-white p-3 rounded-lg border border-gray-200">
                 <p className="text-xs text-gray-500 mb-1">Conducted By</p>
                 <p className="text-sm font-semibold text-gray-800">
-                  {report.visitExecution.conductorName || report.conductedBy || 'N/A'}
+                  {(report as any).visitExecution.conductorName || report.conductedBy || 'N/A'}
                 </p>
               </div>
               <div className="bg-white p-3 rounded-lg border border-gray-200">
                 <p className="text-xs text-gray-500 mb-1">Location</p>
                 <p className="text-sm font-semibold text-gray-800">
-                  {report.visitExecution.location || 'No location recorded'}
+                  {(report as any).visitExecution.location || 'No location recorded'}
                 </p>
               </div>
               <div className="bg-white p-3 rounded-lg border border-gray-200">
                 <p className="text-xs text-gray-500 mb-1">Duration</p>
                 <p className="text-sm font-semibold text-gray-800">
-                  {report.visitExecution.durationMinutes
-                    ? `${report.visitExecution.durationMinutes} minute(s)`
+                  {(report as any).visitExecution.durationMinutes
+                    ? `${(report as any).visitExecution.durationMinutes} minute(s)`
                     : 'Not recorded'}
                 </p>
               </div>
@@ -711,461 +798,1038 @@ ${userRole}`
     );
   };
 
- const renderSiteVisitReportTab = () => {
-  if (!selectedApplication) return null;
+  // ─── ACKNOWLEDGEMENT LETTER TAB ──────────────────────────────────────────────
+  const renderAcknowledgementTab = () => {
+    if (!selectedApplication) return null;
 
-  const report = selectedApplication.siteVisitReport as any;
-  const visitExecution = report?.visitExecution || {};
-  const headerFields = report?.headerFields || {};
-  const reportSections = report?.sections || [];
+    const ackLetter = selectedApplication.acknowledgementLetter;
 
-  if (!report) {
     return (
-      <div className="bg-gray-50 p-6 rounded-lg text-center">
-        <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-        <p className="text-sm text-gray-500">No site visit report available.</p>
+      <div className="space-y-4">
+        {ackLetter ? (
+          <>
+            <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+              <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center">
+                <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                Acknowledgement Letter
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-white p-3 rounded-lg border border-green-200">
+                  <p className="text-xs text-gray-500 mb-1">Generated At</p>
+                  <p className="text-sm font-semibold text-gray-800">
+                    {new Date(ackLetter.generatedAt).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-green-200">
+                  <p className="text-xs text-gray-500 mb-1">Letter ID</p>
+                  <p className="text-sm font-semibold text-gray-800">{ackLetter.id}</p>
+                </div>
+              </div>
+              {ackLetter.content && (
+                <div className="mt-3 bg-white p-3 rounded-lg border border-green-200">
+                  <p className="text-xs text-gray-500 mb-1">Content</p>
+                  <p className="text-sm text-gray-700">{ackLetter.content}</p>
+                </div>
+              )}
+              <div className="mt-3">
+                <a
+                  href={ackLetter.letterUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  View Acknowledgement Letter
+                </a>
+              </div>
+            </div>
+
+            {/* Rejection details if applicable */}
+            {selectedApplication.rejectionDate && (
+              <div className="bg-red-50 p-4 rounded-xl border border-red-200">
+                <h4 className="text-sm font-semibold text-red-800 mb-3 flex items-center">
+                  <XCircle className="w-4 h-4 mr-2 text-red-600" />
+                  Initial Rejection Details
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-white p-3 rounded-lg border border-red-200">
+                    <p className="text-xs text-gray-500 mb-1">Rejected On</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {new Date(selectedApplication.rejectionDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {selectedApplication.resubmissionDeadline && (
+                    <div className="bg-white p-3 rounded-lg border border-red-200">
+                      <p className="text-xs text-gray-500 mb-1">Resubmission Deadline</p>
+                      <p className="text-sm font-semibold text-red-700">
+                        {new Date(selectedApplication.resubmissionDeadline).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  {selectedApplication.rejectionReason && (
+                    <div className="bg-white p-3 rounded-lg border border-red-200 md:col-span-2">
+                      <p className="text-xs text-gray-500 mb-1">Rejection Reason</p>
+                      <p className="text-sm text-gray-700">{selectedApplication.rejectionReason}</p>
+                    </div>
+                  )}
+                  {selectedApplication.missingDocuments &&
+                    selectedApplication.missingDocuments.length > 0 && (
+                      <div className="bg-white p-3 rounded-lg border border-red-200 md:col-span-2">
+                        <p className="text-xs text-gray-500 mb-2">Missing Documents</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {selectedApplication.missingDocuments.map((doc) => (
+                            <li key={doc} className="text-sm text-gray-700">
+                              {doc}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
+
+            {/* Initial review details */}
+            {(selectedApplication as any).initialReview && (
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-800 mb-3">Initial Review Record</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-white p-3 rounded-lg border border-blue-200">
+                    <p className="text-xs text-gray-500 mb-1">Reviewed By</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {(selectedApplication as any).initialReview.reviewedBy}
+                    </p>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-blue-200">
+                    <p className="text-xs text-gray-500 mb-1">Reviewed At</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {new Date(
+                        (selectedApplication as any).initialReview.reviewedAt
+                      ).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-blue-200">
+                    <p className="text-xs text-gray-500 mb-1">Decision</p>
+                    <span
+                      className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        (selectedApplication as any).initialReview.decision === 'approved'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {(selectedApplication as any).initialReview.decision}
+                    </span>
+                  </div>
+                </div>
+                {(selectedApplication as any).initialReview.checklist?.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium text-gray-700 mb-2">
+                      Qualification Verification Checklist
+                    </p>
+                    <div className="space-y-2">
+                      {(selectedApplication as any).initialReview.checklist.map((item: any) => (
+                        <div
+                          key={item.criteriaId}
+                          className="flex items-center justify-between p-2 bg-white rounded border border-gray-200"
+                        >
+                          <span className="text-sm text-gray-600">{item.criteriaName}</span>
+                          {item.isMet ? (
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-500" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(selectedApplication as any).initialReview.comments && (
+                  <div className="mt-3 bg-white p-3 rounded-lg border border-blue-200">
+                    <p className="text-xs text-gray-500 mb-1">Comments</p>
+                    <p className="text-sm text-gray-700">
+                      {(selectedApplication as any).initialReview.comments}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="bg-gray-50 p-8 rounded-xl text-center border border-dashed border-gray-300">
+            <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No acknowledgement letter on record.</p>
+          </div>
+        )}
       </div>
     );
-  }
+  };
 
-  return (
-    <div className="space-y-6">
-      {/* Report Header */}
-      <div className="bg-gradient-to-r from-green-600 to-teal-600 text-white p-6 rounded-lg">
-        <h3 className="text-xl font-bold mb-2">Site Visit Report</h3>
-        <p className="text-sm opacity-90">Conducted by: {report.conductedBy}</p>
-        <p className="text-sm opacity-90">
-          Date: {new Date(report.completedAt || report.conductedAt).toLocaleDateString()}
-        </p>
+  // ─── AI REPORT TAB ───────────────────────────────────────────────────────────
+  const renderAIReportTab = () => {
+    if (!selectedApplication) return null;
+    const aiReport = selectedApplication.finalReview?.aiRecommendation;
+
+    return (
+      <div className="space-y-4">
+        {!aiReport ? (
+          <div className="bg-gray-50 p-8 rounded-xl text-center border border-dashed border-gray-300">
+            <Zap className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No AI report available for this application.</p>
+          </div>
+        ) : (
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border border-blue-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <Zap className="w-5 h-5 text-blue-600 mr-2" />
+                <h4 className="text-sm font-semibold text-gray-800">AI Draft Evaluation Report</h4>
+              </div>
+              <span className="text-xs text-gray-500">
+                Generated: {new Date(aiReport.generatedAt).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Score summary */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-500 mb-1">Score</p>
+                <p className="text-xl font-bold text-blue-600">{aiReport.overallScore}%</p>
+              </div>
+              <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-500 mb-1">Risk Level</p>
+                <p
+                  className={`text-xl font-bold ${
+                    aiReport.riskLevel === 'low'
+                      ? 'text-green-600'
+                      : aiReport.riskLevel === 'medium'
+                      ? 'text-yellow-600'
+                      : 'text-red-600'
+                  }`}
+                >
+                  {aiReport.riskLevel}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-500 mb-1">Action</p>
+                <p
+                  className={`text-xl font-bold ${
+                    aiReport.recommendedAction === 'approve'
+                      ? 'text-green-600'
+                      : aiReport.recommendedAction === 'reject'
+                      ? 'text-red-600'
+                      : 'text-yellow-600'
+                  }`}
+                >
+                  {aiReport.recommendedAction}
+                </p>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-white p-3 rounded-lg border border-gray-200 mb-4">
+              <p className="text-sm text-gray-700">{aiReport.summary}</p>
+            </div>
+
+            {/* Document Findings */}
+            <h5 className="text-xs font-semibold text-gray-700 mb-2">
+              Requested Document Evaluation
+            </h5>
+            <div className="space-y-2">
+              {aiReport.documentFindings.map((finding: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="bg-white p-3 rounded-lg border border-gray-200"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center">
+                      <FileText className="w-4 h-4 text-gray-500 mr-2" />
+                      <span className="text-sm font-medium">{finding.fileName}</span>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        finding.status === 'valid'
+                          ? 'bg-green-100 text-green-700'
+                          : finding.status === 'missing'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {finding.status === 'valid'
+                        ? 'Uploaded'
+                        : finding.status === 'missing'
+                        ? 'Missing'
+                        : finding.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                  </div>
+                  {finding.confidence !== undefined && (
+                    <p className="text-xs text-gray-500">Confidence: {finding.confidence}%</p>
+                  )}
+                  {finding.issues && finding.issues.length > 0 && (
+                    <ul className="mt-1 text-xs text-red-600 list-disc list-inside">
+                      {finding.issues.map((issue: string, i: number) => (
+                        <li key={i}>{issue}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Final review details if available */}
+            {selectedApplication.finalReview && (
+              <div className="mt-4 bg-white p-3 rounded-lg border border-blue-200">
+                <p className="text-xs font-medium text-gray-700 mb-2">Final Review Record</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {selectedApplication.finalReview.reviewedBy && (
+                    <>
+                      <p className="text-gray-500">Reviewed By:</p>
+                      <p className="font-medium">{selectedApplication.finalReview.reviewedBy}</p>
+                    </>
+                  )}
+                  {selectedApplication.finalReview.reviewedAt && (
+                    <>
+                      <p className="text-gray-500">Reviewed At:</p>
+                      <p className="font-medium">
+                        {new Date(selectedApplication.finalReview.reviewedAt).toLocaleString()}
+                      </p>
+                    </>
+                  )}
+                  {selectedApplication.finalReview.decision && (
+                    <>
+                      <p className="text-gray-500">Decision:</p>
+                      <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded-full w-fit ${
+                          selectedApplication.finalReview.decision === 'approved'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {selectedApplication.finalReview.decision}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {selectedApplication.finalReview.comments && (
+                  <div className="mt-2 p-2 bg-gray-50 rounded">
+                    <p className="text-xs text-gray-500">Comments</p>
+                    <p className="text-sm text-gray-700">{selectedApplication.finalReview.comments}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+    );
+  };
 
-      {/* Key Details Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-xs text-gray-500 mb-1">Outcome</p>
-          <p
-            className={`text-lg font-semibold ${
-              report.outcome === 'compliant'
-                ? 'text-green-600'
-                : report.outcome === 'partially_compliant'
-                ? 'text-yellow-600'
-                : 'text-red-600'
-            }`}
-          >
-            {String(report.outcome || '').replace('_', ' ').toUpperCase()}
+  // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
+  const renderHistoryTab = () => {
+    if (!selectedApplication) return null;
+    const history = selectedApplication.evaluationHistory;
+
+    return (
+      <div className="space-y-4">
+        {!history || history.length === 0 ? (
+          <div className="bg-gray-50 p-8 rounded-xl text-center border border-dashed border-gray-300">
+            <History className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No evaluation history available.</p>
+          </div>
+        ) : (
+          history.map((entry, index) => (
+            <div key={index} className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <span
+                    className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      entry.stage === 'initial'
+                        ? 'bg-blue-100 text-blue-800'
+                        : entry.stage === 'final'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}
+                  >
+                    {entry.stage === 'initial'
+                      ? 'Initial Review'
+                      : entry.stage === 'final'
+                      ? 'Final Review'
+                      : 'AI Evaluation'}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {entry.reviewedBy} &bull;{' '}
+                    {new Date(entry.reviewedAt).toLocaleString()}
+                  </p>
+                </div>
+                {entry.stage !== 'ai-evaluation' && (
+                  <span
+                    className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      entry.decision === 'approved'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {entry.decision}
+                  </span>
+                )}
+                {entry.stage === 'ai-evaluation' && entry.aiRecommendation && (
+                  <span
+                    className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      entry.aiRecommendation.riskLevel === 'low'
+                        ? 'bg-green-100 text-green-800'
+                        : entry.aiRecommendation.riskLevel === 'medium'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    Risk: {entry.aiRecommendation.riskLevel}
+                  </span>
+                )}
+              </div>
+
+              {entry.stage !== 'ai-evaluation' && entry.checklist.length > 0 && (
+                <div className="mt-3">
+                  <h5 className="text-xs font-medium text-gray-700 mb-2">Checklist Results:</h5>
+                  <div className="space-y-2">
+                    {entry.checklist.map((item) => (
+                      <div
+                        key={item.criteriaId}
+                        className="flex items-center justify-between text-sm bg-white p-2 rounded border border-gray-200"
+                      >
+                        <span className="text-gray-600">{item.criteriaName}</span>
+                        {item.isMet ? (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-500" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {entry.stage === 'ai-evaluation' && entry.aiRecommendation && (
+                <div className="mt-3">
+                  <h5 className="text-xs font-medium text-gray-700 mb-2">AI Draft Evaluation:</h5>
+                  <div className="bg-white p-3 rounded-lg border border-gray-200">
+                    <p className="text-sm text-gray-700 mb-3">
+                      {entry.aiRecommendation.summary}
+                    </p>
+                    <div className="space-y-2">
+                      {entry.aiRecommendation.documentFindings.map(
+                        (finding: any, i: number) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <span className="text-gray-600">{finding.fileName}</span>
+                            <span
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                finding.status === 'valid'
+                                  ? 'bg-green-100 text-green-700'
+                                  : finding.status === 'missing'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}
+                            >
+                              {finding.status === 'valid'
+                                ? 'Uploaded'
+                                : finding.status === 'missing'
+                                ? 'Missing'
+                                : finding.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {entry.comments && (
+                <div className="mt-3 p-2 bg-white rounded border border-gray-200">
+                  <p className="text-sm text-gray-600">{entry.comments}</p>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
+  // ─── DESKTOP EVALUATION TAB ──────────────────────────────────────────────────
+  const renderDesktopEvaluationTab = () => {
+    if (!selectedApplication) return null;
+
+    if (!desktopEvaluation) {
+      return (
+        <div className="bg-gray-50 p-8 rounded-xl text-center border border-dashed border-gray-300">
+          <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">
+            No desktop evaluation has been completed for this application.
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            Desktop evaluations are completed in the Site Visit Management module.
           </p>
         </div>
+      );
+    }
 
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-xs text-gray-500 mb-1">Conducted By</p>
-          <p className="text-lg font-semibold text-gray-800">{report.conductedBy}</p>
-          <p className="text-xs text-gray-500">
-            {report.conductedByRole === 'qp'
-              ? 'Quality Partner'
-              : report.conductedByRole === 'verifier'
-              ? 'Verifier'
-              : report.conductedByRole}
-          </p>
+    const qualChecks = desktopEvaluation.qualificationVerification;
+    const annexures = desktopEvaluation.annexures;
+
+    return (
+      <div className="space-y-5">
+        {/* Status Banner */}
+        <div
+          className={`p-4 rounded-xl border flex items-center gap-3 ${
+            desktopEvaluation.isComplete
+              ? 'bg-green-50 border-green-200'
+              : 'bg-yellow-50 border-yellow-200'
+          }`}
+        >
+          {desktopEvaluation.isComplete ? (
+            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+          ) : (
+            <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+          )}
+          <div>
+            <p
+              className={`text-sm font-semibold ${
+                desktopEvaluation.isComplete ? 'text-green-800' : 'text-yellow-800'
+              }`}
+            >
+              {desktopEvaluation.isComplete ? 'Desktop Evaluation Completed' : 'Desktop Evaluation Incomplete'}
+            </p>
+            {desktopEvaluation.completedAt && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                Completed: {new Date(desktopEvaluation.completedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-xs text-gray-500 mb-1">Date Completed</p>
-          <p className="text-lg font-semibold text-gray-800">
-            {new Date(report.completedAt || report.conductedAt).toLocaleDateString()}
-          </p>
+        {/* Section 1 – Qualification Verification */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 pb-2 border-b flex items-center">
+            <BarChart2 className="w-4 h-4 mr-2 text-blue-600" />
+            1. Qualification Verification
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Detail</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">Result</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Comments</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[
+                  { key: 'qualificationTitle', label: 'Qualification / Curriculum Title' },
+                  { key: 'saqaId', label: 'SAQA ID' },
+                  { key: 'curriculumCode', label: 'Curriculum Code' },
+                  { key: 'nqfLevel', label: 'NQF Level' },
+                  { key: 'credits', label: 'Credits' },
+                ].map(({ key, label }) => {
+                  const item = qualChecks[key as keyof typeof qualChecks];
+                  return (
+                    <tr key={key} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-gray-700">{label}</td>
+                      <td className="px-3 py-2 text-center">
+                        {item.isCorrect ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                            <CheckCircle className="w-3 h-3" /> Correct
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                            <XCircle className="w-3 h-3" /> Incorrect
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500">{item.comments || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Section 2 – Document Upload */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 pb-2 border-b flex items-center">
+            <FileText className="w-4 h-4 mr-2 text-blue-600" />
+            2. Document Upload
+          </h4>
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <span className="text-sm text-gray-700">All requested documents uploaded (Annexure 1 – 8)</span>
+            <span
+              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                desktopEvaluation.allDocumentsUploaded.value === 'YES'
+                  ? 'bg-green-100 text-green-700'
+                  : desktopEvaluation.allDocumentsUploaded.value === 'NO'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {desktopEvaluation.allDocumentsUploaded.value || 'Not answered'}
+            </span>
+          </div>
+          {desktopEvaluation.allDocumentsUploaded.comments && (
+            <p className="mt-2 text-sm text-gray-500 px-1">
+              {desktopEvaluation.allDocumentsUploaded.comments}
+            </p>
+          )}
+        </div>
+
+        {/* Section 3 – Application Type */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 pb-2 border-b flex items-center">
+            <ClipboardCheck className="w-4 h-4 mr-2 text-blue-600" />
+            3. Type of Accreditation Application
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {[
+              { key: 'newApplication', label: 'New Application' },
+              { key: 'extensionOfScope', label: 'Extension of Scope' },
+              { key: 'amendmentOfContactDetails', label: 'Amendment of Contact Details' },
+              { key: 'changeOfSiteAddress', label: 'Change of Site Address' },
+            ].map(({ key, label }) => (
+              <div
+                key={key}
+                className={`flex items-center justify-between p-3 rounded-lg border ${
+                  desktopEvaluation.applicationType[key as keyof typeof desktopEvaluation.applicationType]
+                    ? 'bg-blue-50 border-blue-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <span className="text-sm text-gray-700">{label}</span>
+                {desktopEvaluation.applicationType[key as keyof typeof desktopEvaluation.applicationType] ? (
+                  <CheckSquare className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-gray-300" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 4 – Annexures */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 pb-2 border-b flex items-center">
+            <FileText className="w-4 h-4 mr-2 text-blue-600" />
+            4. Annexures Submitted
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Annexure</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">Included</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Comment</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {Object.entries(annexures).map(([key, val]) => (
+                  <tr key={key} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-700">
+                      {key.replace('annexure', '').toUpperCase()}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">
+                      {ANNEXURE_LABELS[key] || key}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {val.included ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          <CheckCircle className="w-3 h-3" /> Yes
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                          <XCircle className="w-3 h-3" /> No
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{val.comments || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Section 5 – Recommendation */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3 pb-2 border-b flex items-center">
+            <CheckCircle className="w-4 h-4 mr-2 text-blue-600" />
+            5. Recommendation for Verification (Phase 2)
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-1">Decision</p>
+              <span
+                className={`px-2 py-1 text-sm font-semibold rounded-full ${
+                  desktopEvaluation.recommendation.recommendedForVerification === 'YES'
+                    ? 'bg-green-100 text-green-800'
+                    : desktopEvaluation.recommendation.recommendedForVerification === 'NO'
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {desktopEvaluation.recommendation.recommendedForVerification || 'Not decided'}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-1">Evaluator Name</p>
+              <p className="text-sm font-semibold text-gray-800">
+                {desktopEvaluation.recommendation.name || '—'}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-1">Signature</p>
+              <p className="text-sm font-semibold text-gray-800">
+                {desktopEvaluation.recommendation.signature || '—'}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-1">Date</p>
+              <p className="text-sm font-semibold text-gray-800">
+                {desktopEvaluation.recommendation.date || '—'}
+              </p>
+            </div>
+            {desktopEvaluation.recommendation.comments && (
+              <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 md:col-span-2">
+                <p className="text-xs text-gray-500 mb-1">Additional Comments</p>
+                <p className="text-sm text-gray-700">
+                  {desktopEvaluation.recommendation.comments}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+    );
+  };
 
-      {/* Site Visit Conductor Information */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <h4 className="text-lg font-semibold text-gray-800 mb-4">
-          Site Visit Conductor Information
-        </h4>
+  // ─── SITE VISIT REPORT TAB ───────────────────────────────────────────────────
+  const renderSiteVisitReportTab = () => {
+    if (!selectedApplication) return null;
+    const report = selectedApplication.siteVisitReport as any;
+    const visitExecution = report?.visitExecution || {};
+    const headerFields = report?.headerFields || {};
+    const reportSections = report?.sections || [];
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Conductor Name</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.conductorName || report.conductedBy}
+    if (!report) {
+      return (
+        <div className="bg-gray-50 p-8 rounded-xl text-center border border-dashed border-gray-300">
+          <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">No site visit report available.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Report Header */}
+        <div className="bg-gradient-to-r from-green-600 to-teal-600 text-white p-6 rounded-xl">
+          <h3 className="text-xl font-bold mb-2">Site Visit Report</h3>
+          <p className="text-sm opacity-90">Conducted by: {report.conductedBy}</p>
+          <p className="text-sm opacity-90">
+            Date: {new Date(report.completedAt || report.conductedAt).toLocaleDateString()}
+          </p>
+        </div>
+
+        {/* Key Details Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <p className="text-xs text-gray-500 mb-1">Outcome</p>
+            <p
+              className={`text-lg font-semibold ${
+                report.outcome === 'compliant'
+                  ? 'text-green-600'
+                  : report.outcome === 'partially_compliant'
+                  ? 'text-yellow-600'
+                  : 'text-red-600'
+              }`}
+            >
+              {String(report.outcome || '').replace('_', ' ').toUpperCase()}
             </p>
           </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Conductor Role</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.conductorRole === 'qp'
-                ? 'Quality Partner'
-                : visitExecution.conductorRole === 'verifier'
-                ? 'Verifier'
-                : report.conductedByRole === 'qp'
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <p className="text-xs text-gray-500 mb-1">Conducted By</p>
+            <p className="text-lg font-semibold text-gray-800">{report.conductedBy}</p>
+            <p className="text-xs text-gray-500">
+              {report.conductedByRole === 'qp'
                 ? 'Quality Partner'
                 : report.conductedByRole === 'verifier'
                 ? 'Verifier'
                 : report.conductedByRole}
             </p>
           </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Current Location</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.location || 'No location recorded'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">On-Site Verification</p>
-            <p
-              className={`text-sm font-semibold ${
-                visitExecution.onSiteVerified ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              {visitExecution.onSiteVerified ? 'Verified On-Site' : 'Not Verified'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Started At</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.visitStartedAt
-                ? new Date(visitExecution.visitStartedAt).toLocaleString()
-                : 'Not recorded'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Ended At</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.visitCompletedAt
-                ? new Date(visitExecution.visitCompletedAt).toLocaleString()
-                : 'Not recorded'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Duration</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.durationMinutes
-                ? `${visitExecution.durationMinutes} minute(s)`
-                : 'Not recorded'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Verified At</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {visitExecution.onSiteVerifiedAt
-                ? new Date(visitExecution.onSiteVerifiedAt).toLocaleString()
-                : 'Not recorded'}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <p className="text-xs text-gray-500 mb-1">Date Completed</p>
+            <p className="text-lg font-semibold text-gray-800">
+              {new Date(report.completedAt || report.conductedAt).toLocaleDateString()}
             </p>
           </div>
         </div>
 
-        {visitExecution.onSiteVerifiedAt && (
-          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
-            <p className="text-sm text-green-700">
-              On-site presence was verified at{' '}
-              {new Date(visitExecution.onSiteVerifiedAt).toLocaleString()}.
-            </p>
+        {/* Site Visit Conductor Information */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">
+            Site Visit Conductor Information
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { label: 'Conductor Name', value: visitExecution.conductorName || report.conductedBy },
+              {
+                label: 'Conductor Role',
+                value:
+                  visitExecution.conductorRole === 'qp'
+                    ? 'Quality Partner'
+                    : visitExecution.conductorRole === 'verifier'
+                    ? 'Verifier'
+                    : report.conductedByRole === 'qp'
+                    ? 'Quality Partner'
+                    : report.conductedByRole === 'verifier'
+                    ? 'Verifier'
+                    : report.conductedByRole,
+              },
+              { label: 'Location', value: visitExecution.location || 'No location recorded' },
+              {
+                label: 'On-Site Verification',
+                value: visitExecution.onSiteVerified ? 'Verified On-Site' : 'Not Verified',
+                highlight: visitExecution.onSiteVerified ? 'text-green-600' : 'text-red-600',
+              },
+              {
+                label: 'Started At',
+                value: visitExecution.visitStartedAt
+                  ? new Date(visitExecution.visitStartedAt).toLocaleString()
+                  : 'Not recorded',
+              },
+              {
+                label: 'Duration',
+                value: visitExecution.durationMinutes
+                  ? `${visitExecution.durationMinutes} minute(s)`
+                  : 'Not recorded',
+              },
+            ].map(({ label, value, highlight }) => (
+              <div key={label} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <p className={`text-sm font-semibold ${highlight || 'text-gray-800'}`}>
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Evaluation Summary */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">Evaluation Summary</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              {
+                label: 'Legal Name of SDP',
+                value:
+                  headerFields.legalName ||
+                  selectedApplication.applicationData?.applicantInfo.organisationName,
+              },
+              {
+                label: 'Physical Address',
+                value:
+                  headerFields.physicalAddress ||
+                  selectedApplication.applicationData?.applicantInfo.trainingLocation,
+              },
+              {
+                label: 'Contact Person',
+                value:
+                  headerFields.contactPerson ||
+                  selectedApplication.applicationData?.applicantInfo.fullName,
+              },
+              {
+                label: 'Contact Number',
+                value:
+                  headerFields.contactNumber ||
+                  selectedApplication.applicationData?.applicantInfo.phone,
+              },
+              {
+                label: 'Contact Email',
+                value:
+                  headerFields.contactEmail ||
+                  selectedApplication.applicationData?.applicantInfo.email,
+              },
+              {
+                label: 'Site Visit Date',
+                value: headerFields.siteVisitDate
+                  ? new Date(headerFields.siteVisitDate).toLocaleDateString()
+                  : new Date(report.conductedAt).toLocaleDateString(),
+              },
+              {
+                label: 'Qualification Title',
+                value:
+                  headerFields.qualificationTitle ||
+                  report.qualification ||
+                  selectedApplication.applicationData?.qualification,
+              },
+              { label: 'NQF Level', value: headerFields.nqfLevel },
+              { label: 'Credits', value: headerFields.credits },
+              { label: 'SAQA ID', value: headerFields.saqaId },
+              { label: 'Curriculum Code', value: headerFields.curriculumCode },
+              ...(report.riskProfile
+                ? [{ label: 'Risk Profile', value: report.riskProfile?.toUpperCase(), highlight: report.riskProfile === 'low' ? 'text-green-600' : report.riskProfile === 'medium' ? 'text-yellow-600' : 'text-red-600' }]
+                : []),
+              ...(report.recommendation
+                ? [{ label: 'Recommendation', value: report.recommendation === 'recommended' ? 'Recommended' : 'Not Recommended', highlight: report.recommendation === 'recommended' ? 'text-green-600' : 'text-red-600' }]
+                : []),
+            ]
+              .filter((f) => f.value)
+              .map(({ label, value, highlight }: any) => (
+                <div key={label} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-xs text-gray-500 mb-1">{label}</p>
+                  <p className={`text-sm font-semibold ${highlight || 'text-gray-800'}`}>
+                    {value || 'N/A'}
+                  </p>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Executive Summary */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-lg font-semibold text-gray-800 mb-3">Executive Summary</h4>
+          <p className="text-gray-700 whitespace-pre-wrap">{report.summary}</p>
+        </div>
+
+        {/* Recommendations */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <h4 className="text-lg font-semibold text-gray-800 mb-3">Recommendations</h4>
+          <p className="text-gray-700 whitespace-pre-wrap">{report.recommendations}</p>
+        </div>
+
+        {report.additionalComments && (
+          <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <h4 className="text-lg font-semibold text-gray-800 mb-3">Additional Comments</h4>
+            <p className="text-gray-700 whitespace-pre-wrap">{report.additionalComments}</p>
           </div>
         )}
-      </div>
 
-      {/* QCTO Evaluation Summary */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <h4 className="text-lg font-semibold text-gray-800 mb-4">
-          Evaluation Summary
-        </h4>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Legal Name of SDP</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.legalName ||
-                selectedApplication.applicationData?.applicantInfo.organisationName ||
-                'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Physical Address</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.physicalAddress ||
-                selectedApplication.applicationData?.applicantInfo.trainingLocation ||
-                'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Contact Person</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.contactPerson ||
-                selectedApplication.applicationData?.applicantInfo.fullName ||
-                'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Contact Number</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.contactNumber ||
-                selectedApplication.applicationData?.applicantInfo.phone ||
-                'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Contact Email</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.contactEmail ||
-                selectedApplication.applicationData?.applicantInfo.email ||
-                'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Site Visit Date</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.siteVisitDate
-                ? new Date(headerFields.siteVisitDate).toLocaleDateString()
-                : new Date(report.conductedAt).toLocaleDateString()}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Qualification Title</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.qualificationTitle ||
-                report.qualification ||
-                selectedApplication.applicationData?.qualification ||
-                'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">NQF Level</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.nqfLevel || 'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Credits</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.credits || 'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">SAQA ID</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.saqaId || 'N/A'}
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">Curriculum Code</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {headerFields.curriculumCode || 'N/A'}
-            </p>
-          </div>
-
-          {'deliveryMode' in report && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Delivery Mode</p>
-              <p className="text-sm font-semibold text-gray-800">
-                {report.deliveryMode === 'face_to_face'
-                  ? 'Face-to-Face'
-                  : report.deliveryMode === 'hybrid_blended'
-                  ? 'Hybrid / Blended'
-                  : report.deliveryMode === 'mobile_unit'
-                  ? 'Mobile Unit'
-                  : 'N/A'}
-              </p>
-            </div>
-          )}
-
-          {report.riskProfile && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Risk Profile</p>
-              <p
-                className={`text-sm font-semibold ${
-                  report.riskProfile === 'low'
-                    ? 'text-green-600'
-                    : report.riskProfile === 'medium'
-                    ? 'text-yellow-600'
-                    : 'text-red-600'
-                }`}
-              >
-                {report.riskProfile.toUpperCase()}
-              </p>
-            </div>
-          )}
-
-          {report.recommendation && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Recommendation</p>
-              <p
-                className={`text-sm font-semibold ${
-                  report.recommendation === 'recommended'
-                    ? 'text-green-600'
-                    : 'text-red-600'
-                }`}
-              >
-                {report.recommendation === 'recommended'
-                  ? 'Recommended'
-                  : 'Not Recommended'}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Executive Summary */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <h4 className="text-lg font-semibold text-gray-800 mb-3">Executive Summary</h4>
-        <p className="text-gray-700 whitespace-pre-wrap">{report.summary}</p>
-      </div>
-
-      {/* Recommendations */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <h4 className="text-lg font-semibold text-gray-800 mb-3">Recommendations</h4>
-        <p className="text-gray-700 whitespace-pre-wrap">{report.recommendations}</p>
-      </div>
-
-      {/* Additional Comments */}
-      {report.additionalComments && (
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <h4 className="text-lg font-semibold text-gray-800 mb-3">
-            Additional Comments
-          </h4>
-          <p className="text-gray-700 whitespace-pre-wrap">{report.additionalComments}</p>
-        </div>
-      )}
-
-      {/* Grouped Sections */}
-      {Array.isArray(reportSections) && reportSections.length > 0 ? (
-        <div className="space-y-4">
-          {reportSections.map((section: any) => (
-            <div key={section.id} className="bg-white p-4 rounded-lg border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-800 mb-4">{section.title}</h4>
-
-              <div className="space-y-4">
-                {section.items?.map((item: any) => (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
+        {/* Grouped Sections */}
+        {Array.isArray(reportSections) && reportSections.length > 0 ? (
+          <div className="space-y-4">
+            {reportSections.map((section: any) => (
+              <div key={section.id} className="bg-white p-4 rounded-xl border border-gray-200">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">{section.title}</h4>
+                <div className="space-y-4">
+                  {section.items?.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+                    >
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">
                             {item.id}
                           </span>
-                          <span className="text-sm font-medium text-gray-800">
-                            {item.criteria}
-                          </span>
+                          <span className="text-sm font-medium text-gray-800">{item.criteria}</span>
                         </div>
+                        <span
+                          className={`px-3 py-1 text-xs font-medium rounded-full flex-shrink-0 ${
+                            item.response === 'yes'
+                              ? 'bg-green-100 text-green-800'
+                              : item.response === 'no'
+                              ? 'bg-red-100 text-red-800'
+                              : item.response === 'na'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {item.response ? item.response.toUpperCase() : 'NOT ANSWERED'}
+                        </span>
                       </div>
-
-                      <span
-                        className={`px-3 py-1 text-xs font-medium rounded-full ${
-                          item.response === 'yes'
-                            ? 'bg-green-100 text-green-800'
-                            : item.response === 'no'
-                            ? 'bg-red-100 text-red-800'
-                            : item.response === 'na'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {item.response ? item.response.toUpperCase() : 'NOT ANSWERED'}
-                      </span>
+                      <div className="bg-white border border-gray-200 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1">Remarks</p>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {item.comments || 'No remarks provided'}
+                        </p>
+                      </div>
                     </div>
-
-                    <div className="bg-white border border-gray-200 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Remarks</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {item.comments || 'No remarks provided'}
-                      </p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          report.checklist && (
+            <div className="bg-white p-4 rounded-xl border border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Evaluation Checklist</h4>
+              <div className="space-y-4">
+                {report.checklist.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="border-b border-gray-200 last:border-0 pb-4 last:pb-0"
+                  >
+                    <div className="flex items-start space-x-3">
+                      {item.isMet ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800">{item.criteria}</p>
+                        {item.comments && (
+                          <p className="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded whitespace-pre-wrap">
+                            {item.comments}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <h4 className="text-lg font-semibold text-gray-800 mb-4">Evaluation Checklist</h4>
-          <div className="space-y-4">
-            {report.checklist?.map((item: any) => (
-              <div
-                key={item.id}
-                className="border-b border-gray-200 last:border-0 pb-4 last:pb-0"
-              >
-                <div className="flex items-start space-x-3">
-                  {item.isMet ? (
-                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">{item.criteria}</p>
-                    {item.comments && (
-                      <p className="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded whitespace-pre-wrap">
-                        {item.comments}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+          )
+        )}
 
-      {/* Evidence Gallery */}
-      {report.evidence && report.evidence.length > 0 && (
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <h4 className="text-lg font-semibold text-gray-800 mb-4">
-            Evidence Collected ({report.evidence.length})
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {report.evidence.map((item: any) => (
-              <a
-                key={item.id}
-                href={item.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors"
-              >
-                {item.type === 'photo' ? (
+        {/* Evidence Gallery */}
+        {report.evidence && report.evidence.length > 0 && (
+          <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <h4 className="text-lg font-semibold text-gray-800 mb-4">
+              Evidence Collected ({report.evidence.length})
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {report.evidence.map((item: any) => (
+                <a
+                  key={item.id}
+                  href={item.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors"
+                >
                   <div className="aspect-square bg-blue-100 rounded-lg flex items-center justify-center mb-2">
-                    <span className="text-2xl">📷</span>
+                    <span className="text-2xl">{item.type === 'photo' ? '📷' : '📄'}</span>
                   </div>
-                ) : (
-                  <div className="aspect-square bg-purple-100 rounded-lg flex items-center justify-center mb-2">
-                    <span className="text-2xl">📄</span>
-                  </div>
-                )}
-                <p className="text-xs font-medium text-gray-700 truncate">{item.fileName}</p>
-                {item.description && (
-                  <p className="text-xs text-gray-500 mt-1 truncate">{item.description}</p>
-                )}
-              </a>
-            ))}
+                  <p className="text-xs font-medium text-gray-700 truncate">{item.fileName}</p>
+                  {item.description && (
+                    <p className="text-xs text-gray-500 mt-1 truncate">{item.description}</p>
+                  )}
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-};
+        )}
+      </div>
+    );
+  };
 
+  // ─── OUTCOME LETTER TAB ──────────────────────────────────────────────────────
   const renderOutcomeLetterTab = () => {
     if (!selectedApplication) return null;
-
     const letter = getOutcomeLetter(selectedApplication);
 
     if (!letter) {
       return (
-        <div className="bg-gray-50 p-6 rounded-lg text-center">
+        <div className="bg-gray-50 p-8 rounded-xl text-center border border-dashed border-gray-300">
           <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
           <p className="text-sm text-gray-500">No outcome letter generated yet.</p>
         </div>
@@ -1174,7 +1838,7 @@ ${userRole}`
 
     return (
       <div className="space-y-4">
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">Letter Details</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
@@ -1193,12 +1857,115 @@ ${userRole}`
             </div>
           </div>
         </div>
-
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">Letter Body</h4>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{letter.letterBody}</p>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── STAGE ACTIONS ───────────────────────────────────────────────────────────
+  const renderStageActions = (app: ApplicationStatus) => {
+    const workflow = getWorkflow(app);
+    const status = workflow?.status || 'pending_assistant_director_review';
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Review Notes</label>
+          <textarea
+            rows={3}
+            value={commentInput}
+            onChange={(e) => setCommentInput(e.target.value)}
+            placeholder="Add notes / review comments..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {status === 'pending_assistant_director_review' && (
+            <button
+              onClick={() => handleAssistantDirectorReview(app)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+            >
+              Review & Forward
+            </button>
+          )}
+          {status === 'pending_deputy_director_review' && (
+            <button
+              onClick={() => handleDeputyDirectorRecommend(app)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+            >
+              Recommend
+            </button>
+          )}
+          {status === 'pending_domains_officer_review' && (
+            <button
+              onClick={() => handleDomainsOfficerRecommendReport(app)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
+            >
+              Recommend for IAC
+            </button>
+          )}
+          {status === 'pending_iac_approval' && (
+            <>
+              <button
+                onClick={() => handleIacResolution(app, 'approved')}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+              >
+                Approve Report
+              </button>
+              <button
+                onClick={() => handleIacResolution(app, 'declined')}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+              >
+                Decline Report
+              </button>
+            </>
+          )}
+          {status === 'pending_outcome_letter_generation' && (
+            <button
+              onClick={() => openLetterEditor(app)}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-sm"
+            >
+              Generate Outcome Letter
+            </button>
+          )}
+          {status === 'pending_domains_officer_outcome_review' && (
+            <button
+              onClick={() => handleDomainsOfficerOutcomeRecommend(app)}
+              className="px-4 py-2 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 text-sm"
+            >
+              Recommend Outcome Letter
+            </button>
+          )}
+          {status === 'pending_chief_director_approval' && (
+            <>
+              <button
+                onClick={() => handleChiefDirectorFinal(app, 'approved')}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+              >
+                Approve Outcome Letter
+              </button>
+              <button
+                onClick={() => handleChiefDirectorFinal(app, 'declined')}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+              >
+                Decline Outcome Letter
+              </button>
+            </>
+          )}
+          {status === 'approved' && !workflow?.communicatedAt && (
+            <button
+              onClick={() => handleCommunicateOutcome(app)}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm flex items-center"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Communicate Outcome
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1216,8 +1983,47 @@ ${userRole}`
     'declined',
   ];
 
+  // Determine which tabs to show for the selected application
+  const getAvailableTabs = (): { key: ModalTab; label: string }[] => {
+    if (!selectedApplication) return [];
+    const tabs: { key: ModalTab; label: string }[] = [
+      { key: 'details', label: 'Details' },
+    ];
+
+    // Acknowledgement – show if letter exists or there is any initial review record
+    if (
+      selectedApplication.acknowledgementLetter ||
+      (selectedApplication as any).initialReview
+    ) {
+      tabs.push({ key: 'acknowledgement', label: 'Acknowledgement' });
+    }
+
+    // AI Report – show if finalReview with aiRecommendation exists
+    if (selectedApplication.finalReview?.aiRecommendation) {
+      tabs.push({ key: 'ai-report', label: 'AI Report' });
+    }
+
+    // History – show if evaluationHistory has entries
+    if (selectedApplication.evaluationHistory && selectedApplication.evaluationHistory.length > 0) {
+      tabs.push({ key: 'history', label: 'History' });
+    }
+
+    // Desktop Evaluation – always attempt to show (will show empty state if none found)
+    tabs.push({ key: 'desktop-evaluation', label: 'Desktop Evaluation' });
+
+    // Site Visit Report – always present (it's required to appear in this page)
+    tabs.push({ key: 'site-visit-report', label: 'Site Visit Report' });
+
+    // Outcome Letter
+    tabs.push({ key: 'outcome-letter', label: 'Outcome Letter' });
+
+    return tabs;
+  };
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* Page Header */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-6">
         <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white">
           <div className="flex items-center gap-3">
@@ -1233,12 +2039,12 @@ ${userRole}`
           </div>
         </div>
 
+        {/* Stats */}
         <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm text-blue-600">Completed Site Visits</p>
             <p className="text-2xl font-bold text-blue-800">{completedVisitApps.length}</p>
           </div>
-
           <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
             <p className="text-sm text-yellow-600">Pending Approvals</p>
             <p className="text-2xl font-bold text-yellow-800">
@@ -1250,14 +2056,12 @@ ${userRole}`
               }
             </p>
           </div>
-
           <div className="rounded-xl border border-green-200 bg-green-50 p-4">
             <p className="text-sm text-green-600">Approved</p>
             <p className="text-2xl font-bold text-green-800">
               {filteredApplications.filter((a) => getWorkflow(a)?.status === 'approved').length}
             </p>
           </div>
-
           <div className="rounded-xl border border-red-200 bg-red-50 p-4">
             <p className="text-sm text-red-600">Declined</p>
             <p className="text-2xl font-bold text-red-800">
@@ -1267,6 +2071,7 @@ ${userRole}`
         </div>
       </div>
 
+      {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
@@ -1279,7 +2084,6 @@ ${userRole}`
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md"
             />
           </div>
-
           <div>
             <select
               value={statusFilter}
@@ -1294,7 +2098,6 @@ ${userRole}`
               ))}
             </select>
           </div>
-
           <div className="flex justify-end">
             <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
               <Download className="w-4 h-4 mr-2" />
@@ -1304,6 +2107,7 @@ ${userRole}`
         </div>
       </div>
 
+      {/* Applications by Stage */}
       {completedVisitApps.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
           <AlertCircle className="w-10 h-10 text-gray-400 mx-auto mb-3" />
@@ -1332,37 +2136,29 @@ ${userRole}`
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Application
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Organisation
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Qualification
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Region
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Site Visit
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Workflow Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
+                        {[
+                          'Application',
+                          'Organisation',
+                          'Qualification',
+                          'Region',
+                          'Site Visit',
+                          'Workflow Status',
+                          'Actions',
+                        ].map((h) => (
+                          <th
+                            key={h}
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            {h}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
-
                     <tbody className="bg-white divide-y divide-gray-200">
                       {apps.map((app) => {
                         const workflow =
                           getWorkflow(app) ||
-                          ({
-                            status: 'pending_assistant_director_review',
-                          } as OutcomeLetterWorkflow);
+                          ({ status: 'pending_assistant_director_review' } as OutcomeLetterWorkflow);
 
                         return (
                           <tr key={app.id} className="hover:bg-gray-50">
@@ -1371,23 +2167,19 @@ ${userRole}`
                                 {app.applicationId}
                               </div>
                             </td>
-
                             <td className="px-6 py-4">
                               <div className="text-sm font-medium text-gray-900">
                                 {app.applicationData?.applicantInfo.organisationName}
                               </div>
                             </td>
-
                             <td className="px-6 py-4">
                               <div className="text-sm text-gray-900 max-w-xs truncate">
                                 {app.applicationData?.qualification}
                               </div>
                             </td>
-
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {app.applicationData?.applicantInfo.region}
                             </td>
-
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {app.siteVisitSchedule?.visitCompletedAt
                                 ? new Date(
@@ -1395,7 +2187,6 @@ ${userRole}`
                                   ).toLocaleDateString()
                                 : 'Completed'}
                             </td>
-
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
                                 className={`px-2.5 py-1 text-xs font-medium rounded-full ${STAGE_BADGES[workflow.status]}`}
@@ -1403,7 +2194,6 @@ ${userRole}`
                                 {STAGE_LABELS[workflow.status]}
                               </span>
                             </td>
-
                             <td className="px-6 py-4 whitespace-nowrap">
                               <button
                                 onClick={() => openApplicationModal(app)}
@@ -1425,9 +2215,11 @@ ${userRole}`
         </div>
       )}
 
+      {/* Application Detail Modal */}
       {selectedApplication && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
             <div className="p-5 border-b border-gray-200 sticky top-0 bg-white z-10">
               <div className="flex justify-between items-start gap-4">
                 <div>
@@ -1438,7 +2230,6 @@ ${userRole}`
                     {selectedApplication.applicationData?.applicantInfo.organisationName}
                   </p>
                 </div>
-
                 <button
                   onClick={closeApplicationModal}
                   className="text-gray-500 hover:text-gray-700"
@@ -1447,53 +2238,42 @@ ${userRole}`
                 </button>
               </div>
 
-              <div className="flex gap-4 mt-4 border-b border-gray-200">
-                <button
-                  onClick={() => setModalTab('details')}
-                  className={`pb-2 px-1 text-sm font-medium ${
-                    modalTab === 'details'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-500'
-                  }`}
-                >
-                  Details
-                </button>
-                <button
-                  onClick={() => setModalTab('site-visit-report')}
-                  className={`pb-2 px-1 text-sm font-medium ${
-                    modalTab === 'site-visit-report'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-500'
-                  }`}
-                >
-                  Site Visit Report
-                </button>
-                <button
-                  onClick={() => setModalTab('outcome-letter')}
-                  className={`pb-2 px-1 text-sm font-medium ${
-                    modalTab === 'outcome-letter'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-500'
-                  }`}
-                >
-                  Outcome Letter
-                </button>
+              {/* Dynamic Tabs */}
+              <div className="flex gap-1 mt-4 border-b border-gray-200 flex-wrap">
+                {getAvailableTabs().map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setModalTab(key)}
+                    className={`pb-2 px-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                      modalTab === key
+                        ? 'text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
 
+            {/* Modal Body */}
             <div className="p-5 space-y-5">
               {modalTab === 'details' && renderDetailsTab()}
+              {modalTab === 'acknowledgement' && renderAcknowledgementTab()}
+              {modalTab === 'ai-report' && renderAIReportTab()}
+              {modalTab === 'history' && renderHistoryTab()}
+              {modalTab === 'desktop-evaluation' && renderDesktopEvaluationTab()}
               {modalTab === 'site-visit-report' && renderSiteVisitReportTab()}
               {modalTab === 'outcome-letter' && renderOutcomeLetterTab()}
 
+              {/* Workflow Actions */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <h4 className="text-sm font-semibold text-blue-800 mb-3">
-                  Review Actions
-                </h4>
+                <h4 className="text-sm font-semibold text-blue-800 mb-3">Review Actions</h4>
                 {renderStageActions(selectedApplication)}
               </div>
             </div>
 
+            {/* Modal Footer */}
             <div className="p-5 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
               <button
                 onClick={closeApplicationModal}
@@ -1506,6 +2286,7 @@ ${userRole}`
         </div>
       )}
 
+      {/* Letter Editor Modal */}
       {showLetterEditor && selectedApplication && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
@@ -1513,7 +2294,6 @@ ${userRole}`
               <h3 className="text-lg font-semibold text-gray-900">Generate Outcome Letter</h3>
               <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId}</p>
             </div>
-
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1525,7 +2305,6 @@ ${userRole}`
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Letter Body
@@ -1538,7 +2317,6 @@ ${userRole}`
                 />
               </div>
             </div>
-
             <div className="p-5 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
               <button
                 onClick={() => setShowLetterEditor(false)}
