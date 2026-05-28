@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { QAInternalRoleSelector } from './QAInternalRoleSelector';
 import { cn } from '@/lib/utils';
-import { 
+import {
+  LayoutDashboard,
   Users,
   BookOpen,
   Award,
@@ -20,6 +21,7 @@ interface QAInternalSideBarProps {
 
 // QA Internal nav items
 const qaInternalNavItems = [
+  { path: '/departments/quality-assurance/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/departments/quality-assurance/learner-enrolment', label: 'Learner Enrolment', icon: Users },
   { path: '/departments/quality-assurance/curriculum-implementation', label: 'Curriculum Implementation', icon: BookOpen },
   { path: '/departments/quality-assurance/skills-programmes', label: 'Skills Programmes', icon: Award },
