@@ -233,7 +233,13 @@ const createBatchId = () =>
 const ExternalLearnerEnrolment = () => {
   const { currentUser } = useApp();
 
-  const [enrolments, setEnrolments] = useState<LearnerEnrolmentBatch[]>([]);
+  const [enrolments, setEnrolments] = useState<LearnerEnrolmentBatch[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* fall through */ }
+    }
+    return [];
+  });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedEnrolment, setSelectedEnrolment] = useState<LearnerEnrolmentBatch | null>(null);
@@ -267,17 +273,6 @@ const ExternalLearnerEnrolment = () => {
   const [gateSimulationChoice, setGateSimulationChoice] = useState<'passed' | 'failed'>('passed');
   const [gateEvaluation, setGateEvaluation] = useState<LearnerEnrolmentBatch['gateEvaluation']>(null);
   const [draftReport, setDraftReport] = useState<DraftReport | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setEnrolments(JSON.parse(saved));
-      } catch {
-        setEnrolments([]);
-      }
-    }
-  }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(enrolments));

@@ -83,6 +83,7 @@ import InternalLearnerEnrolment from "./pages/QA/QAInternal/InternalLearnerEnrol
 import InternalCurriculumImplementation from "./pages/QA/QAInternal/InternalCurriculumImplementation";
 import InternalSkillsProgrammes from "./pages/QA/QAInternal/InternalSkillsProgrammes";
 import InternalHistoricalQualifications from "./pages/QA/QAInternal/InternalHistoricalQualifications";
+import QADashboard from "./pages/QA/QADashboard";
 import ResearchAuditTrail from "./pages/research/internal/ResearchAuditTrail";
 
 import ProtectedDepartmentRoute from "@/components/ProtectedDepartmentRoute";
@@ -407,13 +408,17 @@ const App = () => {
       <ProtectedDepartmentRoute department="qa">
         <QAInternalSideBar>
           <Routes>
-            <Route 
-              path="" 
-              element={<Navigate to="/departments/quality-assurance/learner-enrolment" replace />} 
+            <Route
+              path=""
+              element={<Navigate to="/departments/quality-assurance/dashboard" replace />}
             />
-            <Route 
-              path="learner-enrolment" 
-              element={<InternalLearnerEnrolment />} 
+            <Route
+              path="dashboard"
+              element={<QADashboard />}
+            />
+            <Route
+              path="learner-enrolment"
+              element={<InternalLearnerEnrolment />}
             />
             <Route 
               path="curriculum-implementation" 
@@ -437,7 +442,7 @@ const App = () => {
             {/* Redirect old QA path */}
   <Route 
     path="/departments/qa/*" 
-    element={<Navigate to="/departments/quality-assurance/learner-enrolment" replace />} 
+    element={<Navigate to="/departments/quality-assurance/dashboard" replace />} 
   />
 
   {/* Catch all for unknown routes */}
