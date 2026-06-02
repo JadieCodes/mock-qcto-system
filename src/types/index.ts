@@ -646,6 +646,8 @@ siteVisitAssignedBy?: string;
   finalRejectionReason?: string;
   finalRejectionDate?: string;
   finalRejectionCriteria?: string[];
+
+  
 }
 export type SiteVisitStatus =
  'pending_confirmation'
@@ -689,7 +691,94 @@ durationMinutes?: number;
   rescheduleRequestedBy?: 'applicant';
   rescheduleReason?: string;
 }
+export interface EvaluationData {
+  evaluationApplications: any[];
+  notes: string;
+  recommendation: 'approve' | 'reject' | null;
+  signature: string;
+  date: string;
+  completedBy: string;
+  completedDate: string;
+}
 
+export interface AcknowledgementLetterData {
+  recipientName: string;
+  recipientOrganization: string;
+  recipientAddress: string;
+  submissionDate: string;
+  skillsProgrammes: Array<{
+    id: string;
+    type: string;
+    title: string;
+    nqfLevel: number;
+    credits: number;
+    curriculumCode: string;
+  }>;
+  documentsChecklist: Array<{
+    documentName: string;
+    submitted: boolean;
+    completed: boolean;
+  }>;
+  additionalNotes: string;
+  senderName: string;
+  senderDesignation: string;
+  letterDate: string;
+}
+
+export interface ApprovalLetterData {
+  recipientName: string;
+  recipientOrganization: string;
+  recipientAddress: string;
+  approvalDate: string;
+  approvedQualifications: Array<{
+    typeOfDevelopment: string;
+    saqaId: string;
+    qualificationTitle: string;
+    nqfLevel: number;
+    credits: number;
+  }>;
+  clusterName: string;
+  senderName: string;
+  senderDesignation: string;
+  letterDate: string;
+}
+
+export interface DeclineLetterData {
+  recipientName: string;
+  recipientOrganization: string;
+  recipientAddress: string;
+  qualificationType: string;
+  qualificationDescription: string;
+  nqfLevel: number;
+  credits: number;
+  curriculumCode: string;
+  shortcomings: Array<{
+    section: string;
+    problem: string;
+    recommendation: string;
+  }>;
+  additionalNotes: string;
+  senderName: string;
+  senderDesignation: string;
+  letterDate: string;
+}
+
+export interface ReviewAcknowledgementData {
+  recipientName: string;
+  recipientOrganization: string;
+  recipientAddress: string;
+  submissionDate: string;
+  qualifications: Array<{
+    qualificationId: string;
+    qualificationTitle: string;
+    level: number;
+    credits: number;
+    qp: string;
+  }>;
+  senderName: string;
+  senderDesignation: string;
+  letterDate: string;
+}
    // Add these to your existing types file
 
 export interface SiteVisitEvidence {
@@ -774,10 +863,17 @@ export interface DraftReportData {
   applicationId: string;
   applicant: string;
   qualification: string;
+  qualificationType?: string;
+  actionType?: string;
   date: string;
   time: string;
-  documents: DraftReportDocumentItem[];
-  overallStatus: 'complete' | 'incomplete';
+  documents: Array<{
+    label: string;
+    status: boolean;
+    file: string;
+    optional?: boolean;
+  }>;
+  overallStatus: string;
   recommendation: string;
 }
 // types/application.types.ts
@@ -790,21 +886,22 @@ export interface Application {
   qualification: string;
   submissionDate: string;
   status:
-  | 'draft'
-  | 'submitted'
-  | 'document_review'
-  | 'resolution'
-  | 'evaluation'
-  | 'evaluation_summary'
-  | 'development_workspace'
-  | 'approved'
-  | 'rejected';
+    | 'draft'
+    | 'submitted'
+    | 'document_review'
+    | 'resolution'
+    | 'evaluation'
+    | 'evaluation_summary'
+    | 'development_workspace'
+    | 'returned_to_qd'        // ← NEW: REVIEW/DE-ACTIVATE/REPLACE after outcome letter sent
+    | 'approved'
+    | 'rejected';
   documents: {
     applicationLetter: string | null;
     motivation: string | null;
     reference: string | null;
     acrLetter: string | null;
-    other: string |null
+    other: string | null;
   };
   report?: {
     verified: boolean;
@@ -829,7 +926,7 @@ export interface Application {
     reviewDate: string;
     notes: string;
   };
- evaluation?: {
+  evaluation?: {
     qualificationDesign: boolean;
     draftReport: boolean;
     applicationLetter: boolean;
@@ -854,8 +951,7 @@ export interface Application {
     notes: string;
     sentToQualityPartner: boolean;
   };
-   
-   evaluationSummary?: {
+  evaluationSummary?: {
     resolution: string;
     resolutionUploaded: string | null;
     recommended: boolean;
@@ -863,8 +959,185 @@ export interface Application {
     approvalLetter: string | null;
     approvalDate: string;
     approvedBy: string;
+    // Evaluation checklist fields (set when evaluation is completed)
+    evaluationApplications?: Array<{
+      id: string;
+      type: string;
+      ofoCode: string;
+      qualificationTitle: string;
+      specialisation: string;
+      qualityPartner: string;
+      criterionMet: string;
+      rationale: string;
+    }>;
+    notes?: string;
+    recommendation?: 'approve' | 'reject';
+    signature?: string;
+    date?: string;
+    completedBy?: string;
+    completedDate?: string;
+  };
+ 
+  // ── NEW: Acknowledgement letter (sent during Initial Evaluation) ───────────
+  acknowledgementLetter?: {
+    recipientName: string;
+    recipientOrganization: string;
+    recipientAddress: string;
+    submissionDate: string;
+    skillsProgrammes: Array<{
+      id: string;
+      type: string;
+      title: string;
+      nqfLevel: number;
+      credits: number;
+      curriculumCode: string;
+    }>;
+    documentsChecklist: Array<{
+      documentName: string;
+      submitted: boolean;
+      completed: boolean;
+    }>;
+    additionalNotes: string;
+    senderName: string;
+    senderDesignation: string;
+    letterDate: string;
+  };
+ 
+  // ── NEW: Outcome letter (sent during Evaluation Summary) ──────────────────
+  outcomeLetter?: {
+    sent: boolean;
+    sentDate?: string;
+    letterTypeLabel?: string;   // e.g. 'Approval Letter', 'Decline Letter', 'Acknowledgement of Receipt (Review)'
+    developOutcome?: 'approve' | 'decline' | null;
+    // Common fields
+    recipientName?: string;
+    recipientOrganization?: string;
+    recipientAddress?: string;
+    letterDate?: string;
+    senderName?: string;
+    senderDesignation?: string;
+    receivedDate?: string;
+    // REVIEW: list of qualifications
+    qualifications?: Array<{
+      id: string;
+      qualId: string;
+      qualTitle: string;
+      level: string;
+      credits: string;
+      qap: string;
+    }>;
+    // DE-ACTIVATE / REPLACE: list of programmes
+    programmes?: Array<{
+      id: string;
+      type: string;
+      descriptor: string;
+      setaChamber: string;
+      sicCode: string;
+    }>;
+    // DEVELOP approval
+    iqcDate?: string;
+    cluster?: string;
+    // DEVELOP decline
+    declineQualifications?: Array<{
+      id: string;
+      qualType: string;
+      descriptor: string;
+      nqfLevel: string;
+      credits: string;
+      curriculumCode: string;
+      shortcomings: string;
+    }>;
+    declineRecommendedBy?: string;
+    declineRecommendedByDesignation?: string;
+    declineRecommendedDate?: string;
+    declineApprovedBy?: string;
+    declineApprovedByDesignation?: string;
+    declineApprovedDate?: string;
+  };
+ 
+  // QCTO Annexure D Application Form fields
+  qualificationType?: string;
+  actionType?: string;
+  occupationTitle?: string;
+  ofoCode?: string;
+  specialisationTitle?: string;
+  setaChamber?: string;
+  sicCode?: string;
+  existingQualId?: string;
+  existingQualTitle?: string;
+  existingQualLevel?: string;
+  existingQualCredits?: string;
+  existingQualQP?: string;
+  learnershipRegNo?: string;
+  learnershipTitle?: string;
+  learnershipNqfLevel?: string;
+  errp?: boolean;
+  ndp?: boolean;
+  ngp?: boolean;
+  ipap?: boolean;
+  sips?: boolean;
+  n4n6Reconfig?: boolean;
+  scarceSkills?: boolean;
+  legacyOqsf?: boolean;
+  otherPriority?: boolean;
+  rationale?: string;
+  regulatoryBodies?: string;
+  applicantDesignation?: string;
+  applicantEmail?: string;
+  applicantSignature?: string;
+  applicationDate?: string;
+  qualityPartnerName?: string;
+}
+export interface SavedReport {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  createdBy: string;
+  sections: string[];
+  filters: {
+    timeRange: 'today' | 'week' | 'month' | 'all';
+    type: 'qualification' | 'learnership' | 'all';
+    status: string;
+  };
+  // NEW: Store the actual report content data
+  reportData: {
+    stats: {
+      totalQualifications: number;
+      totalLearnerships: number;
+      activeDevelopment: number;
+      pendingApproval: number;
+      approvedQualifications: number;
+      approvedLearnerships: number;
+      pendingCorrections: number;
+      avgApprovalTime: string;
+    };
+    phaseProgress: Array<{
+      phase: string;
+      qualifications: number;
+      learnerships: number;
+      total: number;
+    }>;
+    publicInputItems: Array<{
+      itemId: string;
+      title: string;
+      type: string;
+      received: number;
+      resolved: number;
+      status: string;
+    }>;
+    qualificationsList: any[];
+    learnershipsList: any[];
   };
 }
+
+export type ReportSection =
+  | 'submissionOverview'
+  | 'phaseProgress'
+  | 'publicInputSummary'
+  | 'approvalStatus'
+  | 'qualificationsList'
+  | 'learnershipsList';
 
 
 

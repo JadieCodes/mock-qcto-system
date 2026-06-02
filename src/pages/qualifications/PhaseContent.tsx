@@ -125,23 +125,47 @@ export default function PhaseContent({ phase, qualificationCode, qualificationTi
   
 
   // In PhaseContent.tsx - add this useEffect to listen for updates
+// In PhaseContent.tsx - improved storage listener
 useEffect(() => {
-  const handleStorageChange = (e: StorageEvent) => {
-    if (e.key === 'cyclePlans' && e.newValue) {
-      const plans = JSON.parse(e.newValue);
-      const updatedPlan = plans.find((p: any) => p.qualificationCode === qualificationCode);
-      if (updatedPlan) {
-        const updatedPhase = updatedPlan.phases.find((p: Phase) => p.name === phase.name);
-        if (updatedPhase && (updatedPhase.reportSubmitted !== phase.reportSubmitted || updatedPhase.status !== phase.status)) {
-          // Force refresh by reloading or updating state
+  // Function to check for updates from internal side
+  const checkForUpdates = () => {
+    const cyclePlans = localStorage.getItem('cyclePlans');
+    if (cyclePlans) {
+      const plans = JSON.parse(cyclePlans);
+      const currentPlan = plans.find((p: any) => p.qualificationCode === qualificationCode);
+      if (currentPlan) {
+        const updatedPhase = currentPlan.phases.find((p: Phase) => p.name === phase.name);
+        if (updatedPhase && (updatedPhase.approved !== phase.approved || 
+            updatedPhase.reportSubmitted !== phase.reportSubmitted)) {
           window.location.reload();
         }
       }
     }
   };
+
+  // Listen for storage events
+  const handleStorageChange = (e: StorageEvent) => {
+    if (e.key === 'cyclePlans' || e.key === 'internalCyclePlans' || e.key === 'submittedPhaseReports') {
+      checkForUpdates();
+    }
+  };
+  
+  // Listen for custom refresh event
+  const handleRefresh = () => {
+    checkForUpdates();
+  };
   
   window.addEventListener('storage', handleStorageChange);
-  return () => window.removeEventListener('storage', handleStorageChange);
+  window.addEventListener('refreshWorkspace', handleRefresh);
+  
+  // Poll for changes every 3 seconds (fallback for same-tab updates)
+  const intervalId = setInterval(checkForUpdates, 3000);
+  
+  return () => {
+    window.removeEventListener('storage', handleStorageChange);
+    window.removeEventListener('refreshWorkspace', handleRefresh);
+    clearInterval(intervalId);
+  };
 }, [phase, qualificationCode]);
 
   const handleStartPhase = () => {
@@ -209,10 +233,52 @@ useEffect(() => {
     setIsModalOpen(false);
   };
 
-  const handleSavePhaseData = (updatedData: any) => {
-    setPhaseData(updatedData);
-  };
-
+ const handleSavePhaseData = (updatedData: any) => {
+  setPhaseData(updatedData);
+  
+  // If this is a submission (has submittedAt), update the local phase status
+  if (updatedData.submittedAt) {
+    // Update the phase in localStorage
+    const cyclePlans = localStorage.getItem('cyclePlans');
+    if (cyclePlans) {
+      const plans = JSON.parse(cyclePlans);
+      const updatedPlans = plans.map((plan: any) => {
+        if (plan.qualificationCode === qualificationCode) {
+          const updatedPhases = plan.phases.map((p: Phase) => 
+            p.name === phase.name 
+              ? { ...p, status: 'completed', reportSubmitted: true, reportData: updatedData, completedDate: new Date().toISOString() }
+              : p
+          );
+          return { ...plan, phases: updatedPhases };
+        }
+        return plan;
+      });
+      localStorage.setItem('cyclePlans', JSON.stringify(updatedPlans));
+      
+      // Also update internalCyclePlans
+      const internalPlans = localStorage.getItem('internalCyclePlans');
+      if (internalPlans) {
+        const internal = JSON.parse(internalPlans);
+        const updatedInternal = internal.map((plan: any) => {
+          if (plan.qualificationCode === qualificationCode) {
+            const updatedPhases = plan.phases.map((p: Phase) => 
+              p.name === phase.name 
+                ? { ...p, status: 'completed', reportSubmitted: true, reportData: updatedData, completedDate: new Date().toISOString() }
+                : p
+            );
+            return { ...plan, phases: updatedPhases };
+          }
+          return plan;
+        });
+        localStorage.setItem('internalCyclePlans', JSON.stringify(updatedInternal));
+      }
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new StorageEvent('storage', { key: 'cyclePlans', newValue: JSON.stringify(updatedPlans) }));
+      window.dispatchEvent(new CustomEvent('refreshWorkspace'));
+    }
+  }
+};
  // In PhaseContent.tsx - update getStatusBadge
 const getStatusBadge = () => {
   if (phase.approved) {

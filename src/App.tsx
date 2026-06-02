@@ -88,6 +88,7 @@ import ResearchAuditTrail from "./pages/research/internal/ResearchAuditTrail";
 
 import ProtectedDepartmentRoute from "@/components/ProtectedDepartmentRoute";
 import RejectedApplicationsHistory from "./pages/accreditation/RejectedApplicationsHistory";
+import { QualificationReporting } from "./pages/qualifications/internal/QualificationReporting";
 
 const App = () => {
   const [userRole, setUserRole] = useState('applicant');
@@ -200,6 +201,7 @@ const App = () => {
             <Route path="public-input" element={<PublicInputDashboard />} />
             <Route path="approval" element={<QualificationsApprovalPhase />} />
             <Route path="reporting" element={<InternalReporting />} />
+            <Route path="reporting-dash" element={<QualificationReporting />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </InternalQualificationsLayout>
