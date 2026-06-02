@@ -25,7 +25,11 @@ import {
   Share2,
   History,
   Upload,
-  ClipboardList
+  ClipboardList,
+  Building2,
+  FileCheck,
+  Target,
+  BookOpen
 } from 'lucide-react';
 import type { Application, DraftReportData } from '@/types';
 
@@ -51,7 +55,6 @@ export default function ApplicationDetailsModal({
   
   // Document Review Checklist State
   const [documentChecklist, setDocumentChecklist] = useState({
-    applicationLetter: !!application?.documents?.applicationLetter,
     motivation: !!application?.documents?.motivation,
     reference: !!application?.documents?.reference,
     acrLetter: !!application?.documents?.acrLetter
@@ -61,7 +64,6 @@ export default function ApplicationDetailsModal({
   const [resolutionChecklist, setResolutionChecklist] = useState({
     qualificationDesign: true,
     draftReport: !!application?.report,
-    applicationLetter: !!application?.documents?.applicationLetter,
     motivation: !!application?.documents?.motivation,
     reference: !!application?.documents?.reference,
     acrLetter: !!application?.documents?.acrLetter
@@ -78,35 +80,31 @@ export default function ApplicationDetailsModal({
       ? (application.report.draftReport as DraftReportData)
       : null;
 
-  // Mock data for demonstration - in real app, this would come from props/API
-  const applicantDetails = {
-    fullName: application.applicantName,
-    email: 'john.smith@email.com',
-    phone: '+27 12 345 6789',
-    address: '123 Main Street, Johannesburg, 2001',
-    idNumber: '900101 5084 089',
-    dateOfBirth: '1990-01-01',
-    nationality: 'South African'
+  // Format display values
+  const formatBoolean = (value: boolean | undefined) => {
+    if (value === undefined) return 'Not specified';
+    return value ? '✓ Yes' : '✗ No';
   };
 
-  const qualificationDetails = {
-    title: application.qualification,
-    nqfLevel: '7',
-    credits: 120,
-    saqaId: '97654',
-    field: 'Business, Commerce and Management Studies',
-    subfield: 'Project Management'
+  const getQualificationTypeDisplay = (type: string | undefined) => {
+    if (!type) return 'Not specified';
+    return type;
+  };
+
+  const getActionTypeDisplay = (type: string | undefined) => {
+    if (!type) return 'Not specified';
+    return type;
   };
 
   const documentList = [
-    { id: 'applicationLetter', name: 'Application Letter', file: application.documents?.applicationLetter, uploadedDate: application.submissionDate },
     { id: 'motivation', name: 'Motivation Letter', file: application.documents?.motivation, uploadedDate: application.submissionDate },
     { id: 'reference', name: 'Reference', file: application.documents?.reference, uploadedDate: application.submissionDate },
     { id: 'acrLetter', name: 'ACR Letter', file: application.documents?.acrLetter, uploadedDate: application.submissionDate },
+    { id: 'other', name: 'Other Document', file: application.documents?.other, uploadedDate: application.submissionDate },
   ];
 
   const historyItems = [
-    { action: 'Application Submitted', user: 'System', date: application.submissionDate, description: 'Application received and logged' },
+    { action: 'Application Submitted', user: application.applicantName || 'System', date: application.submissionDate, description: 'Application received and logged' },
     ...(application.documentReview ? [
       { action: 'Document Review Completed', user: application.documentReview.reviewedBy, date: application.documentReview.reviewDate, description: application.documentReview.notes }
     ] : []),
@@ -131,26 +129,13 @@ export default function ApplicationDetailsModal({
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case 'verified':
-        return <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Verified</span>;
-      case 'pending':
-        return <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</span>;
-      case 'flagged':
-        return <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Flagged</span>;
-      default:
-        return <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">{status}</span>;
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
           <div>
-            <h2 className="text-xl font-semibold text-gray-800">Application Details</h2>
+            <h2 className="text-xl font-semibold text-gray-800">QCTO Application Details</h2>
             <p className="text-sm text-gray-500 mt-1">ID: {application.id} | Submitted: {application.submissionDate}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -176,7 +161,7 @@ export default function ApplicationDetailsModal({
           </div>
         </div>
 
-        {/* Tabs - Removed Notes Tab, Added Checklist Tab */}
+        {/* Tabs */}
         <div className="px-6 border-b">
           <div className="flex gap-6">
             <button
@@ -219,87 +204,221 @@ export default function ApplicationDetailsModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Details Tab */}
+          {/* Details Tab - Full QCTO Application Data */}
           {activeTab === 'details' && (
             <div className="space-y-6">
-              {/* Applicant Information */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-medium mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  Applicant Information
+              
+              {/* SECTION A: Development Requested */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                  <Target className="w-5 h-5" />
+                  SECTION A: TYPE OF DEVELOPMENT REQUESTED
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-500">Full Name</p>
-                    <p className="text-sm font-medium">{applicantDetails.fullName}</p>
+                    <p className="text-xs text-gray-500">Qualification Type</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">
+                      {getQualificationTypeDisplay(application.qualificationType)}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Email</p>
-                    <p className="text-sm font-medium">{applicantDetails.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Phone</p>
-                    <p className="text-sm font-medium">{applicantDetails.phone}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">ID Number</p>
-                    <p className="text-sm font-medium">{applicantDetails.idNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Date of Birth</p>
-                    <p className="text-sm font-medium">{applicantDetails.dateOfBirth}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Nationality</p>
-                    <p className="text-sm font-medium">{applicantDetails.nationality}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Address</p>
-                    <p className="text-sm font-medium">{applicantDetails.address}</p>
+                    <p className="text-xs text-gray-500">Action Type</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">
+                      {getActionTypeDisplay(application.actionType)}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Qualification Information */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-medium mb-3 flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4" />
-                  Qualification Information
+              {/* SECTION B1: Occupation Details */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                  <Briefcase className="w-5 h-5" />
+                  SECTION B1: OCCUPATION DETAILS
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-500">Qualification Title</p>
-                    <p className="text-sm font-medium">{qualificationDetails.title}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">SAQA ID</p>
-                    <p className="text-sm font-medium">{qualificationDetails.saqaId}</p>
+                    <p className="text-xs text-gray-500">Occupation Title</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.occupationTitle || 'Not specified'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">NQF Level</p>
-                    <p className="text-sm font-medium">Level {qualificationDetails.nqfLevel}</p>
+                    <p className="text-xs text-gray-500">OFO Code</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.ofoCode || 'Not specified'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Credits</p>
-                    <p className="text-sm font-medium">{qualificationDetails.credits}</p>
+                    <p className="text-xs text-gray-500">Specialisation Title</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.specialisationTitle || 'Not specified'}</p>
                   </div>
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Field</p>
-                    <p className="text-sm font-medium">{qualificationDetails.field}</p>
+                  <div>
+                    <p className="text-xs text-gray-500">SETA Chamber</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.setaChamber || 'Not specified'}</p>
                   </div>
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Subfield</p>
-                    <p className="text-sm font-medium">{qualificationDetails.subfield}</p>
+                  <div>
+                    <p className="text-xs text-gray-500">SIC Code</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.sicCode || 'Not specified'}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Draft Report */}
+              {/* SECTION B2: Existing Qualification */}
+              {(application.existingQualId || application.existingQualTitle) && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                    <BookOpen className="w-5 h-5" />
+                    SECTION B2: EXISTING QUALIFICATION AFFECTED
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Qualification ID</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.existingQualId || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Qualification Title</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.existingQualTitle || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">NQF Level</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.existingQualLevel || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Credits</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.existingQualCredits || 'Not specified'}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-xs text-gray-500">Quality Partner (QP)</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.existingQualQP || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION B3: Learnership Details */}
+              {(application.learnershipRegNo || application.learnershipTitle) && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                    <Award className="w-5 h-5" />
+                    SECTION B3: LEARNERSHIP DETAILS
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Learnership Registration Number</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.learnershipRegNo || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Learnership Title</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.learnershipTitle || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">NQF Level</p>
+                      <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.learnershipNqfLevel || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION B4: Priority Alignments */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                  <FileCheck className="w-5 h-5" />
+                  SECTION B4: POLICY & PRIORITY ALIGNMENTS
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">ERRP:</span> {formatBoolean(application.errp)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">National Development Plan:</span> {formatBoolean(application.ndp)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">New Growth Path:</span> {formatBoolean(application.ngp)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">Industrial Policy Action Plan:</span> {formatBoolean(application.ipap)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">Strategic Infrastructure Projects:</span> {formatBoolean(application.sips)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">N4-N6 Reconfiguration:</span> {formatBoolean(application.n4n6Reconfig)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">DHET Scarce Skills List:</span> {formatBoolean(application.scarceSkills)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">Legacy OQSF Qualifications:</span> {formatBoolean(application.legacyOqsf)}
+                  </div>
+                  <div className="bg-white px-3 py-2 rounded border text-sm">
+                    <span className="font-medium">Other Priorities:</span> {formatBoolean(application.otherPriority)}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION B5: Rationale */}
+              {application.rationale && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                    <MessageSquare className="w-5 h-5" />
+                    SECTION B5: RATIONALE
+                  </h3>
+                  <div className="bg-white px-4 py-3 rounded border">
+                    <p className="text-sm whitespace-pre-wrap">{application.rationale}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION B6: Regulatory Bodies */}
+              {application.regulatoryBodies && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                    <Building2 className="w-5 h-5" />
+                    SECTION B6: REGULATORY BODIES & STAKEHOLDERS
+                  </h3>
+                  <div className="bg-white px-4 py-3 rounded border">
+                    <p className="text-sm whitespace-pre-wrap">{application.regulatoryBodies}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION C: Quality Partner & Applicant Details */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                  <User className="w-5 h-5" />
+                  SECTION C: QUALITY PARTNER & APPLICANT DETAILS
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-gray-500">Quality Partner Name</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.qualityPartnerName || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Applicant Name</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.applicantName || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Designation</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.applicantDesignation || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Email Address</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.applicantEmail || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Date</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.applicationDate || 'Not specified'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-gray-500">Signature</p>
+                    <p className="text-sm font-medium bg-white px-3 py-1.5 rounded border">{application.applicantSignature || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Draft Report Section */}
               {application.report && (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-medium mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    Draft Report
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                    <FileText className="w-5 h-5" />
+                    GATE EVALUATION REPORT
                   </h3>
 
                   {typeof application.report.draftReport === 'string' ? (
@@ -321,23 +440,23 @@ export default function ApplicationDetailsModal({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <p className="text-xs text-gray-500">Application ID</p>
-                            <p className="text-sm font-medium">
-                              {application.report.draftReport?.applicationId}
-                            </p>
+                            <p className="text-sm font-medium">{application.report.draftReport?.applicationId}</p>
                           </div>
-
                           <div>
                             <p className="text-xs text-gray-500">Applicant</p>
-                            <p className="text-sm font-medium">
-                              {application.report.draftReport?.applicant}
-                            </p>
+                            <p className="text-sm font-medium">{application.report.draftReport?.applicant}</p>
                           </div>
-
+                          <div>
+                            <p className="text-xs text-gray-500">Qualification Type</p>
+                            <p className="text-sm font-medium">{application.report.draftReport?.qualificationType || 'Not specified'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Action Type</p>
+                            <p className="text-sm font-medium">{application.report.draftReport?.actionType || 'Not specified'}</p>
+                          </div>
                           <div className="md:col-span-2">
                             <p className="text-xs text-gray-500">Qualification</p>
-                            <p className="text-sm font-medium">
-                              {application.report.draftReport?.qualification}
-                            </p>
+                            <p className="text-sm font-medium">{application.report.draftReport?.qualification}</p>
                           </div>
                         </div>
 
@@ -355,7 +474,7 @@ export default function ApplicationDetailsModal({
                               <tbody>
                                 {application.report.draftReport?.documents?.map((doc: any, idx: number) => (
                                   <tr key={idx} className="border-t">
-                                    <td className="px-4 py-2">{doc.label}</td>
+                                    <td className="px-4 py-2">{doc.label}{doc.optional && <span className="ml-2 text-xs text-gray-400">(Optional)</span>}</td>
                                     <td className="px-4 py-2">
                                       {doc.status ? (
                                         <span className="text-green-600 font-medium">Present</span>
@@ -365,9 +484,7 @@ export default function ApplicationDetailsModal({
                                         <span className="text-red-600 font-medium">Missing</span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-2 text-gray-600">
-                                      {doc.file || 'Not uploaded'}
-                                    </td>
+                                    <td className="px-4 py-2 text-gray-600">{doc.file || 'Not uploaded'}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -389,7 +506,7 @@ export default function ApplicationDetailsModal({
             </div>
           )}
 
-          {/* Documents Tab - Removed Status and Size Columns */}
+          {/* Documents Tab */}
           {activeTab === 'documents' && (
             <div className="space-y-4">
               {selectedDocument ? (
@@ -426,14 +543,14 @@ export default function ApplicationDetailsModal({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {documentList.map((doc) => (
+                      {documentList.filter(doc => doc.file).map((doc) => (
                         <tr key={doc.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <FileText className="w-4 h-4 text-gray-400" />
                               <span className="text-sm font-medium">{doc.name}</span>
                             </div>
-                           </td>
+                          </td>
                           <td className="px-4 py-3 text-sm">{doc.uploadedDate}</td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
@@ -451,6 +568,13 @@ export default function ApplicationDetailsModal({
                            </td>
                          </tr>
                       ))}
+                      {documentList.filter(doc => doc.file).length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+                            No documents uploaded
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -458,7 +582,7 @@ export default function ApplicationDetailsModal({
             </div>
           )}
 
-          {/* Review Checklist Tab - Moved from Details tab */}
+          {/* Review Checklist Tab */}
           {activeTab === 'checklist' && (
             <div className="space-y-6">
               {mode === 'documentReview' && (
@@ -468,21 +592,6 @@ export default function ApplicationDetailsModal({
                     Document Review Checklist
                   </h3>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between p-2 bg-white rounded">
-                      <span className="text-sm font-medium">Application Letter</span>
-                      <div className="flex items-center gap-2">
-                        {documentChecklist.applicationLetter ? 
-                          <CheckCircle className="w-5 h-5 text-green-500" /> : 
-                          <AlertCircle className="w-5 h-5 text-red-500" />
-                        }
-                        <input
-                          type="checkbox"
-                          checked={documentChecklist.applicationLetter}
-                          onChange={(e) => setDocumentChecklist({ ...documentChecklist, applicationLetter: e.target.checked })}
-                          className="rounded w-4 h-4"
-                        />
-                      </div>
-                    </div>
                     <div className="flex items-center justify-between p-2 bg-white rounded">
                       <span className="text-sm font-medium">Motivation</span>
                       <div className="flex items-center gap-2">
@@ -583,15 +692,6 @@ export default function ApplicationDetailsModal({
                         type="checkbox"
                         checked={resolutionChecklist.draftReport}
                         onChange={(e) => setResolutionChecklist({ ...resolutionChecklist, draftReport: e.target.checked })}
-                        className="rounded w-4 h-4"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between p-2 bg-white rounded">
-                      <span className="text-sm font-medium">Application Letter</span>
-                      <input
-                        type="checkbox"
-                        checked={resolutionChecklist.applicationLetter}
-                        onChange={(e) => setResolutionChecklist({ ...resolutionChecklist, applicationLetter: e.target.checked })}
                         className="rounded w-4 h-4"
                       />
                     </div>

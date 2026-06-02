@@ -72,6 +72,14 @@ const handleLogout = () => {
       count: 6,
       color: "indigo"
     },
+       {
+      path: "/departments/qualifications/reporting-dash",  // Make sure this matches the route
+      label: "Qualifications Reporting",
+      icon: BarChart3,  // Changed from CheckCircle to avoid duplicate icon
+      description: "Reporting workflow management",
+      count: 6,
+      color: "indigo"
+    },
    
   ];
 

@@ -138,6 +138,69 @@ export default function PhaseDevelopment() {
       }
     }
   };
+  // Add this useEffect to PhaseDevelopment.tsx component, before the return statement
+
+// Monitor when all phases are completed and trigger public input
+useEffect(() => {
+  if (!cyclePlan) return;
+  
+  // Check if all phases are approved (Final Verification specifically needs to be approved)
+  const allPhasesApproved = cyclePlan.phases.every(phase => phase.approved === true);
+  const finalPhaseApproved = cyclePlan.phases.find(p => p.name === 'Final Verification')?.approved === true;
+  
+  // Also check if all phases are completed (reportSubmitted)
+  const allPhasesCompleted = cyclePlan.phases.every(phase => phase.reportSubmitted === true);
+  
+  if ((allPhasesApproved || (allPhasesCompleted && finalPhaseApproved)) && cyclePlan.status !== 'submitted_to_public') {
+    // Create or update public input qualification
+    const existingPublicInputs = JSON.parse(localStorage.getItem('publicInputQualifications') || '[]');
+    
+    const existingIndex = existingPublicInputs.findIndex((p: any) => p.qualificationCode === cyclePlan.qualificationCode);
+    
+    const publicInputQualification = {
+      id: cyclePlan.id.toString(),
+      qualificationCode: cyclePlan.qualificationCode,
+      qualificationTitle: cyclePlan.title,
+      qualificationLevel: 5, // You may need to store this in cyclePlan
+      credits: 120,
+      submittedBy: cyclePlan.phases.find(p => p.responsibleRole)?.responsibleRole || 'System',
+      submittedDate: new Date().toISOString().split('T')[0],
+      status: 'pending',
+      allPhasesCompleted: true,
+      comments: [], // Will be populated from generated comments
+      resolutionDocument: undefined
+    };
+    
+    if (existingIndex >= 0) {
+      existingPublicInputs[existingIndex] = { ...existingPublicInputs[existingIndex], status: 'pending', allPhasesCompleted: true };
+    } else {
+      existingPublicInputs.push(publicInputQualification);
+    }
+    
+    localStorage.setItem('publicInputQualifications', JSON.stringify(existingPublicInputs));
+    
+    // Update cycle plan status to prevent re-triggering
+    const allPlans = localStorage.getItem('cyclePlans');
+    if (allPlans) {
+      const plans = JSON.parse(allPlans);
+      const updatedPlans = plans.map((p: any) => 
+        p.qualificationCode === cyclePlan.qualificationCode 
+          ? { ...p, status: 'submitted_to_public' } 
+          : p
+      );
+      localStorage.setItem('cyclePlans', JSON.stringify(updatedPlans));
+      setCyclePlan(prev => prev ? { ...prev, status: 'submitted_to_public' } : prev);
+    }
+    
+    // Dispatch event to notify PublicInputDashboard
+    window.dispatchEvent(new StorageEvent('storage', { 
+      key: 'publicInputQualifications', 
+      newValue: JSON.stringify(existingPublicInputs) 
+    }));
+    
+    console.log(`Qualification ${cyclePlan.qualificationCode} moved to Public Input phase`);
+  }
+}, [cyclePlan]);
 
   if (availableCyclePlans.length === 0) {
     return (

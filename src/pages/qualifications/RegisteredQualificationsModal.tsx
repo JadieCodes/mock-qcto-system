@@ -1,5 +1,70 @@
-// RegisteredQualificationsModal.tsx
 import React, { useState } from 'react';
+
+// Mirrors the official SAQA letter layout — read-only
+function SaqaLetterPreview({ letter }: { letter: any }) {
+  if (!letter) return null;
+  return (
+    <div className="bg-white border-2 border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#003087] px-6 py-3 flex items-center justify-between">
+        <div className="text-white">
+          <p className="text-xs font-bold tracking-widest uppercase opacity-80">South African Qualifications Authority</p>
+          <p className="text-xs opacity-60">SAQA House · 1067 Arcadia Street · Hatfield, 0083</p>
+        </div>
+        <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center">
+          <span className="text-[#003087] font-black text-lg">S</span>
+        </div>
+      </div>
+      <div className="p-6 space-y-4 font-serif text-sm text-gray-800">
+        <div className="text-right text-gray-500">{letter.letterDate}</div>
+        <div className="space-y-0.5">
+          <p className="font-semibold">{letter.recipientName}</p>
+          <p>{letter.recipientTitle}</p>
+          <p>{letter.recipientOrganisation}</p>
+        </div>
+        <p className="font-semibold">Dear {letter.recipientName?.split(' ').slice(-1)[0]}</p>
+        <p className="font-bold text-center underline uppercase tracking-wide">
+          Registration of OQSF Qualifications on the NQF by SAQA
+        </p>
+        <p className="text-sm">
+          I am pleased to inform you that SAQA's NQF Qualifications Committee, at its meeting held on{' '}
+          <strong>{letter.committeeDate}</strong>, approved the registration of the following OQSF
+          qualification(s) on the National Qualifications Framework.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse border border-gray-400 text-xs">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="border border-gray-400 px-3 py-2 text-left font-bold w-8">No.</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-bold">Qualification Title</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-bold w-24">NQF Level</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-bold w-20">Min Credits</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-bold w-20">SAQA ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(letter.rows || []).map((row: any, i: number) => (
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="border border-gray-400 px-3 py-2">{row.no}.</td>
+                  <td className="border border-gray-400 px-3 py-2">{row.qualificationTitle}</td>
+                  <td className="border border-gray-400 px-3 py-2">{row.nqfLevel}</td>
+                  <td className="border border-gray-400 px-3 py-2">{row.minCredits}</td>
+                  <td className="border border-gray-400 px-3 py-2">{row.saqaId}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p>Should you require further information, please contact me.</p>
+        <p>Sincerely</p>
+        <div className="mt-4">
+          <div className="w-32 border-b border-gray-500 mb-1" />
+          <p className="font-bold uppercase">{letter.signedBy}</p>
+          <p className="font-bold uppercase">{letter.signedByTitle}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface RegisteredQualificationsModalProps {
   isOpen: boolean;
@@ -7,405 +72,197 @@ interface RegisteredQualificationsModalProps {
   qualification: any | null;
 }
 
-export default function RegisteredQualificationsModal({ 
-  isOpen, 
-  onClose, 
-  qualification 
+export default function RegisteredQualificationsModal({
+  isOpen,
+  onClose,
+  qualification,
 }: RegisteredQualificationsModalProps) {
-  const [activeTab, setActiveTab] = useState<'application' | 'qualifications' | 'publicInput' | 'registration'>('application');
+  const [activeTab, setActiveTab] = useState<'registration' | 'saqa_letter' | 'qp_notification'>('registration');
 
   if (!isOpen || !qualification) return null;
 
+  const dl = qualification.digitalSaqaLetter;
+  const qpNotif = qualification.qpNotification;
+
   const tabs = [
-    { id: 'application', label: 'Application' },
-    { id: 'qualifications', label: 'Qualifications Development' },
-    { id: 'publicInput', label: 'Public Input' },
-    { id: 'registration', label: 'Registration Details' }
+    { id: 'registration', label: 'Registration Details' },
+    ...(dl ? [{ id: 'saqa_letter', label: 'SAQA Registration Letter' }] : []),
+    ...(qpNotif ? [{ id: 'qp_notification', label: 'QP Notification' }] : []),
   ];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b">
+        <div className="flex justify-between items-center p-6 border-b bg-gradient-to-r from-green-50 to-white shrink-0">
           <div>
-            <h2 className="text-xl font-semibold">Registered Qualification Details</h2>
-            <p className="text-sm text-gray-500 mt-1">Code: {qualification.qualificationCode} | Reg: {qualification.registrationNumber}</p>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold">Registered Qualification Details</h2>
+              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-medium">Via Approval Phase</span>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Code: {qualification.qualificationCode}
+              {qualification.registrationNumber && ` · Reg: ${qualification.registrationNumber}`}
+            </p>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-lg">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b px-6 overflow-x-auto">
+        <div className="flex border-b px-6 overflow-x-auto shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              className={`py-3 px-4 font-medium whitespace-nowrap ${
-                activeTab === tab.id 
-                  ? 'text-blue-600 border-b-2 border-blue-600' 
+              className={`py-3 px-4 font-medium whitespace-nowrap text-sm transition-colors relative ${
+                activeTab === tab.id
+                  ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               onClick={() => setActiveTab(tab.id as any)}
             >
               {tab.label}
+              {tab.id === 'saqa_letter' && dl && (
+                <span className="ml-1.5 w-2 h-2 rounded-full bg-green-500 inline-block" />
+              )}
+              {tab.id === 'qp_notification' && qpNotif && (
+                <span className="ml-1.5 w-2 h-2 rounded-full bg-green-500 inline-block" />
+              )}
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          {activeTab === 'application' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded">
-                  <label className="text-sm text-gray-500">Qualification Title</label>
-                  <p className="font-medium">{qualification.qualificationTitle}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded">
-                  <label className="text-sm text-gray-500">Qualification Code</label>
-                  <p className="font-medium">{qualification.qualificationCode}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded">
-                  <label className="text-sm text-gray-500">NQF Level</label>
-                  <p className="font-medium">Level {qualification.nqfLevel}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded">
-                  <label className="text-sm text-gray-500">Credits</label>
-                  <p className="font-medium">{qualification.credits}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded">
-                  <label className="text-sm text-gray-500">Application Date</label>
-                  <p className="font-medium">2023-06-01</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded">
-                  <label className="text-sm text-gray-500">Approval Date</label>
-                  <p className="font-medium">{qualification.registrationDate}</p>
-                </div>
-              </div>
+        <div className="flex-1 overflow-y-auto p-6">
 
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-4">Application Documents</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm">Application Form.pdf</span>
-                    <button className="text-blue-600 text-sm hover:underline">Download</button>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm">Curriculum Vitae.pdf</span>
-                    <button className="text-blue-600 text-sm hover:underline">Download</button>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm">Supporting Documents.zip</span>
-                    <button className="text-blue-600 text-sm hover:underline">Download</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-4">Application Notes</h3>
-                <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-sm">
-                    This qualification was submitted for registration on 2023-06-01. 
-                    All required documentation was provided and verified. The application 
-                    went through the standard review process with no major issues identified.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'qualifications' && (
-            <div className="space-y-6">
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-4">Qualification Development History</h3>
-                <div className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-3 h-3 mt-1 bg-green-500 rounded-full"></div>
-                    <div className="flex-1">
-                      <p className="font-medium">Initial Draft Developed</p>
-                      <p className="text-sm text-gray-600">2023-01-15</p>
-                      <p className="text-sm text-gray-500 mt-1">Curriculum framework and learning outcomes defined</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-3 h-3 mt-1 bg-blue-500 rounded-full"></div>
-                    <div className="flex-1">
-                      <p className="font-medium">Stakeholder Consultation</p>
-                      <p className="text-sm text-gray-600">2023-02-20 to 2023-03-20</p>
-                      <p className="text-sm text-gray-500 mt-1">Industry and academic feedback incorporated</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-3 h-3 mt-1 bg-purple-500 rounded-full"></div>
-                    <div className="flex-1">
-                      <p className="font-medium">Quality Assurance Review</p>
-                      <p className="text-sm text-gray-600">2023-04-10</p>
-                      <p className="text-sm text-gray-500 mt-1">Internal QA committee approval obtained</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-3 h-3 mt-1 bg-yellow-500 rounded-full"></div>
-                    <div className="flex-1">
-                      <p className="font-medium">Public Comment Period</p>
-                      <p className="text-sm text-gray-600">2023-05-01 to 2023-05-30</p>
-                      <p className="text-sm text-gray-500 mt-1">15 submissions received and addressed</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-4">Curriculum Details</h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-sm text-gray-500">Purpose of Qualification</label>
-                    <p className="text-sm mt-1">
-                      To provide learners with advanced knowledge and skills in project management,
-                      enabling them to manage complex projects in various sectors.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Learning Outcomes</label>
-                    <ul className="list-disc list-inside text-sm mt-1">
-                      <li>Develop and manage project portfolios</li>
-                      <li>Apply advanced project management methodologies</li>
-                      <li>Lead project teams and stakeholders</li>
-                      <li>Manage project risks and quality</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Modules/Subjects</label>
-                    <div className="grid grid-cols-2 gap-2 mt-1">
-                      <div className="text-sm">• Advanced Project Planning</div>
-                      <div className="text-sm">• Risk Management</div>
-                      <div className="text-sm">• Stakeholder Engagement</div>
-                      <div className="text-sm">• Project Finance</div>
-                      <div className="text-sm">• Quality Management</div>
-                      <div className="text-sm">• Research Project</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'publicInput' && (
-            <div className="space-y-6">
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-4">Public Submissions Summary</h3>
-                <div className="space-y-4">
-                  <div className="bg-gray-50 p-3 rounded">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">Industry Body Submission</p>
-                        <p className="text-xs text-gray-500">Received: 2023-05-15</p>
-                      </div>
-                      <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Addressed</span>
-                    </div>
-                    <p className="text-sm mt-2">
-                      Recommended inclusion of digital transformation module to reflect current industry trends.
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      <span className="font-medium">Response:</span> Module added as elective in curriculum.
-                    </p>
-                  </div>
-
-                  <div className="bg-gray-50 p-3 rounded">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">Academic Reviewer</p>
-                        <p className="text-xs text-gray-500">Received: 2023-05-18</p>
-                      </div>
-                      <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Addressed</span>
-                    </div>
-                    <p className="text-sm mt-2">
-                      Suggested increasing research component to align with NQF level 7 requirements.
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      <span className="font-medium">Response:</span> Research project credits increased from 15 to 20.
-                    </p>
-                  </div>
-
-                  <div className="bg-gray-50 p-3 rounded">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">Public Individual</p>
-                        <p className="text-xs text-gray-500">Received: 2023-05-22</p>
-                      </div>
-                      <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">Under Review</span>
-                    </div>
-                    <p className="text-sm mt-2">
-                      Question about articulation pathways to other qualifications.
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      <span className="font-medium">Response:</span> Pending further investigation.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-4">Public Input Analysis</h3>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="text-center p-3 bg-blue-50 rounded">
-                    <p className="text-2xl font-bold text-blue-600">15</p>
-                    <p className="text-xs text-gray-600">Total Submissions</p>
-                  </div>
-                  <div className="text-center p-3 bg-green-50 rounded">
-                    <p className="text-2xl font-bold text-green-600">12</p>
-                    <p className="text-xs text-gray-600">Addressed</p>
-                  </div>
-                  <div className="text-center p-3 bg-yellow-50 rounded">
-                    <p className="text-2xl font-bold text-yellow-600">3</p>
-                    <p className="text-xs text-gray-600">Pending</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
+          {/* ── Registration Details ── */}
           {activeTab === 'registration' && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="border rounded p-4">
-                  <h3 className="font-medium mb-3">Registration Information</h3>
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3 text-sm uppercase text-gray-600 tracking-wide">Registration Information</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Registration Number</span>
-                      <span className="text-sm font-medium">{qualification.registrationNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Registration Date</span>
-                      <span className="text-sm font-medium">{qualification.registrationDate}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Expiry Date</span>
-                      <span className="text-sm font-medium">{qualification.expiryDate}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Status</span>
+                    {[
+                      ['Qualification Title', qualification.qualificationTitle],
+                      ['Qualification Code', qualification.qualificationCode],
+                      ['NQF Level', `Level ${qualification.nqfLevel}`],
+                      ['Credits', `${qualification.credits}`],
+                      ['SAQA ID', qualification.saqaId || '—'],
+                      ['Registration Number', qualification.registrationNumber],
+                      ['Registration Date', qualification.registrationDate],
+                      ['Expiry Date', qualification.expiryDate],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex justify-between text-sm">
+                        <span className="text-gray-500">{label}</span>
+                        <span className="font-medium text-right max-w-xs">{value}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Status</span>
                       <span className={`text-sm font-medium capitalize ${
                         qualification.status === 'active' ? 'text-green-600' :
                         qualification.status === 'expiring' ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {qualification.status}
-                      </span>
+                      }`}>{qualification.status}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="border rounded p-4">
-                  <h3 className="font-medium mb-3">SAQA Decision</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Decision</span>
-                      <span className="text-sm font-medium text-green-600">{qualification.saqaDecision}</span>
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3 text-sm uppercase text-gray-600 tracking-wide">SAQA Decision</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Decision</span><span className="font-medium text-green-600">{qualification.saqaDecision || 'Approved'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">Provider</span><span className="font-medium">{qualification.provider}</span></div>
+                    {dl && (
+                      <>
+                        <div className="flex justify-between"><span className="text-gray-500">Committee Date</span><span className="font-medium">{dl.committeeDate}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">SAQA Signatory</span><span className="font-medium">{dl.signedBy}</span></div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Quick status indicators */}
+                  <div className="mt-4 space-y-2">
+                    <div className={`flex items-center gap-2 p-2 rounded-lg text-xs ${dl ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
+                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {dl ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />}
+                      </svg>
+                      SAQA Registration Letter — {dl ? 'Attached' : 'Not available'}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Decision Date</span>
-                      <span className="text-sm font-medium">2023-12-15</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Review Committee</span>
-                      <span className="text-sm font-medium">Qualifications Committee</span>
+                    <div className={`flex items-center gap-2 p-2 rounded-lg text-xs ${qpNotif ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
+                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {qpNotif ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />}
+                      </svg>
+                      QP Notification — {qpNotif ? `Sent to ${qpNotif.recipientName}` : 'Not sent'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-3">Registration Conditions</h3>
+              <div className="border rounded-lg p-4">
+                <h3 className="font-semibold mb-3 text-sm uppercase text-gray-600 tracking-wide">Registration Conditions</h3>
                 <div className="space-y-2">
-                  <div className="flex items-start space-x-2">
-                    <input type="checkbox" className="mt-1" checked readOnly />
-                    <span className="text-sm">Annual reporting on graduate employment outcomes</span>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <input type="checkbox" className="mt-1" checked readOnly />
-                    <span className="text-sm">Curriculum review every 3 years</span>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <input type="checkbox" className="mt-1" checked readOnly />
-                    <span className="text-sm">Maintain accreditation of assessors</span>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <input type="checkbox" className="mt-1" />
-                    <span className="text-sm">Submit moderation reports quarterly (Pending)</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-3">Renewal/Extension Options</h3>
-                <div className="space-y-3">
-                  {qualification.status === 'expiring' && (
-                    <div className="bg-yellow-50 p-3 rounded">
-                      <p className="text-sm text-yellow-800">
-                        This qualification is expiring in less than 3 months. Renewal application recommended.
-                      </p>
+                  {['Annual reporting on graduate employment outcomes', 'Curriculum review every 3 years', 'Maintain accreditation of assessors'].map(cond => (
+                    <div key={cond} className="flex items-center gap-2 text-sm">
+                      <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      {cond}
                     </div>
-                  )}
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                    Apply for Renewal
-                  </button>
-                  <button className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 ml-2">
-                    Request Extension
-                  </button>
+                  ))}
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="border rounded p-4">
-                <h3 className="font-medium mb-3">Compliance History</h3>
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="text-left text-xs text-gray-500">
-                      <th className="pb-2">Date</th>
-                      <th className="pb-2">Type</th>
-                      <th className="pb-2">Status</th>
-                      <th className="pb-2">Report</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    <tr>
-                      <td className="py-1">2024-01-15</td>
-                      <td>Annual Report</td>
-                      <td><span className="text-green-600">Compliant</span></td>
-                      <td><button className="text-blue-600">View</button></td>
-                    </tr>
-                    <tr>
-                      <td className="py-1">2023-07-20</td>
-                      <td>Site Visit</td>
-                      <td><span className="text-green-600">Compliant</span></td>
-                      <td><button className="text-blue-600">View</button></td>
-                    </tr>
-                    <tr>
-                      <td className="py-1">2023-01-10</td>
-                      <td>Moderation</td>
-                      <td><span className="text-yellow-600">Partial</span></td>
-                      <td><button className="text-blue-600">View</button></td>
-                    </tr>
-                  </tbody>
-                </table>
+          {/* ── SAQA Registration Letter ── */}
+          {activeTab === 'saqa_letter' && dl && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3">
+                <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                <div>
+                  <p className="font-semibold text-green-800 text-sm">Official SAQA Registration Letter</p>
+                  <p className="text-xs text-green-700">
+                    Committee meeting: {dl.committeeDate} · Created: {dl.createdDate ? new Date(dl.createdDate).toLocaleDateString() : '—'}
+                    {dl.sentDate && ` · Sent to Registration: ${new Date(dl.sentDate).toLocaleDateString()}`}
+                  </p>
+                </div>
+              </div>
+              <SaqaLetterPreview letter={dl} />
+            </div>
+          )}
+
+          {/* ── QP Notification ── */}
+          {activeTab === 'qp_notification' && qpNotif && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-5">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-green-100 rounded-lg shrink-0">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-green-800 mb-1">Registration Notification Sent to QP</p>
+                    <p className="text-xs text-green-600 mb-3">Sent on {new Date(qpNotif.sentDate).toLocaleDateString()}</p>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div><p className="text-xs text-gray-500 uppercase font-semibold mb-0.5">Recipient</p><p className="font-medium">{qpNotif.recipientName}</p></div>
+                      <div><p className="text-xs text-gray-500 uppercase font-semibold mb-0.5">Email</p><p className="font-medium">{qpNotif.recipientEmail}</p></div>
+                      <div className="col-span-2"><p className="text-xs text-gray-500 uppercase font-semibold mb-0.5">Subject</p><p className="font-medium">{qpNotif.subject}</p></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 border rounded-lg p-4">
+                <h4 className="font-semibold text-gray-700 text-xs uppercase tracking-wide mb-3">Message</h4>
+                <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">{qpNotif.message}</pre>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end space-x-2 p-6 border-t">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border rounded hover:bg-gray-50"
-          >
-            Close
-          </button>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Generate Report
-          </button>
+        <div className="flex justify-end gap-2 p-6 border-t shrink-0 bg-gray-50">
+          <button onClick={onClose} className="px-4 py-2 border rounded-lg text-sm hover:bg-white">Close</button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Generate Report</button>
         </div>
       </div>
     </div>
