@@ -4,6 +4,7 @@ import ExternalQasaAddendumSubmission from '@/pages/assessment/External/External
 import ExternalValidationOfFisa from '@/pages/assessment/External/ExternalValidationOfFisa';
 import ExternalEisaRegistration from '@/pages/assessment/External/ExternalEisaRegistration';
 import ExternalSiteVisitsAndMonitoring from '@/pages/assessment/External/ExternalSiteVisitsAndMonitoring';
+import ExternalEisaValidation from '@/pages/assessment/External/ExternalEisaValidation';
 
 export default function AssessmentDomain() {
   const [activeTab, setActiveTab] = useState('qasaAddendumSubmission');
@@ -14,6 +15,8 @@ export default function AssessmentDomain() {
         return <ExternalQasaAddendumSubmission />;
       case 'validationOfFisa':
         return <ExternalValidationOfFisa />;
+        case 'eisaValidation':
+        return <ExternalEisaValidation />;
       case 'eisaRegistration':
         return <ExternalEisaRegistration />;
       case 'siteVisitsAndMonitoring':
