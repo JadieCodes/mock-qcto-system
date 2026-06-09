@@ -29,6 +29,11 @@ const externalAssessmentNavItems = [
     label: 'Validation of FISA',
     icon: ShieldCheck,
   },
+    {
+    id: 'eisaValidation',
+    label: 'EISA Validation',
+    icon: MapPinned,
+  },
   {
     id: 'eisaRegistration',
     label: 'EISA Registration',

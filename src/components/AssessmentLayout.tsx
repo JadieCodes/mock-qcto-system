@@ -62,6 +62,11 @@ const assessmentNavItems = [
     icon: Award,
     isSubmenu: true,
     subItems: [
+       {
+        path: '/departments/assessment/eisa/validation',
+        label: 'EISA Validation',
+        icon: Users,
+      },
       {
         path: '/departments/assessment/eisa/trades',
         label: 'EISA Trades',

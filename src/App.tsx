@@ -90,6 +90,8 @@ import ProtectedDepartmentRoute from "@/components/ProtectedDepartmentRoute";
 import RejectedApplicationsHistory from "./pages/accreditation/RejectedApplicationsHistory";
 import { QualificationReporting } from "./pages/qualifications/internal/QualificationReporting";
 
+import InternalEisaValidation from "./pages/assessment/Internal/InternalEisaValidation";
+
 const App = () => {
   const [userRole, setUserRole] = useState('applicant');
   const [userName, setUserName] = useState('John Applicant'); // Add this
@@ -307,6 +309,10 @@ const App = () => {
           />
 
           {/* EISA Routes */}
+            <Route
+            path="eisa/validation"
+            element={<InternalEisaValidation />}
+          />
           <Route
             path="eisa/trades"
             element={<InternalEisaPage />}
