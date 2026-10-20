@@ -1,0 +1,33 @@
+import type { Portal } from '../types';
+
+export interface NavItem {
+  path: string;
+  label: string;
+  comingInPhase?: number;
+}
+
+export const INTERNAL_NAV: NavItem[] = [
+  { path: 'dashboard', label: 'Dashboard' },
+  { path: 'qsa-addendum', label: 'QSA Addendum', comingInPhase: 1 },
+  { path: 'instrument-validation', label: 'EISA Instrument Validation', comingInPhase: 2 },
+  { path: 'eisa-calendar', label: 'EISA Calendar', comingInPhase: 3 },
+  { path: 'eisa-registration', label: 'EISA Registration', comingInPhase: 4 },
+  { path: 'eisa-confirmation', label: 'EISA Confirmation', comingInPhase: 4 },
+  { path: 'site-visits', label: 'Site Visits & Monitoring', comingInPhase: 5 },
+  { path: 'approval-of-results', label: 'Approval of Results', comingInPhase: 6 },
+  { path: 'fisa', label: 'FISA', comingInPhase: 7 },
+  { path: 'rpl-toolkit', label: 'RPL Toolkit', comingInPhase: 7 },
+];
+
+export const EXTERNAL_NAV: NavItem[] = [
+  { path: 'dashboard', label: 'Dashboard' },
+  { path: 'qsa-addendum', label: 'QSA Addendum', comingInPhase: 1 },
+  { path: 'instrument-validation', label: 'EISA Instrument Validation', comingInPhase: 2 },
+  { path: 'eisa-registration', label: 'EISA Registration', comingInPhase: 4 },
+  { path: 'eisa-confirmation', label: 'EISA Confirmation', comingInPhase: 4 },
+  { path: 'site-visits', label: 'Site Visits & Monitoring', comingInPhase: 5 },
+];
+
+export function navForPortal(portal: Portal): NavItem[] {
+  return portal === 'internal' ? INTERNAL_NAV : EXTERNAL_NAV;
+}
