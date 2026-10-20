@@ -25,8 +25,8 @@ const saveToStorage = () => {
       const cleanApp = { ...app };
       
       // Option 1: Remove file data from documents to save space
-      if (cleanApp.applicationData?.documents) {
-        cleanApp.applicationData.documents = cleanApp.applicationData.documents.map(doc => ({
+     if (cleanApp.documents) {
+  cleanApp.documents = cleanApp.documents.map(doc => ({
           ...doc,
           // Remove fileData if it exists and is too large
           fileData: undefined,
@@ -120,23 +120,21 @@ export const mockAccreditationService = {
   },
 
   createApplication: (applicationData: ApplicationForm): ApplicationStatus => {
-    console.log('Creating application with documents:', applicationData.documents);
+  console.log('Creating application:', applicationData.applicationType);
 
     const newApplication: ApplicationStatus = {
-      id: applicationData.id || Date.now().toString(),
-      applicationId: applicationData.applicationId || `APP-${Date.now()}`,
-      status: 'step1_initial_submitted',
-      submittedDate: applicationData.submittedAt || new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-      paymentStatus: 'pending',
-      applicationData: {
-        ...applicationData,
-        documents: applicationData.documents || []
-      },
-      evaluationHistory: [],
-      requiredApplicantDocuments: [],
-      applicantRequiredUploads: [],
-    };
+    id: applicationData.id || Date.now().toString(),
+    applicationId: applicationData.applicationId || `APP-${Date.now()}`,
+    status: 'step1_initial_submitted',
+    submittedDate: applicationData.submittedAt || new Date().toISOString(),
+    lastUpdated: new Date().toISOString(),
+    paymentStatus: 'pending',
+    applicationData,
+    documents: [],
+    evaluationHistory: [],
+    requiredApplicantDocuments: [],
+    applicantRequiredUploads: [],
+  };
 
     applications = [...applications, newApplication];
     saveToStorage();
@@ -148,20 +146,17 @@ export const mockAccreditationService = {
     return updateApplicationInternal(id, updates);
   },
 
-  addDocuments: (id: string, documents: any[]) => {
-    const app = applications.find(a => a.id === id);
-    if (!app) return null;
+addDocuments: (id: string, documents: any[]) => {
+  const app = applications.find(a => a.id === id);
+  if (!app) return null;
 
-    const currentDocs = app.applicationData?.documents || [];
-    const updatedDocs = [...currentDocs, ...documents];
+  const currentDocs = app.documents || [];
+  const updatedDocs = [...currentDocs, ...documents];
 
-    return updateApplicationInternal(id, {
-      applicationData: {
-        ...app.applicationData!,
-        documents: updatedDocs
-      }
-    });
-  },
+  return updateApplicationInternal(id, {
+    documents: updatedDocs
+  });
+},
 
   addProofOfPayment: (id: string, documents: any[]) => {
     const app = applications.find(a => a.id === id);

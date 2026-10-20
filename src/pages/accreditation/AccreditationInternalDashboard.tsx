@@ -20,8 +20,11 @@ import {
   Zap,
   History
 } from 'lucide-react';
-import type { ApplicationStatus, EvaluationChecklist, AIRecommendation, EvaluationHistoryEntry ,RequiredUploadItem} from '@/types';
+import type { ApplicationStatus, EvaluationChecklist, AIRecommendation, EvaluationHistoryEntry, RequiredUploadItem, ComplianceResult, CorrectionItem } from '@/types';
 import { mockAccreditationService } from '@/services/mockAccreditationService';
+import { getApplicantInfo, getQualification } from '@/utils/applicationDisplay';
+import SubmittedApplicationView from '@/pages/accreditation/SubmittedApplicationView';
+
 
 interface AccreditationInternalDashboardProps {
   userName?: string;
@@ -38,7 +41,30 @@ const initialEvaluationCriteria = [
 ];
 
 // Final evaluation criteria (without payment check)
+const qualificationCheckItems = [
+  { key: 'qualificationTitle', label: 'Qualification / Curriculum Title' },
+  { key: 'saqaId', label: 'SAQA ID' },
+  { key: 'curriculumCode', label: 'Curriculum Code' },
+  { key: 'nqfLevel', label: 'NQF Level' },
+  { key: 'credits', label: 'Credits' },
+] as const;
 
+type QualKey = (typeof qualificationCheckItems)[number]['key'];
+type QualResults = Record<QualKey, { result?: ComplianceResult; note: string }>;
+
+const emptyQualResults = (): QualResults => ({
+  qualificationTitle: { note: '' },
+  saqaId: { note: '' },
+  curriculumCode: { note: '' },
+  nqfLevel: { note: '' },
+  credits: { note: '' },
+});
+
+const complianceButtons: { value: ComplianceResult; label: string; active: string }[] = [
+  { value: 'pass', label: 'Compliant', active: 'bg-green-600 text-white border-green-600' },
+  { value: 'needs_correction', label: 'Needs correction', active: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'fail', label: 'Not met', active: 'bg-red-600 text-white border-red-600' },
+];
 
 const requiredDocumentOptions = [
   { id: 'ohs_audit', label: 'OHS Audit Report' },
@@ -90,13 +116,16 @@ const [activeTab, setActiveTab] = useState<'details' | 'initial-evaluation' | 'f
   paymentBelongsToThisApplication: false,
 });
 
-  const [qualificationChecks, setQualificationChecks] = useState({
-  qualificationTitle: false,
-  saqaId: false,
-  curriculumCode: false,
-  nqfLevel: false,
-  credits: false,
-});
+  const [qualificationResults, setQualificationResults] = useState<QualResults>(emptyQualResults());
+
+// Derived booleans so existing code using `qualificationChecks.x` keeps working
+const qualificationChecks = {
+  qualificationTitle: qualificationResults.qualificationTitle.result === 'pass',
+  saqaId: qualificationResults.saqaId.result === 'pass',
+  curriculumCode: qualificationResults.curriculumCode.result === 'pass',
+  nqfLevel: qualificationResults.nqfLevel.result === 'pass',
+  credits: qualificationResults.credits.result === 'pass',
+};
 
 const [requiredApplicantDocuments, setRequiredApplicantDocuments] = useState<RequiredUploadItem[]>([]);
 const [showRejectionModal, setShowRejectionModal] = useState(false);
@@ -202,12 +231,38 @@ const getStatusBadge = (status: ApplicationStatus['status']) => {
 };
 
 
-const toggleQualificationCheck = (key: keyof typeof qualificationChecks) => {
-  setQualificationChecks(prev => ({
-    ...prev,
-    [key]: !prev[key]
-  }));
-};
+const setQualResult = (key: QualKey, result: ComplianceResult) =>
+  setQualificationResults(prev => ({ ...prev, [key]: { ...prev[key], result } }));
+
+const setQualNote = (key: QualKey, note: string) =>
+  setQualificationResults(prev => ({ ...prev, [key]: { ...prev[key], note } }));
+
+const allQualEvaluated = qualificationCheckItems.every(i => qualificationResults[i.key].result);
+const hasFlaggedItems = qualificationCheckItems.some(i =>
+  ['needs_correction', 'fail'].includes(qualificationResults[i.key].result ?? ''));
+const hasNeedsCorrection = qualificationCheckItems.some(i => qualificationResults[i.key].result === 'needs_correction');
+const hasMissingNotes = qualificationCheckItems.some(i =>
+  qualificationResults[i.key].result === 'needs_correction' && !qualificationResults[i.key].note.trim());
+
+const buildInitialChecklist = (): EvaluationChecklist[] => [
+  ...qualificationCheckItems.map(({ key, label }) => ({
+    criteriaId: key,
+    criteriaName: label,
+    isMet: qualificationResults[key].result === 'pass',
+    result: qualificationResults[key].result,
+    comments: qualificationResults[key].note.trim() || undefined,
+  })),
+  ...requiredApplicantDocuments.map(doc => ({
+    criteriaId: `requested_${doc.id}`,
+    criteriaName: `Requested from applicant: ${doc.label}`,
+    isMet: true,
+  })),
+];
+
+const buildCorrectionItems = (): CorrectionItem[] =>
+  qualificationCheckItems
+    .filter(i => qualificationResults[i.key].result === 'needs_correction')
+    .map(i => ({ criteriaId: i.key, criteriaName: i.label, note: qualificationResults[i.key].note.trim() }));
 
 const toggleRequiredDocument = (doc: { id: string; label: string }) => {
   setRequiredApplicantDocuments(prev => {
@@ -239,38 +294,11 @@ const handleInitialReview = (applicationId: string, decision: 'approved' | 'reje
 
   const newStatus = decision === 'approved' ? 'step3_initial_approved' : 'step3_initial_rejected';
 
-  const actualInitialChecklist: EvaluationChecklist[] = [
-  {
-    criteriaId: 'qualificationTitle',
-    criteriaName: 'Qualification / Curriculum Title',
-    isMet: qualificationChecks.qualificationTitle,
-  },
-  {
-    criteriaId: 'saqaId',
-    criteriaName: 'SAQA ID',
-    isMet: qualificationChecks.saqaId,
-  },
-  {
-    criteriaId: 'curriculumCode',
-    criteriaName: 'Curriculum Code',
-    isMet: qualificationChecks.curriculumCode,
-  },
-  {
-    criteriaId: 'nqfLevel',
-    criteriaName: 'NQF Level',
-    isMet: qualificationChecks.nqfLevel,
-  },
-  {
-    criteriaId: 'credits',
-    criteriaName: 'Credits',
-    isMet: qualificationChecks.credits,
-  },
-  ...requiredApplicantDocuments.map((doc) => ({
-    criteriaId: `requested_${doc.id}`,
-    criteriaName: `Requested from applicant: ${doc.label}`,
-    isMet: true,
-  })),
-];
+ if (decision === 'approved' && (!allQualEvaluated || hasFlaggedItems)) {
+  alert('All checks must be marked Compliant before approving. Use "Send Back for Correction" for flagged items.');
+  return;
+}
+const actualInitialChecklist = buildInitialChecklist();
 
 const evaluationEntry: EvaluationHistoryEntry = {
   stage: 'initial',
@@ -308,13 +336,7 @@ const evaluationEntry: EvaluationHistoryEntry = {
   loadApplications();
   setSelectedApplication(null);
 
-  setQualificationChecks({
-    qualificationTitle: false,
-    saqaId: false,
-    curriculumCode: false,
-    nqfLevel: false,
-    credits: false,
-  });
+ setQualificationResults(emptyQualResults());
   setRequiredApplicantDocuments([]);
   setInitialChecklist(initialEvaluationCriteria.map(c => ({
     criteriaId: c.id,
@@ -414,11 +436,12 @@ const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map
 
   setActiveTab('ai-report');
 };
-  const handleOpenRejectionModal = () => {
-    setRejectionReason('');
-    setRejectionMissingDocs([]);
-    setShowRejectionModal(true);
-  };
+const handleOpenRejectionModal = () => {
+  const items = buildCorrectionItems();
+  setRejectionReason(items.map(i => `${i.criteriaName}: ${i.note}`).join('\n'));
+  setRejectionMissingDocs([]);
+  setShowRejectionModal(true);
+};
 
   const toggleRejectionDoc = (docLabel: string) => {
     setRejectionMissingDocs(prev =>
@@ -432,18 +455,7 @@ const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map
     const now = new Date().toISOString();
     const deadline = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
 
-    const actualInitialChecklist: EvaluationChecklist[] = [
-      { criteriaId: 'qualificationTitle', criteriaName: 'Qualification / Curriculum Title', isMet: qualificationChecks.qualificationTitle },
-      { criteriaId: 'saqaId', criteriaName: 'SAQA ID', isMet: qualificationChecks.saqaId },
-      { criteriaId: 'curriculumCode', criteriaName: 'Curriculum Code', isMet: qualificationChecks.curriculumCode },
-      { criteriaId: 'nqfLevel', criteriaName: 'NQF Level', isMet: qualificationChecks.nqfLevel },
-      { criteriaId: 'credits', criteriaName: 'Credits', isMet: qualificationChecks.credits },
-      ...requiredApplicantDocuments.map(doc => ({
-        criteriaId: `requested_${doc.id}`,
-        criteriaName: `Requested from applicant: ${doc.label}`,
-        isMet: true,
-      })),
-    ];
+const actualInitialChecklist = buildInitialChecklist();
 
     const evaluationEntry: EvaluationHistoryEntry = {
       stage: 'initial',
@@ -464,6 +476,7 @@ const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map
         checklist: actualInitialChecklist,
         decision: 'rejected' as const,
         comments: rejectionReason,
+         correctionItems: buildCorrectionItems(),
       },
       evaluationHistory: [...(app.evaluationHistory || []), evaluationEntry],
       rejectionReason,
@@ -480,7 +493,7 @@ const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map
     setRejectedAppForLetter({ ...app, ...updates } as ApplicationStatus);
     setShowRejectionLetterModal(true);
 
-    setQualificationChecks({ qualificationTitle: false, saqaId: false, curriculumCode: false, nqfLevel: false, credits: false });
+    setQualificationResults(emptyQualResults());
     setRequiredApplicantDocuments([]);
     setVerificationNotes('');
   };
@@ -515,8 +528,8 @@ const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map
         <div class="title">Application Rejection Notice</div>
         <div class="subtitle">QCTO Accreditation Division</div>
       </div>
-      <div class="section"><div class="label">Applicant</div><div class="value">${app.applicationData?.applicantInfo.fullName || 'N/A'}</div></div>
-      <div class="section"><div class="label">Organisation</div><div class="value">${app.applicationData?.applicantInfo.organisationName || 'N/A'}</div></div>
+      <div class="section"><div class="label">Applicant</div><div class="value">${getApplicantInfo(app.applicationData).fullName|| 'N/A'}</div></div>
+      <div class="section"><div class="label">Organisation</div><div class="value">${getApplicantInfo(app.applicationData).organisationName|| 'N/A'}</div></div>
       <div class="section"><div class="label">Application Reference</div><div class="value">${app.applicationId}</div></div>
       <div class="section"><div class="label">Date of Rejection</div><div class="value">${rejDate}</div></div>
       <div class="section"><div class="label">Rejection Reason</div><div class="value">${app.rejectionReason || 'N/A'}</div></div>
@@ -615,8 +628,8 @@ const documentFindings: AIRecommendation['documentFindings'] = requestedDocs.map
         <div class="title">Final Evaluation Rejection Notice</div>
         <div class="subtitle">QCTO Accreditation Division</div>
       </div>
-      <div class="section"><div class="label">Applicant</div><div class="value">${app.applicationData?.applicantInfo.fullName || 'N/A'}</div></div>
-      <div class="section"><div class="label">Organisation</div><div class="value">${app.applicationData?.applicantInfo.organisationName || 'N/A'}</div></div>
+      <div class="section"><div class="label">Applicant</div><div class="value">${getApplicantInfo(app.applicationData).fullName|| 'N/A'}</div></div>
+      <div class="section"><div class="label">Organisation</div><div class="value">${getApplicantInfo(app.applicationData).organisationName || 'N/A'}</div></div>
       <div class="section"><div class="label">Application Reference</div><div class="value">${app.applicationId}</div></div>
       <div class="section"><div class="label">Date of Rejection</div><div class="value">${rejDate}</div></div>
       <div class="section"><div class="label">Rejection Reason</div><div class="value">${app.finalRejectionReason || 'N/A'}</div></div>
@@ -743,11 +756,11 @@ const handleVerifyPayment = (applicationId: string) => {
 
     const matchesSearch = searchTerm === '' ||
       app.applicationId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.applicationData?.applicantInfo.organisationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.applicationData?.qualification.toLowerCase().includes(searchTerm.toLowerCase());
+      getApplicantInfo(app.applicationData).organisationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getQualification(app.applicationData).toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-    const matchesRegion = regionFilter === 'all' || app.applicationData?.applicantInfo.region === regionFilter;
+    const matchesRegion = regionFilter === 'all' || getApplicantInfo(app.applicationData).region=== regionFilter;
 
     return matchesSearch && matchesStatus && matchesRegion;
   });
@@ -955,13 +968,13 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
                         )}
                        </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{app.applicationData?.applicantInfo.organisationName}</div>
+                        <div className="text-sm font-medium text-gray-900">{getApplicantInfo(app.applicationData).organisationName}</div>
                        </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 max-w-xs truncate">{app.applicationData?.qualification}</div>
+                        <div className="text-sm text-gray-900 max-w-xs truncate">{getQualification(app.applicationData)}</div>
                        </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {app.applicationData?.applicantInfo.region}
+                        {getApplicantInfo(app.applicationData).region}
                        </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(app.status)}
@@ -995,15 +1008,15 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
                               <div className="space-y-2 text-sm">
                                 <p className="flex items-center text-gray-600">
                                   <User className="w-4 h-4 mr-2" />
-                                  {app.applicationData?.applicantInfo.fullName}
+                                  {getApplicantInfo(app.applicationData).fullName}
                                 </p>
                                 <p className="flex items-center text-gray-600">
                                   <Mail className="w-4 h-4 mr-2" />
-                                  {app.applicationData?.applicantInfo.email}
+                                  {getApplicantInfo(app.applicationData).email}
                                 </p>
                                 <p className="flex items-center text-gray-600">
                                   <Phone className="w-4 h-4 mr-2" />
-                                  {app.applicationData?.applicantInfo.phone}
+                                  {getApplicantInfo(app.applicationData).phone}
                                 </p>
                               </div>
                               
@@ -1011,7 +1024,7 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
                               <div className="space-y-2 text-sm">
                                 <p className="flex items-center text-gray-600">
                                   <MapPin className="w-4 h-4 mr-2" />
-                                  {app.applicationData?.applicantInfo.trainingLocation}
+                                  {getApplicantInfo(app.applicationData).trainingLocation}
                                 </p>
                               </div>
 
@@ -1176,60 +1189,16 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
               {/* Details Tab */}
               {activeTab === 'details' && (
                 <div className="space-y-6">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Applicant Information</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Full Name</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.fullName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">ID Number</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.idNumber}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Email</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.email}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Phone</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.phone}</p>
-                      </div>
-                    </div>
-                  </div>
+            
 
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Organisation Information</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Organisation Name</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.organisationName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Company Name</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.companyName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Company Registration</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.companyRegistration || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Region</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.region}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-sm text-gray-600">Training Location</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.trainingLocation}</p>
-                      </div>
-                    </div>
-                  </div>
+               
 
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">Application Details</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-600">Qualification</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.qualification}</p>
+                        <p className="text-sm font-medium">{getQualification(selectedApplication.applicationData)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Application Type</p>
@@ -1237,7 +1206,7 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
                       </div>
                     </div>
                   </div>
-
+<SubmittedApplicationView applicationData={selectedApplication.applicationData} />
                {/* Documents Section in Details Tab */}
 <div className="bg-gray-50 p-4 rounded-lg">
   <h3 className="text-lg font-semibold text-gray-800 mb-4">Documents</h3>
@@ -1466,66 +1435,61 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
               {/* Initial Evaluation Tab */}
         {activeTab === 'initial-evaluation' && (
   <div className="space-y-6">
-    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-      <h3 className="text-lg font-semibold text-gray-800 mb-1">
-        Qualification Verification
-      </h3>
-      <p className="text-sm text-gray-600 mb-4">
-        Complete these checks before approving the initial application.
-      </p>
+  <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+  <h3 className="text-lg font-semibold text-gray-800 mb-1">Qualification Verification</h3>
+  <p className="text-sm text-gray-600 mb-4">
+    Mark each item Compliant, Needs correction (a note is required) or Not met.
+  </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
-          <span className="text-sm text-gray-700">Qualification / Curriculum Title</span>
-          <input
-            type="checkbox"
-            checked={qualificationChecks.qualificationTitle}
-            onChange={() => toggleQualificationCheck('qualificationTitle')}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        </label>
+  <div className="space-y-3">
+    {qualificationCheckItems.map(({ key, label }) => {
+      const { result, note } = qualificationResults[key];
+      const noteMissing = result === 'needs_correction' && !note.trim();
+      return (
+        <div key={key} className="p-3 bg-white rounded border border-gray-200 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-medium text-gray-700">{label}</span>
+            <div className="flex gap-1">
+              {complianceButtons.map(b => (
+                <button
+                  key={b.value}
+                  type="button"
+                  onClick={() => setQualResult(key, b.value)}
+                  className={`px-3 py-1 text-xs rounded-md border ${
+                    result === b.value ? b.active : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
-          <span className="text-sm text-gray-700">SAQA ID</span>
-          <input
-            type="checkbox"
-            checked={qualificationChecks.saqaId}
-            onChange={() => toggleQualificationCheck('saqaId')}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        </label>
-
-        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
-          <span className="text-sm text-gray-700">Curriculum Code</span>
-          <input
-            type="checkbox"
-            checked={qualificationChecks.curriculumCode}
-            onChange={() => toggleQualificationCheck('curriculumCode')}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        </label>
-
-        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200">
-          <span className="text-sm text-gray-700">NQF Level</span>
-          <input
-            type="checkbox"
-            checked={qualificationChecks.nqfLevel}
-            onChange={() => toggleQualificationCheck('nqfLevel')}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        </label>
-
-        <label className="flex items-center justify-between gap-3 p-3 bg-white rounded border border-gray-200 md:col-span-2">
-          <span className="text-sm text-gray-700">Credits</span>
-          <input
-            type="checkbox"
-            checked={qualificationChecks.credits}
-            onChange={() => toggleQualificationCheck('credits')}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        </label>
-      </div>
-    </div>
+          {result && result !== 'pass' && (
+            <div>
+              <textarea
+                rows={2}
+                value={note}
+                onChange={e => setQualNote(key, e.target.value)}
+                placeholder={
+                  result === 'needs_correction'
+                    ? 'Required: describe exactly what is missing or wrong...'
+                    : 'Optional note...'
+                }
+                className={`w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 ${
+                  noteMissing ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-blue-500'
+                }`}
+              />
+              {noteMissing && (
+                <p className="text-xs text-red-600 mt-1">A note is required when marking Needs correction.</p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+</div>
 
     <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
       <h3 className="text-lg font-semibold text-gray-800 mb-1">
@@ -2114,19 +2078,30 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
       
       <>
 
-        <button
-          onClick={handleOpenRejectionModal}
-          className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-        >
-          Reject Application
-        </button>
-        <button
-          onClick={() => handleInitialReview(selectedApplication.id, 'approved')}
-          className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-        >
-          Approve Initial Application
-        </button>
-      </>
+       <button onClick={handleOpenRejectionModal} className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+    Reject Application
+  </button>
+
+  {hasNeedsCorrection && (
+    <button
+      onClick={handleOpenRejectionModal}
+      disabled={hasMissingNotes}
+      title={hasMissingNotes ? 'Add a note to every "Needs correction" item first' : undefined}
+      className="px-6 py-2 bg-amber-500 text-white rounded-md hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      Send Back for Correction
+    </button>
+  )}
+
+  <button
+    onClick={() => handleInitialReview(selectedApplication.id, 'approved')}
+    disabled={!allQualEvaluated || hasFlaggedItems}
+    title={hasFlaggedItems ? 'Resolve flagged items before approving' : undefined}
+    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    Approve Initial Application
+  </button>
+</>
     )}
 
     {/* Show Run AI Evaluation button only in AI Report tab, when no AI report exists yet, and status is documents_uploaded */}
@@ -2181,7 +2156,7 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-red-700">Reject Application</h2>
-              <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId} — {selectedApplication.applicationData?.applicantInfo.organisationName}</p>
+              <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId} — {getApplicantInfo(selectedApplication.applicationData).organisationName}</p>
             </div>
 
             <div className="p-6 space-y-6">
@@ -2267,7 +2242,7 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-red-700">Reject Final Application</h2>
-              <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId} — {selectedApplication.applicationData?.applicantInfo.organisationName}</p>
+              <p className="text-sm text-gray-500 mt-1">{selectedApplication.applicationId} — {getApplicantInfo(selectedApplication.applicationData).organisationName}</p>
             </div>
 
             <div className="p-6 space-y-6">
@@ -2352,7 +2327,7 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
                 <div>
                   <p className="text-xs text-gray-500">Applicant</p>
-                  <p className="font-medium">{finalRejectedAppForLetter.applicationData?.applicantInfo.fullName}</p>
+                  <p className="font-medium">{getApplicantInfo(finalRejectedAppForLetter.applicationData).fullName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Application Reference</p>
@@ -2410,7 +2385,7 @@ const buildFinalChecklist = (app: ApplicationStatus | null): EvaluationChecklist
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
                 <div>
                   <p className="text-xs text-gray-500">Applicant</p>
-                  <p className="font-medium">{rejectedAppForLetter.applicationData?.applicantInfo.fullName}</p>
+                  <p className="font-medium">{getApplicantInfo(rejectedAppForLetter.applicationData).fullName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Application Reference</p>

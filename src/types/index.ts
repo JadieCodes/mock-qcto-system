@@ -402,7 +402,7 @@ export interface PrintJob {
   createdAt: string;
 }
 // Accreditation-specific types
-export type ApplicationType = 'OC' | 'SP' | 'AC' | 'N4-N6' | 'Non-accredited venue approval' | 'Temporary training approval';
+
 
 // Region type
 export type Region = 'Gauteng' | 'Western Cape' | 'KwaZulu-Natal' | 'Eastern Cape' | 'Free State' | 'Mpumalanga' | 'Limpopo' | 'North West' | 'Northern Cape';
@@ -424,10 +424,18 @@ export type AccreditationStep =
 
 
   // Evaluation Checklist Interface
+  export type ComplianceResult = 'pass' | 'needs_correction' | 'fail';
+
+export interface CorrectionItem {
+  criteriaId: string;
+  criteriaName: string;
+  note: string;
+}
 export interface EvaluationChecklist {
   criteriaId: string;
   criteriaName: string;
   isMet: boolean;
+  result?: ComplianceResult; 
   comments?: string;
 }
 
@@ -519,16 +527,25 @@ export interface ApplicantInfo {
 }
 
 // Enhanced Application Form
-export interface ApplicationForm {
-  id?: string; // For existing applications
-  applicantInfo: ApplicantInfo;
-  qualification: string;
-  applicationType: ApplicationType;
-  applicationId?: string;
-  submittedAt?: string;
-  documents?: AccreditationDocument[];
+export type ApplicationType = 'OC' | 'SP' | 'N4-N6' | 'AC' | 'Permission';
+
+export type FlatAnswers = Record<string, string | string[] | undefined>;
+export type RepeatAnswers = Record<string, FlatAnswers[]>;
+
+export interface FormAnswers {
+  values: FlatAnswers;
+  repeats: Record<string, FlatAnswers[]>;
 }
 
+export interface ApplicationForm {
+  id?: string;
+  applicationId?: string;
+  applicationType: ApplicationType;
+  answers: FormAnswers;
+  documents?: AccreditationDocument[]; // still used for supporting docs
+  submittedAt?: string;
+  status?: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected';
+}
 // Enhanced Application Status
 // Update ApplicationStatus interface
 
@@ -599,6 +616,7 @@ paymentVerificationNotes?: string;
   proofOfPayment?: AccreditationDocument[];
   applicationData?: ApplicationForm;
   evaluationHistory?: EvaluationHistoryEntry[];
+  documents?: AccreditationDocument[]; 
 
   initialQualificationChecks?: InitialAccreditationCheck;
   requiredApplicantDocuments?: RequiredUploadItem[];
@@ -646,6 +664,7 @@ siteVisitAssignedBy?: string;
   finalRejectionReason?: string;
   finalRejectionDate?: string;
   finalRejectionCriteria?: string[];
+  correctionItems?: CorrectionItem[];
 
   
 }
@@ -832,6 +851,7 @@ export interface ApplicationStatus {
   proofOfPayment?: AccreditationDocument[];
   applicationData?: ApplicationForm;
   evaluationHistory?: EvaluationHistoryEntry[];
+  documents?: AccreditationDocument[]; 
   initialReview?: {
     reviewedBy?: string;
     reviewedAt?: string;

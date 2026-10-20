@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import type { ApplicationStatus } from '@/types';
 import { mockAccreditationService } from '@/services/mockAccreditationService';
+import { getApplicantInfo, getQualification } from '@/utils/applicationDisplay';
 import {
   LineChart,
   Line,
@@ -260,7 +261,7 @@ export default function AccreditationMainDashboard({
     return regions
       .map(region => ({
         name: region,
-        count: applications.filter(a => a.applicationData?.applicantInfo.region === region).length,
+        count: applications.filter(a => getApplicantInfo(a.applicationData).region === region).length,
       }))
       .filter(r => r.count > 0)
       .map(item => ({ name: item.name, value: item.count }));
@@ -349,7 +350,7 @@ export default function AccreditationMainDashboard({
         events.push({
           id: `${app.id}-submitted`,
           applicationId: app.applicationId,
-          organisation: app.applicationData?.applicantInfo.organisationName || 'N/A',
+          organisation: getApplicantInfo(app.applicationData).organisationName,
           eventType: 'submitted',
           date: app.submittedDate,
           description: 'Application submitted',
@@ -360,7 +361,7 @@ export default function AccreditationMainDashboard({
         events.push({
           id: `${app.id}-outcome`,
           applicationId: app.applicationId,
-          organisation: app.applicationData?.applicantInfo.organisationName || 'N/A',
+          organisation: getApplicantInfo(app.applicationData).organisationName,
           eventType: 'approved',
           date: (app as any).outcomeLetterWorkflow.approvedAt,
           description: 'Outcome letter approved',
@@ -371,7 +372,7 @@ export default function AccreditationMainDashboard({
         events.push({
           id: `${app.id}-visit`,
           applicationId: app.applicationId,
-          organisation: app.applicationData?.applicantInfo.organisationName || 'N/A',
+          organisation: getApplicantInfo(app.applicationData).organisationName,
           eventType: 'visit',
           date: app.siteVisitSchedule.visitCompletedAt,
           description: 'Site visit completed',

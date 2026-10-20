@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Eye, XCircle, FileText, CheckCircle, Clock, DollarSign, Download, Calendar, MapPin, User } from 'lucide-react';
 import type { ApplicationStatus, SiteVisitStatus, SiteVisitReport } from '@/types';
 import { mockAccreditationService } from '@/services/mockAccreditationService';
+import { getApplicantInfo, getQualification } from '@/utils/applicationDisplay';
+import SubmittedApplicationView from '@/pages/accreditation/SubmittedApplicationView';
 
 interface ApplicationDashboardProps {
   applications: ApplicationStatus[];
@@ -224,6 +226,7 @@ const handleResubmit = () => {
     resubmittedAt: new Date().toISOString(),
     resubmissionCount: (selectedApplication.resubmissionCount || 0) + 1,
     missingDocuments: [],
+    correctionItems: [], 
   });
   onRefreshApplications();
   setSelectedApplication(null);
@@ -258,8 +261,8 @@ const handlePrintFinalRejectionLetterSdp = (app: ApplicationStatus) => {
       <div class="title">Final Evaluation Rejection Notice</div>
       <div class="subtitle">QCTO Accreditation Division</div>
     </div>
-    <div class="section"><div class="label">Applicant</div><div class="value">${app.applicationData?.applicantInfo.fullName || 'N/A'}</div></div>
-    <div class="section"><div class="label">Organisation</div><div class="value">${app.applicationData?.applicantInfo.organisationName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Applicant</div><div class="value">${getApplicantInfo(app.applicationData).organisationName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Organisation</div><div class="value">${getApplicantInfo(app.applicationData).fullName || 'N/A'}</div></div>
     <div class="section"><div class="label">Application Reference</div><div class="value">${app.applicationId}</div></div>
     <div class="section"><div class="label">Date of Rejection</div><div class="value">${rejDate}</div></div>
     <div class="section"><div class="label">Rejection Reason</div><div class="value">${app.finalRejectionReason || 'N/A'}</div></div>
@@ -306,8 +309,8 @@ const handlePrintRejectionLetterSdp = (app: ApplicationStatus) => {
       <div class="title">Application Rejection Notice</div>
       <div class="subtitle">QCTO Accreditation Division</div>
     </div>
-    <div class="section"><div class="label">Applicant</div><div class="value">${app.applicationData?.applicantInfo.fullName || 'N/A'}</div></div>
-    <div class="section"><div class="label">Organisation</div><div class="value">${app.applicationData?.applicantInfo.organisationName || 'N/A'}</div></div>
+    <div class="section"><div class="label">Applicant</div><div class="value">${getApplicantInfo(app.applicationData).fullName|| 'N/A'}</div></div>
+    <div class="section"><div class="label">Organisation</div><div class="value">${getApplicantInfo(app.applicationData).organisationName || 'N/A'}</div></div>
     <div class="section"><div class="label">Application Reference</div><div class="value">${app.applicationId}</div></div>
     <div class="section"><div class="label">Date of Rejection</div><div class="value">${rejDate}</div></div>
     <div class="section"><div class="label">Rejection Reason</div><div class="value">${app.rejectionReason || 'N/A'}</div></div>
@@ -354,7 +357,7 @@ const handleViewDetails = (app: ApplicationStatus) => {
         <div className="bg-gradient-to-r from-green-600 to-teal-600 text-white p-6 rounded-lg">
           <h3 className="text-xl font-bold mb-2">Site Visit Report</h3>
           <p className="text-sm opacity-90">Application: {selectedApplication.applicationId}</p>
-          <p className="text-sm opacity-90">Organisation: {selectedApplication.applicationData?.applicantInfo.organisationName}</p>
+          <p className="text-sm opacity-90">Organisation: {getApplicantInfo(selectedApplication.applicationData).organisationName}</p>
         </div>
 
         {/* Visit Summary Card */}
@@ -538,10 +541,10 @@ const handleViewDetails = (app: ApplicationStatus) => {
                       {app.applicationId}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.applicationData?.applicantInfo.organisationName}
+                      {getApplicantInfo(app.applicationData).organisationName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.applicationData?.qualification}
+                      {getQualification(app.applicationData)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {app.submittedDate ? new Date(app.submittedDate).toLocaleDateString() : '-'}
@@ -671,7 +674,7 @@ const handleViewDetails = (app: ApplicationStatus) => {
               <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-3">
                 <div>
                   <p className="text-xs text-gray-500">Applicant</p>
-                  <p className="font-medium">{selectedApplication.applicationData?.applicantInfo.fullName}</p>
+                  <p className="font-medium">{getApplicantInfo(selectedApplication.applicationData).fullName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Rejection Reason</p>
@@ -724,7 +727,7 @@ const handleViewDetails = (app: ApplicationStatus) => {
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
                 <div>
                   <p className="text-xs text-gray-500">Applicant</p>
-                  <p className="font-medium">{selectedApplication.applicationData?.applicantInfo.fullName}</p>
+                  <p className="font-medium">{getApplicantInfo(selectedApplication.applicationData).fullName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Rejection Reason</p>
@@ -862,6 +865,20 @@ const handleViewDetails = (app: ApplicationStatus) => {
                           <p className="text-sm text-red-800 bg-white rounded border border-red-200 p-3">{selectedApplication.rejectionReason}</p>
                         </div>
                       )}
+
+                      {selectedApplication.correctionItems && selectedApplication.correctionItems.length > 0 && (
+  <div>
+    <p className="text-xs font-semibold text-red-700 mb-2">Items requiring correction</p>
+    <div className="space-y-2">
+      {selectedApplication.correctionItems.map(item => (
+        <div key={item.criteriaId} className="bg-white rounded border border-amber-300 p-3">
+          <p className="text-sm font-medium text-gray-800">{item.criteriaName}</p>
+          <p className="text-sm text-gray-700 mt-1">{item.note}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
                       {selectedApplication.missingDocuments && selectedApplication.missingDocuments.length > 0 && (
                         <div>
@@ -1020,54 +1037,10 @@ const handleViewDetails = (app: ApplicationStatus) => {
                   )}
 
                   {/* Applicant Information */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Applicant Information</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Full Name</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.fullName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">ID Number</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.idNumber}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Email</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.email}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Phone</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.phone}</p>
-                      </div>
-                    </div>
-                  </div>
+                
 
                   {/* Organisation Information */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Organisation Information</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Organisation Name</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.organisationName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Company Name</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.companyName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Company Registration</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.companyRegistration || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Region</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.region}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-sm text-gray-600">Training Location</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.applicantInfo.trainingLocation}</p>
-                      </div>
-                    </div>
-                  </div>
+         
 
                   {/* Application Details */}
                   <div className="bg-gray-50 p-4 rounded-lg">
@@ -1075,7 +1048,7 @@ const handleViewDetails = (app: ApplicationStatus) => {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-600">Qualification</p>
-                        <p className="text-sm font-medium">{selectedApplication.applicationData?.qualification}</p>
+                        <p className="text-sm font-medium">{getQualification(selectedApplication.applicationData)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Application Type</p>
@@ -1083,6 +1056,7 @@ const handleViewDetails = (app: ApplicationStatus) => {
                       </div>
                     </div>
                   </div>
+                  <SubmittedApplicationView applicationData={selectedApplication.applicationData} />
 
                   {/* Uploaded Documents */}
           {/* Application Form */}
