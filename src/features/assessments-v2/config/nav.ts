@@ -15,7 +15,7 @@ export const INTERNAL_NAV: NavItem[] = [
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'EISA Registration' },
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
-  { path: 'site-visits', label: 'Site Visits & Monitoring', comingInPhase: 5 },
+  { path: 'site-visits', label: 'Site Visits & Monitoring' },
   { path: 'approval-of-results', label: 'Approval of Results', comingInPhase: 6 },
   { path: 'fisa', label: 'FISA', comingInPhase: 7 },
   { path: 'rpl-toolkit', label: 'RPL Toolkit', comingInPhase: 7 },
@@ -28,7 +28,7 @@ export const EXTERNAL_NAV: NavItem[] = [
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'EISA Registration' },
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
-  { path: 'site-visits', label: 'Site Visits & Monitoring', comingInPhase: 5 },
+  { path: 'site-visits', label: 'Site Visits & Monitoring' },
 ];
 
 export function navForPortal(portal: Portal): NavItem[] {

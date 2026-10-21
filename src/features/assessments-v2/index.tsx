@@ -6,6 +6,7 @@ import { EisaConfirmationExternal, EisaConfirmationInternal } from './modules/ei
 import { EisaRegistrationExternal, EisaRegistrationInternal } from './modules/eisa-registration';
 import { InstrumentValidationExternal, InstrumentValidationInternal } from './modules/instrument-validation';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
+import { SiteVisitsExternal, SiteVisitsInternal } from './modules/site-visits';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
 import { ComingSoon } from './shared/ui/ComingSoon';
 import { Dashboard } from './shared/ui/Dashboard';
@@ -34,6 +35,7 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'eisa-calendar') return portal === 'internal' ? <EisaCalendarInternal /> : <EisaCalendarExternal />;
   if (item.path === 'eisa-registration') return portal === 'internal' ? <EisaRegistrationInternal /> : <EisaRegistrationExternal />;
   if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;
+  if (item.path === 'site-visits') return portal === 'internal' ? <SiteVisitsInternal /> : <SiteVisitsExternal />;
   return <ComingSoon item={item} />;
 }
 
