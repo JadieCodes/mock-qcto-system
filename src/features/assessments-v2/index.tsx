@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { navForPortal, type NavItem } from './config/nav';
+import { ApprovalOfResultsExternal, ApprovalOfResultsInternal } from './modules/approval-of-results';
 import { EisaCalendarExternal, EisaCalendarInternal } from './modules/eisa-calendar';
 import { EisaConfirmationExternal, EisaConfirmationInternal } from './modules/eisa-confirmation';
 import { EisaRegistrationExternal, EisaRegistrationInternal } from './modules/eisa-registration';
@@ -36,6 +37,7 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'eisa-registration') return portal === 'internal' ? <EisaRegistrationInternal /> : <EisaRegistrationExternal />;
   if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;
   if (item.path === 'site-visits') return portal === 'internal' ? <SiteVisitsInternal /> : <SiteVisitsExternal />;
+  if (item.path === 'approval-of-results') return portal === 'internal' ? <ApprovalOfResultsInternal /> : <ApprovalOfResultsExternal />;
   return <ComingSoon item={item} />;
 }
 

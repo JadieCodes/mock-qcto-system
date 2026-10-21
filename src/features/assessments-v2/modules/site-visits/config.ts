@@ -28,11 +28,6 @@ export const POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT = 60;
 // is still to be agreed with QCTO. Placeholder label, per the developer's instruction.
 export const SHARE_VISIT_OUTCOME_LABEL = 'Share Visit Outcome';
 
-// CR-042/CR-044: the registration that auto-triggers an RPL/ARPL monitoring item carries an
-// SDP and qualification, but no QP name — there is nowhere upstream to pull one from. The
-// conducting official corrects this (CR-049's QP selector) before/while executing the visit.
-export const AUTO_VISIT_QP_PLACEHOLDER = 'Not captured — set before executing this visit';
-
 // CR-057 placeholder: there is no Phase 6 "Approval of Results" module yet to check a real
 // results-batch status against, so this flag lives directly on the visit and is toggled by an
 // official for demo purposes. Replace with a real read from Phase 6 once it exists.

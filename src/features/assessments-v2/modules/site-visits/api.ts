@@ -12,7 +12,6 @@ import type { Role } from '../../types';
 import { listPublishedSittings } from '../eisa-calendar/api';
 import type { EisaSitting } from '../eisa-calendar/types';
 import {
-  AUTO_VISIT_QP_PLACEHOLDER,
   DEFAULT_NOTICE_LEAD_TIME_DAYS,
   PLAN_APPROVER_ROLE,
   REPORT_APPROVER_ROLE,
@@ -59,7 +58,8 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
   return {
     id: crypto.randomUUID(),
     visitType: 'rpl-arpl-monitoring',
-    qpName: AUTO_VISIT_QP_PLACEHOLDER,
+    // Phase 6 fix: carried over from the registration's EISA sitting instead of a placeholder.
+    qpName: item.qpName,
     qualificationTitle: item.qualificationTitle,
     sdpName: item.sdpName,
     sittingId: null,

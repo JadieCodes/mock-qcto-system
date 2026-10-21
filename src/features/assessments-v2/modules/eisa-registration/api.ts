@@ -81,6 +81,7 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
     sittingId: sitting.id,
     sittingDate: sitting.date,
     qualificationTitle: sitting.qualificationTitle,
+    qpName: sitting.qpName,
     sdpName: input.sdpName,
     category: input.category,
     workflow: { stageId: 'sdp-submission', submittedBy: input.createdBy },
@@ -314,6 +315,7 @@ export async function performRegistrationAction(params: RegistrationActionParams
       const item = await createMonitoringItem({
         sourceRegistrationId: updated.id,
         qualificationTitle: updated.qualificationTitle,
+        qpName: updated.qpName,
         sdpName: updated.sdpName,
         sittingDate: updated.sittingDate,
         learnerNames: rplLearners.map((l) => l.fullName),

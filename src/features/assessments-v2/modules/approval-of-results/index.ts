@@ -1,2 +1,2 @@
-// Built in Phase 6 (CR-052, CR-059, CR-060). Folder holds external/, internal/, components/, workflow.ts, types.ts.
-export {};
+export { ExternalDashboard as ApprovalOfResultsExternal } from './external/ExternalDashboard';
+export { InternalDashboard as ApprovalOfResultsInternal } from './internal/InternalDashboard';

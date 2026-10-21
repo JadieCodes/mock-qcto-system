@@ -9,6 +9,8 @@ export interface RplArplMonitoringItem {
   visitType: 'rpl-arpl-monitoring';
   sourceRegistrationId: string;
   qualificationTitle: string;
+  // Carried over from the registration (Phase 6 fix) instead of a placeholder.
+  qpName: string;
   sdpName: string;
   sittingDate: string;
   learnerNames: string[];
