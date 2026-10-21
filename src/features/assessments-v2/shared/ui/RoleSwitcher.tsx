@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { rolesForPortal } from '../../config/roles';
-import { useV2Role } from './RoleContext';
+import { useV2Role } from './useV2Role';
 
 export function RoleSwitcher() {
   const { portal, role, setRole } = useV2Role();

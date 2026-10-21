@@ -1,19 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { rolesForPortal } from '../../config/roles';
 import type { Portal, Role } from '../../types';
+import { RoleContext } from './useV2Role';
 
 // Deliberately separate from the app-wide AppContext: the v2 CLAUDE.md only allows importing
 // components/ui/*, lib/utils and npm packages from outside this folder. AppContext.currentRole
 // is a single value shared by every domain in the app — reusing it here would mean switching
 // role in v2 changes the active role everywhere else too. This context is scoped to v2 only.
-
-interface RoleContextValue {
-  portal: Portal;
-  role: Role;
-  setRole: (role: Role) => void;
-}
-
-const RoleContext = createContext<RoleContextValue | null>(null);
 
 function storageKey(portal: Portal) {
   return `assessmentsV2:currentRole:${portal}`;
@@ -40,10 +33,4 @@ export function RoleProvider({ portal, children }: { portal: Portal; children: R
   }, [portal, role]);
 
   return <RoleContext.Provider value={{ portal, role, setRole }}>{children}</RoleContext.Provider>;
-}
-
-export function useV2Role(): RoleContextValue {
-  const ctx = useContext(RoleContext);
-  if (!ctx) throw new Error('useV2Role must be used within a RoleProvider');
-  return ctx;
 }

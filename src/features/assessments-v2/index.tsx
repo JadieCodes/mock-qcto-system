@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { navForPortal } from './config/nav';
+import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
 import { ComingSoon } from './shared/ui/ComingSoon';
 import { Dashboard } from './shared/ui/Dashboard';
@@ -23,7 +24,17 @@ function PortalRoutes({ portal }: { portal: Portal }) {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard portal={portal} />} />
           {navItems.map((item) => (
-            <Route key={item.path} path={item.path} element={<ComingSoon item={item} />} />
+            <Route
+              key={item.path}
+              path={item.path}
+              element={
+                item.path === 'qsa-addendum'
+                  ? portal === 'internal'
+                    ? <QsaAddendumInternal />
+                    : <QsaAddendumExternal />
+                  : <ComingSoon item={item} />
+              }
+            />
           ))}
         </Routes>
       </AssessmentsV2Layout>

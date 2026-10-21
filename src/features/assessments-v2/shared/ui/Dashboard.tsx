@@ -1,7 +1,7 @@
 import { roleDescriptor } from '../../config/roles';
 import { navForPortal } from '../../config/nav';
 import type { Portal } from '../../types';
-import { useV2Role } from './RoleContext';
+import { useV2Role } from './useV2Role';
 
 export function Dashboard({ portal }: { portal: Portal }) {
   const { role } = useV2Role();

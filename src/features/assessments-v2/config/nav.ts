@@ -8,7 +8,7 @@ export interface NavItem {
 
 export const INTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
-  { path: 'qsa-addendum', label: 'QSA Addendum', comingInPhase: 1 },
+  { path: 'qsa-addendum', label: 'QSA Addendum' },
   { path: 'instrument-validation', label: 'EISA Instrument Validation', comingInPhase: 2 },
   { path: 'eisa-calendar', label: 'EISA Calendar', comingInPhase: 3 },
   { path: 'eisa-registration', label: 'EISA Registration', comingInPhase: 4 },
@@ -21,7 +21,7 @@ export const INTERNAL_NAV: NavItem[] = [
 
 export const EXTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
-  { path: 'qsa-addendum', label: 'QSA Addendum', comingInPhase: 1 },
+  { path: 'qsa-addendum', label: 'QSA Addendum' },
   { path: 'instrument-validation', label: 'EISA Instrument Validation', comingInPhase: 2 },
   { path: 'eisa-registration', label: 'EISA Registration', comingInPhase: 4 },
   { path: 'eisa-confirmation', label: 'EISA Confirmation', comingInPhase: 4 },

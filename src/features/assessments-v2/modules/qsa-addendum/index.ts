@@ -1,2 +1,2 @@
-// Built in Phase 1 (CR-003 to CR-016). Folder holds external/, internal/, components/, workflow.ts, types.ts.
-export {};
+export { ExternalDashboard as QsaAddendumExternal } from './external/ExternalDashboard';
+export { InternalDashboard as QsaAddendumInternal } from './internal/InternalDashboard';
