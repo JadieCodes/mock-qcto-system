@@ -6,7 +6,7 @@ import DocumentUpload from '@/pages/accreditation/documentUpload';
 import QPDashboard from '@/pages/accreditation/QPDashboard';
 import VerifierDashboard from '@/pages/accreditation/VerifierDashboard';
 import { mockAccreditationService } from '@/services/mockAccreditationService';
-import type { ApplicationStatus, ApplicationForm, AccreditationDocument } from '@/types';
+import type { ApplicationStatus, ApplicationForm, AccreditationDocument,FormAnswers } from '@/types';
 
 type AccreditationRole = 'applicant' | 'qp' | 'verifier';
 
@@ -100,7 +100,7 @@ export default function AccreditationDomain() {
 
     if (app.status === 'step3_initial_approved') {
       setCurrentApplicationId(id);
-      setCurrentDocuments(app.applicationData?.documents || []);
+      setCurrentDocuments(app.documents || []);
       setCurrentView('upload');
       setActiveTab('documentUpload');
     } else {
@@ -118,8 +118,7 @@ export default function AccreditationDomain() {
       setCurrentView('upload');
       setActiveTab('documentUpload');
     } else if (app && app.status === 'step3_initial_approved') {
-      setCurrentApplicationId(id);
-      setCurrentDocuments(app.applicationData?.documents || []);
+      setCurrentDocuments(app.documents || []);
       setCurrentView('upload');
       setActiveTab('documentUpload');
     }
