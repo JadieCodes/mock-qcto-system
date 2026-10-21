@@ -1,2 +1,7 @@
-// Built in Phase 3 (CR-027 to CR-034). Folder holds external/, internal/, components/, workflow.ts, types.ts.
-export {};
+export { ExternalCalendarView as EisaCalendarExternal } from './external/ExternalCalendarView';
+export { InternalCalendarView as EisaCalendarInternal } from './internal/InternalCalendarView';
+
+// CR: the typed function other modules (registration, confirmation, site visits) will read
+// once they are built, instead of duplicating EISA Calendar logic.
+export { listPublishedSittings } from './api';
+export type { EisaSitting, EisaSittingStatus } from './types';

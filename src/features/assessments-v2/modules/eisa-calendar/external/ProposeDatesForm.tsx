@@ -1,0 +1,188 @@
+import { useState } from 'react';
+import { AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { roleDescriptor } from '../../../config/roles';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { checkSittingDate } from '../dateChecks';
+import { useEligibleQualifications, useProposeSittingBatch } from '../hooks';
+
+const YEAR_OPTIONS = [0, 1, 2].map((offset) => new Date().getFullYear() + offset);
+
+// CR-029/CR-030/CR-032: the QP's in-system date-submission form. The number of date rows is
+// free-form (add/remove) so a QP really can submit the wrong count and see the block — the
+// row count is not pre-locked to the required frequency.
+export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { data: eligible = [] } = useEligibleQualifications();
+  const { role } = useV2Role();
+  const actorName = roleDescriptor(role)?.label ?? role;
+  const proposeBatch = useProposeSittingBatch();
+
+  const [qualificationTitle, setQualificationTitle] = useState('');
+  const [year, setYear] = useState<number>(YEAR_OPTIONS[0]);
+  const [dates, setDates] = useState<string[]>(['']);
+
+  const selected = eligible.find((q) => q.qualificationTitle === qualificationTitle);
+  const requiredCount = selected?.approvedEisaSittingsPerYear ?? null;
+
+  const filledDates = dates.filter((d) => d.trim() !== '');
+  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d) }));
+  const yearMismatch = filledDates.filter((d) => Number(d.slice(0, 4)) !== year);
+  const duplicates = filledDates.length !== new Set(filledDates).size;
+  const countMatches = requiredCount != null && filledDates.length === requiredCount;
+  const allDatesOk = dateChecks.every((c) => c.result.ok);
+
+  const resetAll = () => {
+    setQualificationTitle('');
+    setYear(YEAR_OPTIONS[0]);
+    setDates(['']);
+  };
+
+  const canSubmit =
+    !!selected && requiredCount != null && countMatches && allDatesOk && yearMismatch.length === 0 && !duplicates && filledDates.length > 0;
+
+  const onSubmit = () => {
+    if (!selected || !canSubmit) return;
+    proposeBatch.mutate(
+      { qualificationTitle: selected.qualificationTitle, qpName: selected.qpName, year, dates: filledDates, submittedBy: actorName },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          resetAll();
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) resetAll();
+      }}
+    >
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Propose EISA Sitting Dates</DialogTitle>
+          <DialogDescription>Only qualifications with an Approved QSA Addendum can have dates proposed.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Qualification *</Label>
+            <Select value={qualificationTitle} onValueChange={setQualificationTitle}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a qualification" />
+              </SelectTrigger>
+              <SelectContent>
+                {eligible.map((q) => (
+                  <SelectItem key={q.qualificationTitle} value={q.qualificationTitle}>
+                    {q.qualificationTitle}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {eligible.length === 0 && (
+              <p className="text-xs text-gray-400">No qualifications with an Approved QSA Addendum yet — approve one first.</p>
+            )}
+          </div>
+
+          {selected && (
+            <div className="rounded-xl border bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              QP: <span className="font-medium">{selected.qpName}</span> · Required sittings per year:{' '}
+              <span className="font-medium">{requiredCount ?? 'not recorded yet'}</span>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Year *</Label>
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {YEAR_OPTIONS.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Proposed Dates *</Label>
+              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setDates((d) => [...d, ''])}>
+                <Plus className="h-3.5 w-3.5" />
+                Add date
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {dates.map((d, idx) => {
+                const check = d.trim() ? checkSittingDate(d) : null;
+                return (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        value={d}
+                        onChange={(e) =>
+                          setDates((prev) => prev.map((value, i) => (i === idx ? e.target.value : value)))
+                        }
+                      />
+                      {dates.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDates((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="h-4 w-4 text-gray-400" />
+                        </Button>
+                      )}
+                    </div>
+                    {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
+                    {check && check.ok && Number(d.slice(0, 4)) !== year && (
+                      <p className="text-xs text-red-600">This date is not in {year}.</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {requiredCount != null && filledDates.length > 0 && !countMatches && (
+              <Alert className="border-amber-500 bg-amber-50">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800">
+                  "{selected?.qualificationTitle}" is approved for {requiredCount} sitting(s) per year — you have entered{' '}
+                  {filledDates.length}.
+                </AlertDescription>
+              </Alert>
+            )}
+            {duplicates && (
+              <Alert className="border-amber-500 bg-amber-50">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800">Duplicate dates are not allowed.</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={!canSubmit || proposeBatch.isPending} onClick={onSubmit}>
+            Submit for QCTO Review
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

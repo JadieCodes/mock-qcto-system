@@ -5,7 +5,10 @@ export const ROLE_DESCRIPTORS: RoleDescriptor[] = [
   { role: 'QP', portal: 'external', label: 'Quality Partner (QP)', teams: [] },
   { role: 'SDP', portal: 'external', label: 'SDP', teams: [] },
 
-  { role: 'ASD', portal: 'internal', label: 'ASD', teams: ['qsa-evaluation', 'instrument-validation', 'site-visits'] },
+  // CR-027/CR-032 open question: the register names no specific role for the EISA Calendar,
+  // only "QCTO officials" — the ASD already owns the two stages either side of it on the
+  // highway (QSA evaluation, instrument validation), so it picks up this team too.
+  { role: 'ASD', portal: 'internal', label: 'ASD', teams: ['qsa-evaluation', 'instrument-validation', 'eisa-calendar', 'site-visits'] },
   { role: 'Assistant Director', portal: 'internal', label: 'Assistant Director', teams: ['registration', 'site-visits', 'fisa'] },
   { role: 'Deputy Director', portal: 'internal', label: 'Deputy Director', teams: ['qsa-evaluation', 'site-visits', 'approval-of-results'] },
   { role: 'Director', portal: 'internal', label: 'Director', teams: ['approval-of-results'] },

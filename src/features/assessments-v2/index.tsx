@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { navForPortal } from './config/nav';
+import { EisaCalendarExternal, EisaCalendarInternal } from './modules/eisa-calendar';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
 import { ComingSoon } from './shared/ui/ComingSoon';
@@ -28,11 +29,13 @@ function PortalRoutes({ portal }: { portal: Portal }) {
               key={item.path}
               path={item.path}
               element={
-                item.path === 'qsa-addendum'
-                  ? portal === 'internal'
-                    ? <QsaAddendumInternal />
-                    : <QsaAddendumExternal />
-                  : <ComingSoon item={item} />
+                item.path === 'qsa-addendum' ? (
+                  portal === 'internal' ? <QsaAddendumInternal /> : <QsaAddendumExternal />
+                ) : item.path === 'eisa-calendar' ? (
+                  portal === 'internal' ? <EisaCalendarInternal /> : <EisaCalendarExternal />
+                ) : (
+                  <ComingSoon item={item} />
+                )
               }
             />
           ))}
