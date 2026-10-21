@@ -6,7 +6,8 @@ import { useV2Role } from './useV2Role';
 export function Dashboard({ portal }: { portal: Portal }) {
   const { role } = useV2Role();
   const descriptor = roleDescriptor(role);
-  const modules = navForPortal(portal).filter((item) => item.path !== 'dashboard');
+  // CR-018: SDPs must not see EISA Instrument Validation at all — not even listed here.
+  const modules = navForPortal(portal).filter((item) => item.path !== 'dashboard' && !item.hiddenForRoles?.includes(role));
 
   return (
     <div className="space-y-6">

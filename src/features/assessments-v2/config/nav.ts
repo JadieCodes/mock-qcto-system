@@ -1,15 +1,17 @@
-import type { Portal } from '../types';
+import type { Portal, Role } from '../types';
 
 export interface NavItem {
   path: string;
   label: string;
   comingInPhase?: number;
+  // CR-018: SDPs must not see EISA Instrument Validation at all — not even the nav link.
+  hiddenForRoles?: Role[];
 }
 
 export const INTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
   { path: 'qsa-addendum', label: 'QSA Addendum' },
-  { path: 'instrument-validation', label: 'EISA Instrument Validation', comingInPhase: 2 },
+  { path: 'instrument-validation', label: 'EISA Instrument Validation' },
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'EISA Registration', comingInPhase: 4 },
   { path: 'eisa-confirmation', label: 'EISA Confirmation', comingInPhase: 4 },
@@ -22,7 +24,7 @@ export const INTERNAL_NAV: NavItem[] = [
 export const EXTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
   { path: 'qsa-addendum', label: 'QSA Addendum' },
-  { path: 'instrument-validation', label: 'EISA Instrument Validation', comingInPhase: 2 },
+  { path: 'instrument-validation', label: 'EISA Instrument Validation', hiddenForRoles: ['SDP'] },
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'EISA Registration', comingInPhase: 4 },
   { path: 'eisa-confirmation', label: 'EISA Confirmation', comingInPhase: 4 },

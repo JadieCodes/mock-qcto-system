@@ -5,11 +5,14 @@ import { navForPortal } from '../../config/nav';
 import type { Portal } from '../../types';
 import { DemoBanner } from './DemoBanner';
 import { RoleSwitcher } from './RoleSwitcher';
+import { useV2Role } from './useV2Role';
 
 export function AssessmentsV2Layout({ portal, children }: { portal: Portal; children: ReactNode }) {
   const location = useLocation();
+  const { role } = useV2Role();
   const basePath = `/assessments-v2/${portal}`;
-  const navItems = navForPortal(portal);
+  // CR-018: SDPs must not see EISA Instrument Validation at all — not even the nav link.
+  const navItems = navForPortal(portal).filter((item) => !item.hiddenForRoles?.includes(role));
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
