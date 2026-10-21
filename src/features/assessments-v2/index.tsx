@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { navForPortal, type NavItem } from './config/nav';
 import { EisaCalendarExternal, EisaCalendarInternal } from './modules/eisa-calendar';
+import { EisaConfirmationExternal, EisaConfirmationInternal } from './modules/eisa-confirmation';
+import { EisaRegistrationExternal, EisaRegistrationInternal } from './modules/eisa-registration';
 import { InstrumentValidationExternal, InstrumentValidationInternal } from './modules/instrument-validation';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
@@ -30,6 +32,8 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
     return portal === 'internal' ? <InstrumentValidationInternal /> : <InstrumentValidationExternal />;
   }
   if (item.path === 'eisa-calendar') return portal === 'internal' ? <EisaCalendarInternal /> : <EisaCalendarExternal />;
+  if (item.path === 'eisa-registration') return portal === 'internal' ? <EisaRegistrationInternal /> : <EisaRegistrationExternal />;
+  if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;
   return <ComingSoon item={item} />;
 }
 

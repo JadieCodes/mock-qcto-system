@@ -1,2 +1,6 @@
-// Built in Phase 4 (CR-043). Folder holds external/, internal/, components/, workflow.ts, types.ts.
-export {};
+export { ExternalDashboard as EisaConfirmationExternal } from './external/ExternalDashboard';
+export { InternalDashboard as EisaConfirmationInternal } from './internal/InternalDashboard';
+
+// Exposed for Phase 5 (CR-050: link marking/moderation visits to the confirmed dates).
+export { getConfirmationForSitting } from './api';
+export type { EisaConfirmationRecord } from './types';

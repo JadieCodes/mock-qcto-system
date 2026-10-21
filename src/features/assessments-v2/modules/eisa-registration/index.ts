@@ -1,2 +1,6 @@
-// Built in Phase 4 (CR-035, CR-036, CR-038, CR-040, CR-041, CR-042, PM-08). Folder holds external/, internal/, components/, workflow.ts, types.ts.
-export {};
+export { ExternalDashboard as EisaRegistrationExternal } from './external/ExternalDashboard';
+export { InternalDashboard as EisaRegistrationInternal } from './internal/InternalDashboard';
+
+// Read by EISA Confirmation (CR-043): registration must be complete for a sitting first.
+export { listRegisteredRegistrationsForSitting, listSittingIdsWithCompletedRegistrations } from './api';
+export type { EisaRegistrationRecord } from './types';
