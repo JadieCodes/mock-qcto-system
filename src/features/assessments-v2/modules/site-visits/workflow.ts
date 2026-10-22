@@ -3,8 +3,11 @@ import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, 
 import type { SiteVisit } from './types';
 
 // Planning chain: Assistant Director plans -> Deputy Director recommends -> Domain Director
-// approves -> Sub Domain Admin books. Forward-only — the register's send-back/reject/reroute
-// requirements (CR-055/056) are scoped to the REPORT workflow below, not this one.
+// approves -> Sub Domain Admin books. Row 33 (test findings): every REVIEW stage (the three
+// stages downstream of the Assistant Director's own, which is where the plan originates and
+// has no prior owner to reject or send back to) gets a Reject and a Send back action, same
+// shape as CR-056's "every approval stage" rule elsewhere in this domain. Reject is terminal
+// (`planning-rejected`); Send back returns to the immediately preceding stage.
 export const PLANNING_WORKFLOW: WorkflowDefinition = {
   id: 'site-visits-planning',
   stages: [
@@ -13,12 +16,61 @@ export const PLANNING_WORKFLOW: WorkflowDefinition = {
     { id: 'domain-director-approval', label: 'Domain Director approval', allowedRoles: [PLAN_APPROVER_ROLE] },
     { id: 'sda-booking', label: 'Sub Domain Admin booking', allowedRoles: [BOOKING_ROLE] },
     { id: 'booked', label: 'Booked', allowedRoles: [] },
+    { id: 'planning-rejected', label: 'Planning rejected', allowedRoles: [] },
   ],
   actions: [
     { id: 'plan-submit', label: 'Submit plan', fromStage: 'ad-planning', toStage: 'dd-recommend', kind: 'advance' },
     { id: 'plan-recommend', label: 'Recommend to Domain Director', fromStage: 'dd-recommend', toStage: 'domain-director-approval', kind: 'advance' },
+    {
+      id: 'plan-dd-send-back',
+      label: 'Send back to Assistant Director',
+      fromStage: 'dd-recommend',
+      toStage: 'ad-planning',
+      kind: 'send-back',
+      requiresNote: true,
+    },
+    {
+      id: 'plan-dd-reject',
+      label: 'Reject (Deputy Director)',
+      fromStage: 'dd-recommend',
+      toStage: 'planning-rejected',
+      kind: 'reject',
+      requiresNote: true,
+    },
     { id: 'plan-approve', label: 'Approve plan', fromStage: 'domain-director-approval', toStage: 'sda-booking', kind: 'advance' },
+    {
+      id: 'plan-domain-director-send-back',
+      label: 'Send back to Deputy Director',
+      fromStage: 'domain-director-approval',
+      toStage: 'dd-recommend',
+      kind: 'send-back',
+      requiresNote: true,
+    },
+    {
+      id: 'plan-domain-director-reject',
+      label: 'Reject (Domain Director)',
+      fromStage: 'domain-director-approval',
+      toStage: 'planning-rejected',
+      kind: 'reject',
+      requiresNote: true,
+    },
     { id: 'plan-book', label: 'Book visit', fromStage: 'sda-booking', toStage: 'booked', kind: 'complete' },
+    {
+      id: 'plan-sda-send-back',
+      label: 'Send back to Domain Director',
+      fromStage: 'sda-booking',
+      toStage: 'domain-director-approval',
+      kind: 'send-back',
+      requiresNote: true,
+    },
+    {
+      id: 'plan-sda-reject',
+      label: 'Reject (Sub Domain Admin)',
+      fromStage: 'sda-booking',
+      toStage: 'planning-rejected',
+      kind: 'reject',
+      requiresNote: true,
+    },
   ],
 };
 

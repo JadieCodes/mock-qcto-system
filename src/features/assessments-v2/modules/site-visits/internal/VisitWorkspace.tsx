@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
+import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
@@ -161,12 +162,22 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
   );
 }
 
+type PlanningDialogAction = { actionId: 'plan-dd-send-back' | 'plan-dd-reject' | 'plan-domain-director-send-back' | 'plan-domain-director-reject' | 'plan-sda-send-back' | 'plan-sda-reject'; title: string; confirmLabel: string; destructive?: boolean } | null;
+
+const PLANNING_STAGE_ORDER = ['ad-planning', 'dd-recommend', 'domain-director-approval', 'sda-booking', 'booked'] as const;
+
+// Row 32: once a stage has been reached, its box stays visible (read-only once passed) instead
+// of disappearing the moment the record moves on — every later approver can still see the plan
+// and every earlier reviewer's decision. Row 33: every review stage (every stage downstream of
+// the Assistant Director's own, which originates the plan and has nothing to send back to) gets
+// a Reject and a Send back action alongside its forward action.
 function PlanningTab({ visit }: { visit: SiteVisit }) {
   const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
   const planningAction = usePlanningAction();
   const [planNote, setPlanNote] = useState(visit.planNote);
+  const [dialogAction, setDialogAction] = useState<PlanningDialogAction>(null);
   const stage = visit.planningWorkflow.stageId;
 
   if (visit.sourceRegistrationId) {
@@ -178,6 +189,43 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
     );
   }
 
+  const auditTrail = getAuditTrail('site-visit-planning', visit.id);
+  const latestNoteFor = (actionLabel: string) => auditTrail.slice().reverse().find((e) => e.action === actionLabel)?.note;
+
+  if (stage === 'planning-rejected') {
+    const rejectReason = auditTrail.slice().reverse().find((e) => e.action.startsWith('Reject'))?.note;
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 space-y-1">
+          <p className="font-semibold">Planning rejected.</p>
+          {rejectReason && <p>Reason: {rejectReason}</p>}
+        </div>
+        {visit.planNote && (
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <p className="text-xs text-gray-400 uppercase mb-1">Plan Note</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{visit.planNote}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const currentIdx = PLANNING_STAGE_ORDER.indexOf(stage as (typeof PLANNING_STAGE_ORDER)[number]);
+  // "Reached" uses the audit trail, not the current stage index, so a stage that has already
+  // been acted on stays visible even after a later stage sends it back behind that point.
+  const ddReached = auditTrail.some((e) => e.action === 'Recommend to Domain Director' || e.action === 'Send back to Assistant Director');
+  const domainDirectorReached = auditTrail.some((e) => e.action === 'Approve plan' || e.action === 'Send back to Deputy Director');
+  const sdaReached = auditTrail.some((e) => e.action === 'Book visit' || e.action === 'Send back to Domain Director');
+
+  const dialogCopy: Record<Exclude<PlanningDialogAction, null>['actionId'], { title: string; confirmLabel: string; destructive?: boolean }> = {
+    'plan-dd-send-back': { title: 'Send back to Assistant Director', confirmLabel: 'Send back' },
+    'plan-dd-reject': { title: 'Reject plan', confirmLabel: 'Reject', destructive: true },
+    'plan-domain-director-send-back': { title: 'Send back to Deputy Director', confirmLabel: 'Send back' },
+    'plan-domain-director-reject': { title: 'Reject plan', confirmLabel: 'Reject', destructive: true },
+    'plan-sda-send-back': { title: 'Send back to Domain Director', confirmLabel: 'Send back' },
+    'plan-sda-reject': { title: 'Reject plan', confirmLabel: 'Reject', destructive: true },
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -185,57 +233,119 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
         <span className="text-sm font-medium">{stage}</span>
       </div>
 
-      {stage === 'ad-planning' && (
-        <div className="space-y-2">
-          <Label>Plan Note</Label>
-          <Textarea rows={3} value={planNote} onChange={(e) => setPlanNote(e.target.value)} disabled={role !== PLANNER_ROLE} />
-          {role === PLANNER_ROLE && (
-            <Button
-              size="sm"
-              disabled={planningAction.isPending}
-              onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-submit', actorRole: role, actorId, actorName, planNote })}
-            >
-              Submit Plan
-            </Button>
+      <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase">Assistant Director planning</p>
+        {stage === 'ad-planning' && latestNoteFor('Send back to Assistant Director') && (
+          <p className="text-xs text-amber-700">Sent back for clarification: {latestNoteFor('Send back to Assistant Director')}</p>
+        )}
+        <Textarea
+          rows={3}
+          value={stage === 'ad-planning' ? planNote : visit.planNote}
+          onChange={(e) => setPlanNote(e.target.value)}
+          disabled={!(role === PLANNER_ROLE && stage === 'ad-planning')}
+        />
+        {role === PLANNER_ROLE && stage === 'ad-planning' && (
+          <Button
+            size="sm"
+            disabled={planningAction.isPending}
+            onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-submit', actorRole: role, actorId, actorName, planNote })}
+          >
+            Submit Plan
+          </Button>
+        )}
+      </div>
+
+      {ddReached && (
+        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase">Deputy Director recommendation</p>
+          {stage === 'dd-recommend' ? (
+            role === PLAN_RECOMMENDER_ROLE && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={planningAction.isPending} onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-recommend', actorRole: role, actorId, actorName })}>
+                  Recommend to Domain Director
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDialogAction({ actionId: 'plan-dd-send-back', ...dialogCopy['plan-dd-send-back'] })}>
+                  Send back for clarification
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setDialogAction({ actionId: 'plan-dd-reject', ...dialogCopy['plan-dd-reject'] })}>
+                  Reject
+                </Button>
+              </div>
+            )
+          ) : currentIdx > PLANNING_STAGE_ORDER.indexOf('dd-recommend') ? (
+            <p className="text-sm text-emerald-700">Recommended to Domain Director.</p>
+          ) : (
+            <p className="text-sm text-amber-700">Sent back for clarification{latestNoteFor('Send back to Assistant Director') ? `: ${latestNoteFor('Send back to Assistant Director')}` : '.'}</p>
           )}
         </div>
       )}
 
-      {stage === 'dd-recommend' && (
+      {domainDirectorReached && (
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{visit.planNote}</p>
-          {role === PLAN_RECOMMENDER_ROLE && (
-            <Button size="sm" disabled={planningAction.isPending} onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-recommend', actorRole: role, actorId, actorName })}>
-              Recommend to Domain Director
-            </Button>
+          <p className="text-xs font-semibold text-gray-500 uppercase">Domain Director approval</p>
+          {stage === 'domain-director-approval' ? (
+            role === PLAN_APPROVER_ROLE && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={planningAction.isPending} onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-approve', actorRole: role, actorId, actorName })}>
+                  Approve Plan
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDialogAction({ actionId: 'plan-domain-director-send-back', ...dialogCopy['plan-domain-director-send-back'] })}>
+                  Send back for clarification
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setDialogAction({ actionId: 'plan-domain-director-reject', ...dialogCopy['plan-domain-director-reject'] })}>
+                  Reject
+                </Button>
+              </div>
+            )
+          ) : currentIdx > PLANNING_STAGE_ORDER.indexOf('domain-director-approval') ? (
+            <p className="text-sm text-emerald-700">Plan approved.</p>
+          ) : (
+            <p className="text-sm text-amber-700">Sent back for clarification{latestNoteFor('Send back to Deputy Director') ? `: ${latestNoteFor('Send back to Deputy Director')}` : '.'}</p>
           )}
         </div>
       )}
 
-      {stage === 'domain-director-approval' && (
+      {sdaReached && (
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{visit.planNote}</p>
-          {role === PLAN_APPROVER_ROLE && (
-            <Button size="sm" disabled={planningAction.isPending} onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-approve', actorRole: role, actorId, actorName })}>
-              Approve Plan
-            </Button>
-          )}
-        </div>
-      )}
-
-      {stage === 'sda-booking' && (
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-          <p className="text-sm text-gray-700">Plan approved — ready to book.</p>
-          {role === BOOKING_ROLE && (
-            <Button size="sm" disabled={planningAction.isPending} onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-book', actorRole: role, actorId, actorName })}>
-              Book Visit
-            </Button>
+          <p className="text-xs font-semibold text-gray-500 uppercase">Sub Domain Admin booking</p>
+          {stage === 'sda-booking' ? (
+            role === BOOKING_ROLE && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={planningAction.isPending} onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-book', actorRole: role, actorId, actorName })}>
+                  Book Visit
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDialogAction({ actionId: 'plan-sda-send-back', ...dialogCopy['plan-sda-send-back'] })}>
+                  Send back for clarification
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setDialogAction({ actionId: 'plan-sda-reject', ...dialogCopy['plan-sda-reject'] })}>
+                  Reject
+                </Button>
+              </div>
+            )
+          ) : currentIdx > PLANNING_STAGE_ORDER.indexOf('sda-booking') ? (
+            <p className="text-sm text-emerald-700">Booked.</p>
+          ) : (
+            <p className="text-sm text-amber-700">Sent back for clarification{latestNoteFor('Send back to Domain Director') ? `: ${latestNoteFor('Send back to Domain Director')}` : '.'}</p>
           )}
         </div>
       )}
 
       {stage === 'booked' && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">Booked — ready for execution.</div>
+      )}
+
+      {dialogAction && (
+        <ReasonDialog
+          open={!!dialogAction}
+          onOpenChange={(open) => !open && setDialogAction(null)}
+          title={dialogAction.title}
+          confirmLabel={dialogAction.confirmLabel}
+          destructive={dialogAction.destructive}
+          onConfirm={(note) => {
+            planningAction.mutate({ visitId: visit.id, actionId: dialogAction.actionId, actorRole: role, actorId, actorName, note });
+            setDialogAction(null);
+          }}
+        />
       )}
     </div>
   );

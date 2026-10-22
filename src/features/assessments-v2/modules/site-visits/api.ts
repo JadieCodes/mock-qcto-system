@@ -16,6 +16,8 @@ import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api'
 import {
   DEFAULT_NOTICE_LEAD_TIME_DAYS,
   PLAN_APPROVER_ROLE,
+  PLAN_RECOMMENDER_ROLE,
+  PLANNER_ROLE,
   REPORT_APPROVER_ROLE,
   REPORT_SUBMITTER_ROLE,
 } from './config';
@@ -170,7 +172,7 @@ export async function createVisit(input: NewVisitInput): Promise<SiteVisit> {
 
 export async function updateVisitDetails(
   id: string,
-  patch: Partial<Pick<SiteVisit, 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate'>>,
+  patch: Partial<Pick<SiteVisit, 'qpId' | 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate'>>,
 ): Promise<SiteVisit> {
   const all = loadAll();
   const updated = { ...getOrThrow(all, id), ...patch };
@@ -178,14 +180,40 @@ export async function updateVisitDetails(
   return updated;
 }
 
+type PlanningActionId =
+  | 'plan-submit'
+  | 'plan-recommend'
+  | 'plan-approve'
+  | 'plan-book'
+  | 'plan-dd-send-back'
+  | 'plan-dd-reject'
+  | 'plan-domain-director-send-back'
+  | 'plan-domain-director-reject'
+  | 'plan-sda-send-back'
+  | 'plan-sda-reject';
+
 interface PlanningActionParams {
   visitId: string;
-  actionId: 'plan-submit' | 'plan-recommend' | 'plan-approve' | 'plan-book';
+  actionId: PlanningActionId;
   actorRole: Role;
   actorId: string;
   actorName: string;
   planNote?: string;
+  // Row 33: mandatory on every send-back/reject action.
+  note?: string;
 }
+
+// Row 33: notify the role that will need to act next. Send-back goes to whichever role owns
+// the stage the record is returning to; reject is terminal, so the planner (the one who would
+// need to raise a fresh plan) is notified instead — there is no "next stage" to notify.
+const PLANNING_NEXT_OWNER: Partial<Record<PlanningActionId, Role>> = {
+  'plan-dd-send-back': PLANNER_ROLE,
+  'plan-dd-reject': PLANNER_ROLE,
+  'plan-domain-director-send-back': PLAN_RECOMMENDER_ROLE,
+  'plan-domain-director-reject': PLANNER_ROLE,
+  'plan-sda-send-back': PLAN_APPROVER_ROLE,
+  'plan-sda-reject': PLANNER_ROLE,
+};
 
 export async function performPlanningAction(params: PlanningActionParams): Promise<SiteVisit> {
   const all = loadAll();
@@ -198,6 +226,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
     actorRole: params.actorRole,
     actorId: params.actorId,
     actorName: params.actorName,
+    note: params.note,
     recordType: 'site-visit-planning',
     recordId: visit.id,
   });
@@ -216,6 +245,16 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
       recipientRole: REPORT_SUBMITTER_ROLE,
       title: 'Visit booked — ready to conduct',
       body: `"${visit.qualificationTitle}" is booked for ${visit.visitDate}. The execution form is ready.`,
+    });
+  }
+
+  const nextOwner = PLANNING_NEXT_OWNER[params.actionId];
+  if (nextOwner) {
+    const isReject = params.actionId.endsWith('reject');
+    addNotification({
+      recipientRole: nextOwner,
+      title: isReject ? 'Visit plan rejected' : 'Visit plan sent back for clarification',
+      body: `"${visit.qualificationTitle}" (${visit.visitType}): ${params.note ?? ''}`,
     });
   }
 
@@ -282,6 +321,15 @@ export async function performReportAction(params: ReportActionParams): Promise<S
       actorName: params.actorName,
       action: `Re-routed to ${target.name} (${target.role})`,
       note: params.note,
+    });
+    // Row 35: notify the new owner. Notifications in this build are role-level, not
+    // per-person (shared/notifications/store.ts), so every holder of the target's role sees
+    // this — the same limitation every other notification in this domain already has; the
+    // body names the specific colleague so it still reads correctly for them.
+    addNotification({
+      recipientRole: target.role,
+      title: 'A visit report was re-routed to you',
+      body: `"${visit.qualificationTitle}" (${visit.visitType}) was re-routed to ${target.name} by ${params.actorName}: ${params.note}`,
     });
     return updated;
   }
