@@ -10,11 +10,13 @@ const TONE_CLASSES: Record<SiteVisitStatusTone, string> = {
   red: 'bg-red-50 text-red-700 border-red-200',
 };
 
-export function SiteVisitStatusBadge({ visit }: { visit: SiteVisit }) {
-  const tone = overallStatusTone(visit);
+// Row 37: pass forQp on every QP-facing render so a Post-EISA Monitoring outcome never leaks
+// before the Deputy Director shares it.
+export function SiteVisitStatusBadge({ visit, forQp }: { visit: SiteVisit; forQp?: boolean }) {
+  const tone = overallStatusTone(visit, { forQp });
   return (
     <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>
-      {overallStatusLabel(visit)}
+      {overallStatusLabel(visit, { forQp })}
     </Badge>
   );
 }

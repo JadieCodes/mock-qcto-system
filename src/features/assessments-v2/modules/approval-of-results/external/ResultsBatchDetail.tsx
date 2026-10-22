@@ -4,7 +4,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsAction, useResultsBatch } from '../hooks';
-import { competencyRatePercent } from '../workflow';
+import { competencyRatePercent, competentCountOf } from '../workflow';
 
 // CR-059: QP-facing read-only summary — status, competency rate, the latest decline reason
 // (if any) and a resubmit action once declined.
@@ -35,7 +35,7 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Competency Rate</span>
                 <span className="text-sm font-semibold">
-                  {competencyRatePercent(batch)}% ({batch.competentCount}/{batch.learnerCount})
+                  {competencyRatePercent(batch)}% ({competentCountOf(batch)}/{batch.learnerCount})
                 </span>
               </div>
               {batch.declineHistory.length > 0 && (

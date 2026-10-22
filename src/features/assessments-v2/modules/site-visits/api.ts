@@ -1,3 +1,4 @@
+import { LABELS } from '../../config/labels';
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { addNotification } from '../../shared/notifications/store';
@@ -42,6 +43,21 @@ function getOrThrow(visits: SiteVisit[], id: string): SiteVisit {
 
 function replace(visits: SiteVisit[], updated: SiteVisit): SiteVisit[] {
   return visits.map((v) => (v.id === updated.id ? updated : v));
+}
+
+// Row 39 (PM-04, G-25): the official names for the readiness notice and the marking/moderation
+// visit request are still placeholders pending QCTO — kept in config/labels.ts so the real
+// names, once confirmed, are a one-line change here and everywhere else that reads them. Other
+// visit types have no distinct trigger name in the register, so they keep the generic wording.
+function bookedVisitNotificationTitle(visitType: VisitType): string {
+  switch (visitType) {
+    case 'eisa-readiness':
+      return LABELS.eisaReadinessNoticePlaceholder;
+    case 'marking-moderation':
+      return LABELS.markingModerationVisitRequestPlaceholder;
+    default:
+      return 'Visit booked — ready to conduct';
+  }
 }
 
 // CR-048: the checklist shape changes per visit type.
@@ -243,7 +259,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
   if (nextWorkflow.stageId === 'booked') {
     addNotification({
       recipientRole: REPORT_SUBMITTER_ROLE,
-      title: 'Visit booked — ready to conduct',
+      title: bookedVisitNotificationTitle(visit.visitType),
       body: `"${visit.qualificationTitle}" is booked for ${visit.visitDate}. The execution form is ready.`,
     });
   }

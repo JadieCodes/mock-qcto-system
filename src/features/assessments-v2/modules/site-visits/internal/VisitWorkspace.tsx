@@ -14,10 +14,12 @@ import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
-import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE } from '../config';
+import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
+import { REPORT_WORKFLOW } from '../workflow';
 import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
 import type { SiteVisit } from '../types';
 import type { Role } from '../../../types';
@@ -427,10 +429,15 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
         </div>
       )}
 
-      {stage === 'approved' && visit.visitType === 'post-eisa-monitoring' && role === REPORT_APPROVER_ROLE && (
+      {/* Row 37: single, role-gated action bar — gated through shared/workflow's
+          canActInStage (REPORT_WORKFLOW now actually allows the Deputy Director to act from
+          'approved') rather than a bare role comparison, and scoped to Post-EISA Monitoring
+          only, since every other visit type's report workflow ends at "Approved" with no
+          outcome-sharing step (CR-058). */}
+      {stage === 'approved' && visit.visitType === 'post-eisa-monitoring' && canActInStage(REPORT_WORKFLOW, stage, role) && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'share-visit-outcome', actorRole: role, actorId, actorName })}>
-            Share Visit Outcome
+            {SHARE_VISIT_OUTCOME_LABEL}
           </Button>
         </div>
       )}

@@ -87,11 +87,17 @@ export function resultsStatusTone(batch: ResultsBatch): ResultsStatusTone {
   }
 }
 
+// Row 40: the competent count is derived from the per-learner results, not stored as its own
+// hand-typed number.
+export function competentCountOf(batch: ResultsBatch): number {
+  return batch.learnerResults.filter((r) => r.outcome === 'competent').length;
+}
+
 // CR-059: the batch competency rate, shown to QCTO and checked against the Post-EISA
 // Monitoring threshold (PM-06).
 export function competencyRatePercent(batch: ResultsBatch): number {
   if (batch.learnerCount === 0) return 0;
-  return Math.round((batch.competentCount / batch.learnerCount) * 1000) / 10;
+  return Math.round((competentCountOf(batch) / batch.learnerCount) * 1000) / 10;
 }
 
 export function submissionDeadlineFor(sittingDate: string): string {

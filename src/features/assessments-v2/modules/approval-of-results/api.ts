@@ -11,7 +11,7 @@ import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-v
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
 import { competencyRatePercent, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
-import type { EvidenceDocument, NewResultsBatchInput, ResultsBatch } from './types';
+import type { EvidenceDocument, LearnerResult, NewResultsBatchInput, ResultsBatch } from './types';
 
 const KEY = 'approvalOfResults:batches';
 
@@ -33,12 +33,46 @@ function replace(batches: ResultsBatch[], updated: ResultsBatch): ResultsBatch[]
   return batches.map((b) => (b.id === updated.id ? updated : b));
 }
 
+// Row 40: older seed/demo data (and anything saved before this fix) only ever carried a single
+// hand-typed `competentCount`/`learnerCount`, with no per-learner breakdown. Migrated the same
+// way Fix 1B-i/Fix 2C migrate old localStorage shapes — on read, not destructively — so old
+// data keeps working instead of crashing the per-learner UI. The roster comes from the
+// sitting's EISA Confirmation record where it still exists; the first `competentCount` learners
+// (in that roster's order) are read as Competent so the competency rate is unchanged by the
+// migration itself.
+function needsLegacyMigration(batch: ResultsBatch): boolean {
+  return !Array.isArray(batch.learnerResults);
+}
+
+async function migrateLegacyBatches(batches: ResultsBatch[]): Promise<ResultsBatch[]> {
+  if (!batches.some(needsLegacyMigration)) return batches;
+  const confirmations = await listConfirmationRecords();
+  const migrated = batches.map((batch) => {
+    if (!needsLegacyMigration(batch)) return batch;
+    const legacyCompetentCount = (batch as unknown as { competentCount?: number }).competentCount ?? 0;
+    const outcomeFor = (index: number): LearnerResult['outcome'] => (index < legacyCompetentCount ? 'competent' : 'not-yet-competent');
+    const roster = confirmations.find((c) => c.sittingId === batch.sittingId)?.learners ?? [];
+    const learnerResults: LearnerResult[] =
+      roster.length > 0
+        ? roster.map((learner, index) => ({ learnerId: learner.learnerId, fullName: learner.fullName, outcome: outcomeFor(index) }))
+        : Array.from({ length: batch.learnerCount }, (_, index) => ({
+            learnerId: `legacy-${batch.id}-${index}`,
+            fullName: `Learner ${index + 1}`,
+            outcome: outcomeFor(index),
+          }));
+    return { ...batch, learnerResults, learnerCount: learnerResults.length };
+  });
+  saveAll(migrated);
+  return migrated;
+}
+
 export async function listBatches(): Promise<ResultsBatch[]> {
-  return loadAll();
+  return migrateLegacyBatches(loadAll());
 }
 
 export async function getBatch(id: string): Promise<ResultsBatch | undefined> {
-  return loadAll().find((b) => b.id === id);
+  const all = await migrateLegacyBatches(loadAll());
+  return all.find((b) => b.id === id);
 }
 
 // CR-059: only sittings with a fully CONFIRMED EISA Confirmation, and without an existing
@@ -63,8 +97,11 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   if (confirmation.workflow.stageId !== 'confirmed') {
     throw new Error('The sitting must be fully confirmed before results can be submitted.');
   }
-  if (input.competentCount < 0 || input.competentCount > confirmation.learners.length) {
-    throw new Error('Competent learner count must be between 0 and the total number of registered learners.');
+  // Row 40: a result per learner, not a hand-typed count — every learner on the sitting's
+  // confirmed registration needs a result before the batch can be submitted at all.
+  const rosterIds = new Set(confirmation.learners.map((l) => l.learnerId));
+  if (input.learnerResults.length !== confirmation.learners.length || input.learnerResults.some((r) => !rosterIds.has(r.learnerId))) {
+    throw new Error('Every registered learner needs a result (Competent or Not yet competent) before the batch can be submitted.');
   }
 
   const batch: ResultsBatch = {
@@ -75,7 +112,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     qpId: confirmation.qpId,
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
-    competentCount: input.competentCount,
+    learnerResults: input.learnerResults,
     evidenceDocuments: input.evidenceDocuments,
     complianceReviewNotes: '',
     evidenceEvaluationNotes: '',

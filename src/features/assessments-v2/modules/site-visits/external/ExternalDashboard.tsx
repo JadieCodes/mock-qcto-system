@@ -55,7 +55,7 @@ function QpVisitsView() {
                     <TableCell className="max-w-[220px] truncate">{v.qualificationTitle}</TableCell>
                     <TableCell className="whitespace-nowrap">{v.visitDate}</TableCell>
                     <TableCell>
-                      <SiteVisitStatusBadge visit={v} />
+                      <SiteVisitStatusBadge visit={v} forQp />
                     </TableCell>
                   </TableRow>
                 ))}

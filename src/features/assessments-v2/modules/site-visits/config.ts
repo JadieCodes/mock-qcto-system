@@ -50,6 +50,15 @@ export const REPORT_VISIBILITY_RULES: VisibilityRule[] = [
   { role: PLAN_RECOMMENDER_ROLE, scope: 'all' },
   { role: PLAN_APPROVER_ROLE, scope: 'all' },
   { role: BOOKING_ROLE, scope: 'all' },
+  // Rows 36/38: Approval of Results now surfaces the linked Marking & Moderation report
+  // summary (CR-052) to its own approval chain, so Director and Chief Director — neither of
+  // them on the site-visits process-stage team — need an explicit entry here too, rather than
+  // falling through to visibilityScopeForRole's "not listed" default. Built as the stated
+  // default (every approval-of-results reviewer sees the full report, same as every
+  // site-visits-team role); still an open question for QCTO's real per-unit subdivision
+  // (CR-054 — see progress.md).
+  { role: 'Director', scope: 'all' },
+  { role: 'Chief Director', scope: 'all' },
   { role: 'QP', scope: 'own-qp-visits' },
 ];
 

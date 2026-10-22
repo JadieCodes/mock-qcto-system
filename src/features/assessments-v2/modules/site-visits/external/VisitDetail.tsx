@@ -27,7 +27,7 @@ export function VisitDetail({ visitId, onClose }: { visitId: string | null; onCl
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Status</span>
-                <SiteVisitStatusBadge visit={visit} />
+                <SiteVisitStatusBadge visit={visit} forQp />
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>

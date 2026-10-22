@@ -12,7 +12,8 @@ import type { WorkflowAction } from '../../../shared/workflow/types';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
-import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../../site-visits/config';
+import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT, visibilityScopeForRole } from '../../site-visits/config';
+import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import {
@@ -25,7 +26,7 @@ import {
   useSaveEvidenceEvaluationNotes,
   useUploadEvidenceDocument,
 } from '../hooks';
-import { competencyRatePercent, RESULTS_WORKFLOW } from '../workflow';
+import { competencyRatePercent, competentCountOf, RESULTS_WORKFLOW } from '../workflow';
 import type { ResultsBatch } from '../types';
 import type { Role } from '../../../types';
 
@@ -103,9 +104,13 @@ function ActionBar({
 function DetailsTab({ batch }: { batch: ResultsBatch }) {
   const { data: mmVisits = [] } = useMarkingModerationStatus(batch.sittingId);
   const createPemVisit = useCreatePemVisitForBatch();
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
+  // Rows 36/38: who can see the report itself (not just the status) is driven by the same
+  // CR-054 REPORT_VISIBILITY_RULES table the Site Visits hub reads from, not a separate rule
+  // invented for this screen.
+  const canSeeReportDetails = visibilityScopeForRole(role) === 'all';
 
   const rate = competencyRatePercent(batch);
   const belowThreshold = rate < POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT;
@@ -139,8 +144,23 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Competency Rate</p>
         <p className="text-2xl font-bold text-gray-900">{rate}%</p>
         <p className="text-xs text-gray-500">
-          {batch.competentCount} of {batch.learnerCount} learners found competent.
+          {competentCountOf(batch)} of {batch.learnerCount} learners found competent.
         </p>
+        {/* Row 40: the rate above is calculated from these per-learner results, not typed in by
+            hand (H-05/H-11/H-12/G-24) — shown here so the number is traceable. */}
+        <details className="text-xs text-gray-500">
+          <summary className="cursor-pointer select-none text-gray-600">View per-learner results</summary>
+          <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+            {batch.learnerResults.map((r) => (
+              <li key={r.learnerId} className="flex items-center justify-between gap-3 border-b last:border-b-0 py-1">
+                <span className="truncate">{r.fullName}</span>
+                <span className={r.outcome === 'competent' ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
+                  {r.outcome === 'competent' ? 'Competent' : 'Not yet competent'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
         {belowThreshold && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
             <p className="text-sm text-amber-800">
@@ -165,13 +185,39 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
           {mmVisits.length === 0 ? (
             <p className="text-sm text-gray-400">No linked Marking &amp; Moderation visit for this sitting.</p>
           ) : (
-            <div className="space-y-2">
-              {mmVisits.map((v) => (
-                <div key={v.id} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{v.venue || 'Marking & Moderation visit'}</span>
-                  <span className="text-gray-500">{v.reportWorkflow.stageId}</span>
-                </div>
-              ))}
+            <div className="space-y-3">
+              {mmVisits.map((v) => {
+                const summary = checklistCompletionSummary(v);
+                const notes = Object.values(v.freeTextNotes).filter((n) => n.trim().length > 0);
+                return (
+                  <div key={v.id} className="rounded-xl border p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-gray-700">{v.venue || 'Marking & Moderation visit'}</span>
+                      <span className="text-gray-500">{overallStatusLabel(v)}</span>
+                    </div>
+                    {/* Row 38 (G-26): show the report itself, not just its status, once it's
+                        been approved — gated by the same visibility rule checked above. */}
+                    {!canSeeReportDetails ? (
+                      <p className="text-xs text-gray-400">Report details are restricted for your role (CR-054 — still open with QCTO).</p>
+                    ) : !reportIsApproved(v) ? (
+                      <p className="text-xs text-gray-400">Report not yet approved.</p>
+                    ) : (
+                      <div className="text-xs text-gray-600 space-y-1 pt-1.5 border-t">
+                        <p>
+                          Checklist: {summary.answered} of {summary.total} lines completed.
+                        </p>
+                        {v.completedBy && (
+                          <p>
+                            Completed by {v.completedBy}
+                            {v.completedDate && ` on ${v.completedDate}`}.
+                          </p>
+                        )}
+                        {notes.length > 0 && <p className="whitespace-pre-wrap">{notes.join(' — ')}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

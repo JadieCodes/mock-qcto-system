@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from '../../shared/workflow/types';
-import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE } from './config';
+import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from './config';
 import type { SiteVisit } from './types';
 
 // Planning chain: Assistant Director plans -> Deputy Director recommends -> Domain Director
@@ -85,7 +85,11 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
   stages: [
     { id: 'awaiting-execution', label: 'Awaiting execution', allowedRoles: [REPORT_SUBMITTER_ROLE] },
     { id: 'dd-report-review', label: 'Deputy Director review', allowedRoles: [REPORT_APPROVER_ROLE] },
-    { id: 'approved', label: 'Approved', allowedRoles: [] },
+    // Row 37 (G-23): this stage needs an allowed role too — "Share Visit Outcome" is an action
+    // FROM 'approved', and the shared workflow engine's canActInStage check blocked it when
+    // this list was empty, so the Deputy Director's click silently failed and the QP never
+    // received anything.
+    { id: 'approved', label: 'Approved', allowedRoles: [REPORT_APPROVER_ROLE] },
     { id: 'rejected', label: 'Rejected', allowedRoles: [] },
     { id: 'outcome-shared', label: 'Outcome shared', allowedRoles: ['QP'] },
     { id: 'closed', label: 'Closed', allowedRoles: [] },
@@ -125,7 +129,7 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
       requiresNote: true,
     },
     // CR-058: post-eisa-monitoring only — QCTO shares the outcome, the QP then responds.
-    { id: 'share-visit-outcome', label: 'Share Visit Outcome', fromStage: 'approved', toStage: 'outcome-shared', kind: 'advance' },
+    { id: 'share-visit-outcome', label: SHARE_VISIT_OUTCOME_LABEL, fromStage: 'approved', toStage: 'outcome-shared', kind: 'advance' },
     { id: 'qp-acknowledge-outcome', label: 'Acknowledge outcome', fromStage: 'outcome-shared', toStage: 'closed', kind: 'complete' },
   ],
 };
@@ -151,8 +155,18 @@ export function planningStatusLabel(visit: SiteVisit): string {
   }
 }
 
-export function overallStatusLabel(visit: SiteVisit): string {
+// Row 37: a QP must see nothing about a Post-EISA Monitoring report — not even that it was
+// approved — until the Deputy Director explicitly shares it (CR-058). `forQp` masks the two
+// stages that would otherwise leak the outcome early; every other visit type has no share step
+// at all, so a QP's status there already stops at "Report approved"/"Report rejected" with
+// nothing further to hide.
+const QP_MASKED_PEM_STAGES = new Set(['dd-report-review', 'approved']);
+
+export function overallStatusLabel(visit: SiteVisit, opts?: { forQp?: boolean }): string {
   if (visit.planningWorkflow.stageId !== 'booked') return planningStatusLabel(visit);
+  if (opts?.forQp && visit.visitType === 'post-eisa-monitoring' && QP_MASKED_PEM_STAGES.has(visit.reportWorkflow.stageId)) {
+    return 'Visit completed — outcome pending';
+  }
   switch (visit.reportWorkflow.stageId) {
     case 'awaiting-execution':
       return 'Booked — awaiting execution';
@@ -163,7 +177,7 @@ export function overallStatusLabel(visit: SiteVisit): string {
     case 'rejected':
       return 'Report rejected';
     case 'outcome-shared':
-      return 'Outcome shared — awaiting QP';
+      return opts?.forQp ? 'Outcome shared' : 'Outcome shared — awaiting QP';
     case 'closed':
       return 'Closed';
     default:
@@ -171,9 +185,31 @@ export function overallStatusLabel(visit: SiteVisit): string {
   }
 }
 
-export function overallStatusTone(visit: SiteVisit): SiteVisitStatusTone {
+// Row 38 (CR-052/G-26): lets Approval of Results show the report itself, not only its status —
+// an approved report is one that has actually been reviewed and signed off, so that's the line
+// used to decide "is there a report worth showing yet."
+export function reportIsApproved(visit: SiteVisit): boolean {
+  return visit.reportWorkflow.stageId === 'approved' || visit.reportWorkflow.stageId === 'outcome-shared' || visit.reportWorkflow.stageId === 'closed';
+}
+
+export function checklistCompletionSummary(visit: SiteVisit): { answered: number; total: number } {
+  let answered = 0;
+  let total = 0;
+  for (const section of visit.checklist) {
+    for (const item of section.items) {
+      total += 1;
+      if (item.answer !== null) answered += 1;
+    }
+  }
+  return { answered, total };
+}
+
+export function overallStatusTone(visit: SiteVisit, opts?: { forQp?: boolean }): SiteVisitStatusTone {
   if (visit.planningWorkflow.stageId !== 'booked') {
     return visit.planningWorkflow.stageId === 'planning-rejected' ? 'red' : 'amber';
+  }
+  if (opts?.forQp && visit.visitType === 'post-eisa-monitoring' && QP_MASKED_PEM_STAGES.has(visit.reportWorkflow.stageId)) {
+    return 'amber';
   }
   switch (visit.reportWorkflow.stageId) {
     case 'approved':
