@@ -9,7 +9,7 @@ export function PortalPicker() {
         <div className="max-w-md w-full space-y-4">
           <h1 className="text-xl font-bold text-gray-900 text-center">QCTO Assessments (v2)</h1>
           <p className="text-sm text-gray-500 text-center">Choose which portal to view.</p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Link
               to="internal/dashboard"
               className="rounded-2xl border bg-white p-6 text-center shadow-sm hover:shadow-md transition-shadow"

@@ -12,9 +12,9 @@ export function RoleSwitcher() {
   const personOptions = personsForRole(role);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Select value={role} onValueChange={(value) => setRole(value as typeof role)}>
-        <SelectTrigger className="w-[190px]" aria-label="Acting as role">
+        <SelectTrigger className="w-[150px] sm:w-[190px]" aria-label="Acting as role">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -26,7 +26,7 @@ export function RoleSwitcher() {
         </SelectContent>
       </Select>
       <Select value={personId} onValueChange={setPersonId}>
-        <SelectTrigger className="w-[190px]" aria-label="Acting as person">
+        <SelectTrigger className="w-[150px] sm:w-[190px]" aria-label="Acting as person">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

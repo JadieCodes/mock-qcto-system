@@ -21,3 +21,15 @@ export function useV2Role(): RoleContextValue {
   if (!ctx) throw new Error('useV2Role must be used within a RoleProvider');
   return ctx;
 }
+
+// Logout: forget which named person was active for a portal, so the next visit to that
+// portal falls back to its default person (mirrors RoleContext.tsx's personStorageKey
+// format). Deliberately separate from mock/api/storage.ts's resetDemoData() — logging out
+// must never touch assessmentsV2: record data, only this one "who am I" selection.
+export function clearStoredPerson(portal: Portal): void {
+  try {
+    localStorage.removeItem(`assessmentsV2:activePersonId:v2:${portal}`);
+  } catch {
+    // storage unavailable — nothing persisted to clear
+  }
+}
