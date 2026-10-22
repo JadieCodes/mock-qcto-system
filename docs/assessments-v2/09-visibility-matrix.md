@@ -114,3 +114,14 @@ Reusing the existing `SDP_DIRECTORY` seed (`mock/data/sdpDirectory.ts`) for cont
 9. Qualifications Development doing both the FISA source-document supply step and the final Director & Team sign-off is one role literal covering two distinct parties named in the process-flow doc — flagged, not changed.
 10. QP demo identity is a named individual; SDP demo identity is an organisation (matches the existing `SDP_DIRECTORY` seed shape).
 11. "See unit" is defined as "whole process-stage team" until Section 3's named users exist to subdivide it further — CR-054's real subdivision rule is still an open question for QCTO, not resolved here.
+
+## Approved corrections
+
+QCTO's corrections to the draft above, as given to the developer. These override the sections they touch; everything else in this doc stands as written.
+
+1. **SDP is None on Site Visits**, confirmed. The SDP picker is removed from visit planning.
+2. **"See unit" = the whole process-stage team's records**, with a "My items / All in my team" switch.
+3. **Records link to a QP or SDP by stable id (`qpId`/`sdpId`), not by free-text name.**
+4. Assumption 3 (Section 5) should read: *"SDP is None on Site Visits; already correct in the code."*
+5. All other assumptions (Section 5) are **approved as written**.
+6. The EISA Instrument Validation status dashboard **stays ASD-only**. CR-025 ("should other officials get a read-only status dashboard?") remains an **open question for QCTO**.

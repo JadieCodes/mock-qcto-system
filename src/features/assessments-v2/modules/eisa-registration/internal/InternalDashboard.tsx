@@ -2,13 +2,22 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import { useRegistrationRecords } from '../hooks';
+import { REGISTRATION_WORKFLOW } from '../workflow';
 import { RegistrationWorkspace } from './RegistrationWorkspace';
 import type { EisaRegistrationRecord } from '../types';
+
+// A brand-new submission nobody has personally touched yet still belongs under "My items" for
+// whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+function isUnassignedActionable(record: EisaRegistrationRecord, role: Role): boolean {
+  return canActInStage(REGISTRATION_WORKFLOW, record.workflow.stageId, role);
+}
 
 // CR-019/CR-035: its own section, separate from EISA Instrument Validation. CR: category split
 // into Trades / Non-Trades tabs for the Assistant Director's queue.
@@ -64,10 +73,10 @@ function RecordsTable({ records, onSelect }: { records: EisaRegistrationRecord[]
 }
 
 export function InternalDashboard() {
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const { data: allRecords = [] } = useRegistrationRecords();
   const [scope, setScope] = useState<ListScope>('mine');
-  const records = filterByScope(allRecords, scope, person.id, (r) => [r.workflow.submittedById]);
+  const records = filterByScope(allRecords, scope, person.id, (r) => [r.workflow.submittedById], (r) => isUnassignedActionable(r, role));
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const trades = records.filter((r) => r.category === 'trades');

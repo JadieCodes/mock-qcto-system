@@ -5,18 +5,33 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { LABELS } from '../../../config/labels';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
 import { VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
+import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
 import type { SiteVisit } from '../types';
 
 function myItemIds(v: SiteVisit): (string | null | undefined)[] {
   return [v.planningWorkflow.submittedById, v.reportWorkflow.submittedById, v.reroutedToId];
+}
+
+// A brand-new plan/report nobody has personally touched yet still belongs under "My items" for
+// whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+// CR-055: a report re-routed to a specific Deputy Director belongs to that person only — it
+// must not also show as an unassigned item for every other Deputy Director.
+function isUnassignedActionable(v: SiteVisit, role: Role, personId: string): boolean {
+  if (canActInStage(PLANNING_WORKFLOW, v.planningWorkflow.stageId, role)) return true;
+  if (canActInStage(REPORT_WORKFLOW, v.reportWorkflow.stageId, role)) {
+    return !v.reroutedToId || v.reroutedToId === personId;
+  }
+  return false;
 }
 
 const REPORT_RECEIVED_STAGES = new Set(['approved', 'outcome-shared', 'closed']);
@@ -66,12 +81,12 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
 }
 
 export function InternalDashboard() {
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const { data: allVisits = [] } = useSiteVisits();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [scope, setScope] = useState<ListScope>('mine');
-  const visits = filterByScope(allVisits, scope, person.id, myItemIds);
+  const visits = filterByScope(allVisits, scope, person.id, myItemIds, (v) => isUnassignedActionable(v, role, person.id));
 
   const pendingPlanning = visits.filter((v) => PLANNING_PENDING_STAGES.has(v.planningWorkflow.stageId));
   // CR-045: "Reports Received" replaces "Results Received"; there is no "Schedules Received" metric.

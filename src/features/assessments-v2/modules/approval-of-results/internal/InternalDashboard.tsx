@@ -1,15 +1,23 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
-import { competencyRatePercent } from '../workflow';
+import { competencyRatePercent, RESULTS_WORKFLOW } from '../workflow';
 import { ResultsBatchWorkspace } from './ResultsBatchWorkspace';
 import type { ResultsBatch } from '../types';
+
+// A brand-new submission nobody has personally touched yet still belongs under "My items" for
+// whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+function isUnassignedActionable(b: ResultsBatch, role: Role): boolean {
+  return canActInStage(RESULTS_WORKFLOW, b.workflow.stageId, role);
+}
 
 const PENDING_STAGES = new Set(['ad-review', 'dd-review', 'director-review', 'chief-director-review']);
 
@@ -58,11 +66,11 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
 // construction, since this name was never used for anything else anywhere in v2's nav
 // (config/nav.ts), only placeholders flagged for Phase 6 (see progress.md).
 export function InternalDashboard() {
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const { data: allBatches = [] } = useResultsBatches();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scope, setScope] = useState<ListScope>('mine');
-  const batches = filterByScope(allBatches, scope, person.id, (b) => [b.workflow.submittedById]);
+  const batches = filterByScope(allBatches, scope, person.id, (b) => [b.workflow.submittedById], (b) => isUnassignedActionable(b, role));
 
   const pending = batches.filter((b) => PENDING_STAGES.has(b.workflow.stageId));
   const approved = batches.filter((b) => b.workflow.stageId === 'approved');

@@ -3,28 +3,61 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { FisaRegistrationStatusBadge, FisaStandardStatusBadge, FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaRegistrations, useFisaStandards, useFisaValidations } from '../hooks';
+import { FISA_REGISTRATION_WORKFLOW, FISA_STANDARD_WORKFLOW, FISA_VALIDATION_WORKFLOW } from '../workflow';
 import { NewStandardDialog } from './NewStandardDialog';
 import { RegistrationWorkspace } from './RegistrationWorkspace';
 import { StandardWorkspace } from './StandardWorkspace';
 import { ValidationWorkspace } from './ValidationWorkspace';
+import type { FisaRegistrationRecord, FisaStandardRecord, FisaValidationRecord } from '../types';
+
+// Brand-new records nobody has personally touched yet still belong under "My items" for
+// whichever role can act on their current stage (09-visibility-matrix.md "Approved corrections").
+// Once a validation is allocated to a specific ASD (PM-11), it belongs to that person only.
+function isStandardActionable(s: FisaStandardRecord, role: Role): boolean {
+  return canActInStage(FISA_STANDARD_WORKFLOW, s.workflow.stageId, role);
+}
+
+function isValidationActionable(v: FisaValidationRecord, role: Role, personId: string): boolean {
+  if (!canActInStage(FISA_VALIDATION_WORKFLOW, v.workflow.stageId, role)) return false;
+  if (v.allocatedAsdId && v.allocatedAsdId !== personId) return false;
+  return true;
+}
+
+function isRegistrationActionable(r: FisaRegistrationRecord, role: Role): boolean {
+  return canActInStage(FISA_REGISTRATION_WORKFLOW, r.workflow.stageId, role);
+}
 
 // CR-026: FISA Team. Fully independent of the QSA Evaluation / Instrument Validation /
 // Registration Teams — no shared records with the EISA flow, only shared components.
 export function InternalDashboard() {
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const { data: allStandards = [] } = useFisaStandards();
   const { data: allValidations = [] } = useFisaValidations();
   const { data: allRegistrations = [] } = useFisaRegistrations();
   const [scope, setScope] = useState<ListScope>('mine');
 
-  const standards = filterByScope(allStandards, scope, person.id, (s) => [s.workflow.submittedById]);
-  const validations = filterByScope(allValidations, scope, person.id, (v) => [v.workflow.submittedById, v.allocatedAsdId]);
-  const registrations = filterByScope(allRegistrations, scope, person.id, (r) => [r.workflow.submittedById]);
+  const standards = filterByScope(allStandards, scope, person.id, (s) => [s.workflow.submittedById], (s) => isStandardActionable(s, role));
+  const validations = filterByScope(
+    allValidations,
+    scope,
+    person.id,
+    (v) => [v.workflow.submittedById, v.allocatedAsdId],
+    (v) => isValidationActionable(v, role, person.id),
+  );
+  const registrations = filterByScope(
+    allRegistrations,
+    scope,
+    person.id,
+    (r) => [r.workflow.submittedById],
+    (r) => isRegistrationActionable(r, role),
+  );
 
   const [isStandardFormOpen, setIsStandardFormOpen] = useState(false);
   const [selectedStandardId, setSelectedStandardId] = useState<string | null>(null);

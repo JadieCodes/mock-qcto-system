@@ -1,16 +1,28 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import { useRplToolkitApplications } from '../hooks';
 import type { RplToolkitApplication } from '../types';
+import { RPL_EVAL_WORKFLOW } from '../workflow';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 
 function myItemIds(app: RplToolkitApplication): (string | null | undefined)[] {
   return [app.evalState.submittedById, app.outcomeState.submittedById, app.allocatedAsdId];
+}
+
+// A brand-new submission nobody has personally touched yet still belongs under "My items" for
+// whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+// Once allocated to a specific ASD, it belongs to that person only.
+function isUnassignedActionable(app: RplToolkitApplication, role: Role, personId: string): boolean {
+  if (!canActInStage(RPL_EVAL_WORKFLOW, app.evalState.stageId, role)) return false;
+  if (app.allocatedAsdId && app.allocatedAsdId !== personId) return false;
+  return true;
 }
 
 // PM-09: RPL Toolkit Team. Self-contained — no inbound or outbound links to the other maps.
@@ -23,7 +35,7 @@ export function InternalDashboard() {
   const isCeo = role === 'CEO';
   const applications = isCeo
     ? allApplications.filter((a) => a.outcomeState.stageId === 'ceo-signature')
-    : filterByScope(allApplications, scope, person.id, myItemIds);
+    : filterByScope(allApplications, scope, person.id, myItemIds, (a) => isUnassignedActionable(a, role, person.id));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

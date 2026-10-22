@@ -24,7 +24,11 @@ export function BatchReviewPanel() {
 
   const canReview = canActInStage(BATCH_WORKFLOW, 'qcto-review', role);
 
-  const batches = filterByScope(allBatches, scope, person.id, (b) => [b.state.submittedById]);
+  // A brand-new date-proposal nobody has personally touched yet still belongs under "My items"
+  // for whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+  const batches = filterByScope(allBatches, scope, person.id, (b) => [b.state.submittedById], (b) =>
+    canActInStage(BATCH_WORKFLOW, b.state.stageId, role),
+  );
   const sorted = [...batches].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   if (sorted.length === 0) {

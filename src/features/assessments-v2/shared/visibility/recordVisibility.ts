@@ -36,12 +36,29 @@ export function filterExternalRecords<T>(
 
 // Internal lists: "My items" (default) vs "All in my team" (09-visibility-matrix.md Section 1
 // note — the matrix has no subdivision smaller than "whole team" yet, so "All in my team" is
-// simply the unfiltered, already-team-gated list). idsOf should return every id the record
-// could be personally associated with (submittedById on each workflow state, allocatedAsdId,
-// reroutedToId, etc.) — isMyItem matches if the active person's id is any one of them.
+// simply the unfiltered, already-team-gated list).
+//
+// "My items" (approved definition, docs/assessments-v2/09-visibility-matrix.md "Approved
+// corrections") is the union of two sets:
+//  1. Records submitted by or allocated to the active person — idsOf should return every id
+//     the record could be personally associated with (submittedById on each workflow state,
+//     allocatedAsdId, reroutedToId, etc.); isMyItem matches if the active person's id is any
+//     one of them.
+//  2. Unassigned records currently waiting at a stage the active person's role can act on
+//     (a brand-new submission nobody has personally touched yet) — isUnassignedActionable
+//     should return true only when the record's current stage allows this role to act AND the
+//     record isn't pinned to a specific *different* named person (e.g. a FISA validation
+//     already allocated to another ASD, or a site-visit report re-routed to another Deputy
+//     Director) — callers that have such a field should check it there.
 export type ListScope = 'mine' | 'team';
 
-export function filterByScope<T>(records: T[], scope: ListScope, personId: string, idsOf: (record: T) => (string | null | undefined)[]): T[] {
+export function filterByScope<T>(
+  records: T[],
+  scope: ListScope,
+  personId: string,
+  idsOf: (record: T) => (string | null | undefined)[],
+  isUnassignedActionable?: (record: T) => boolean,
+): T[] {
   if (scope === 'team') return records;
-  return records.filter((r) => isMyItem(personId, ...idsOf(r)));
+  return records.filter((r) => isMyItem(personId, ...idsOf(r)) || (isUnassignedActionable ? isUnassignedActionable(r) : false));
 }

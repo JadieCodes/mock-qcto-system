@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
 import { useInstrumentValidationRecords } from '../hooks';
 import type { InstrumentValidationRecord } from '../types';
+import { SCHEDULING_WORKFLOW, VALIDATION_WORKFLOW } from '../workflow';
 import { StatusDashboard } from './StatusDashboard';
 import { ValidationWorkspace } from './ValidationWorkspace';
 
@@ -15,14 +18,23 @@ function myItemIds(record: InstrumentValidationRecord): (string | null | undefin
   return [record.scheduling.workflow.submittedById, record.validationWorkflow.submittedById];
 }
 
+// A brand-new submission nobody has personally touched yet still belongs under "My items" for
+// whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+function isUnassignedActionable(record: InstrumentValidationRecord, role: Role): boolean {
+  return (
+    canActInStage(SCHEDULING_WORKFLOW, record.scheduling.workflow.stageId, role) ||
+    canActInStage(VALIDATION_WORKFLOW, record.validationWorkflow.stageId, role)
+  );
+}
+
 // CR-018/CR-019: a section separate from EISA Registration. SDPs cannot see this at all —
 // blocked at the route level (see shared/ui/RoleBlocked.tsx wired in index.tsx), not just
 // hidden from this screen.
 export function InternalDashboard() {
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const { data: allRecords = [] } = useInstrumentValidationRecords();
   const [scope, setScope] = useState<ListScope>('mine');
-  const records = filterByScope(allRecords, scope, person.id, myItemIds);
+  const records = filterByScope(allRecords, scope, person.id, myItemIds, (r) => isUnassignedActionable(r, role));
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const schedulingCount = records.filter((r) => r.scheduling.workflow.stageId !== 'agreed').length;

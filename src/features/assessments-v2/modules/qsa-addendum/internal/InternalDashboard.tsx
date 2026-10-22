@@ -1,16 +1,30 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import type { Role } from '../../../types';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
 import type { QsaAddendumApplication } from '../types';
+import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, OUTCOME_WORKFLOW } from '../workflow';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 
 function myItemIds(app: QsaAddendumApplication): (string | null | undefined)[] {
   return [app.ackState.submittedById, app.evalState.submittedById, app.outcomeState.submittedById, app.approvalState?.submittedById];
+}
+
+// A brand-new submission nobody has personally touched yet still belongs under "My items" for
+// whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+function isUnassignedActionable(app: QsaAddendumApplication, role: Role): boolean {
+  return (
+    canActInStage(ACK_WORKFLOW, app.ackState.stageId, role) ||
+    canActInStage(EVAL_WORKFLOW, app.evalState.stageId, role) ||
+    canActInStage(OUTCOME_WORKFLOW, app.outcomeState.stageId, role) ||
+    (app.approvalState != null && canActInStage(APPROVAL_LETTER_WORKFLOW, app.approvalState.stageId, role))
+  );
 }
 
 export function InternalDashboard() {
@@ -23,7 +37,7 @@ export function InternalDashboard() {
   const isCeo = role === 'CEO';
   const applications = isCeo
     ? allApplications.filter((a) => a.outcomeState.stageId === 'ceo-signature')
-    : filterByScope(allApplications, scope, person.id, myItemIds);
+    : filterByScope(allApplications, scope, person.id, myItemIds, (a) => isUnassignedActionable(a, role));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
