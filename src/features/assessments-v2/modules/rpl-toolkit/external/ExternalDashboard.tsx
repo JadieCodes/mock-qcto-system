@@ -46,7 +46,7 @@ export function ExternalDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Toolkit Title', 'Type', 'Submitted', 'Status', ''].map((h) => (
+                  {['Toolkit Title', 'Type', 'Version', 'Submitted', 'Status', ''].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -58,6 +58,7 @@ export function ExternalDashboard() {
                   <TableRow key={app.id} className="cursor-pointer hover:bg-gray-50" onClick={() => setSelectedId(app.id)}>
                     <TableCell className="font-medium max-w-[220px] truncate">{app.toolkitTitle}</TableCell>
                     <TableCell className="capitalize">{app.toolkitType}</TableCell>
+                    <TableCell>v{app.version}</TableCell>
                     <TableCell className="whitespace-nowrap">{app.submissionDate}</TableCell>
                     <TableCell>
                       <RplToolkitStatusBadge application={app} />

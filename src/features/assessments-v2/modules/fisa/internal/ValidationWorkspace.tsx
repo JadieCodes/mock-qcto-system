@@ -8,10 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
+import { LABELS } from '../../../config/labels';
 import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { FisaValidationReport } from '../components/FisaValidationReport';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaValidation, useFisaValidationAction, useSaveFisaValidationChecklist } from '../hooks';
 import type { FisaValidationRecord } from '../types';
@@ -38,7 +40,8 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
     <Tabs defaultValue="details">
       <TabsList>
         <TabsTrigger value="details">Details</TabsTrigger>
-        <TabsTrigger value="validation">FISA Validation Report</TabsTrigger>
+        <TabsTrigger value="validation">Validate</TabsTrigger>
+        <TabsTrigger value="report">{LABELS.fisaValidationReport}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="details" className="space-y-4">
@@ -174,6 +177,14 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
               onConfirm={(reason) => runOutcome('fval-not-approved', reason)}
             />
           </>
+        )}
+      </TabsContent>
+
+      <TabsContent value="report" className="space-y-4">
+        {record.instrumentStatus === 'validated' ? (
+          <FisaValidationReport record={record} />
+        ) : (
+          <p className="text-sm text-gray-400">Not yet available — the FISA Validation Report is ready once validation completes.</p>
         )}
       </TabsContent>
     </Tabs>

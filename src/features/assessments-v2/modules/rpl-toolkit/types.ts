@@ -38,6 +38,17 @@ export interface RplToolkitApplication {
   checklist: ChecklistSection[];
   evaluationReport: RplEvaluationReport;
 
+  // Row 46 (test findings J-03): a team-level moderation checklist, completed by the Director
+  // & Team before sending to the IAC, plus the IAC's own endorsement note before it approves,
+  // declines or sends for remediation.
+  moderationChecklist: ChecklistSection[];
+  iacEndorsementNote: string;
+
+  // Row 48 (test findings J-05): an "updated toolkit" submission links back to the QP's
+  // existing approved toolkit it supersedes, and carries a version number.
+  version: number;
+  updatesToolkitId: string | null;
+
   createdBy: string;
   createdAt: string;
 }
@@ -50,4 +61,7 @@ export interface NewRplToolkitInput {
   description: string;
   submissionDate: string;
   notes: string;
+  // Required when toolkitType is 'updated' (Row 48) — the QP's existing approved toolkit this
+  // submission is a new version of.
+  updatesToolkitId?: string;
 }

@@ -90,7 +90,7 @@ export function InternalDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['QP', 'Toolkit Title', 'Type', 'Submitted', 'Status', ''].map((h) => (
+                  {['QP', 'Toolkit Title', 'Type', 'Version', 'Submitted', 'Status', ''].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -103,6 +103,7 @@ export function InternalDashboard() {
                     <TableCell className="font-semibold whitespace-nowrap">{app.qpName}</TableCell>
                     <TableCell className="max-w-[220px] truncate">{app.toolkitTitle}</TableCell>
                     <TableCell className="capitalize">{app.toolkitType}</TableCell>
+                    <TableCell>v{app.version}</TableCell>
                     <TableCell className="whitespace-nowrap">{app.submissionDate}</TableCell>
                     <TableCell>
                       <RplToolkitStatusBadge application={app} />

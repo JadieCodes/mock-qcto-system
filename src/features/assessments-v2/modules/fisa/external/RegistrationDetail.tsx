@@ -1,12 +1,19 @@
 import { useRef, useState } from 'react';
-import { AlertCircle, Plus, Upload } from 'lucide-react';
+import { AlertCircle, Plus, Trash2, Upload } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FisaRegistrationStatusBadge } from '../components/StatusBadge';
-import { useAddFisaRegistrationLearner, useFisaEnrollableLearners, useFisaRegistration, useFisaRegistrationAction, useUploadFisaLearnerSor } from '../hooks';
+import {
+  useAddFisaRegistrationLearner,
+  useFisaEnrollableLearners,
+  useFisaRegistration,
+  useFisaRegistrationAction,
+  useRemoveFisaRegistrationLearner,
+  useUploadFisaLearnerSor,
+} from '../hooks';
 import type { FisaRegistrationRecord } from '../types';
 
 function LearnerSorCell({ record, learnerId }: { record: FisaRegistrationRecord; learnerId: string }) {
@@ -53,6 +60,12 @@ function AddLearnerPanel({ record }: { record: FisaRegistrationRecord }) {
 
   return (
     <div className="space-y-2">
+      {/* Row 44 (test findings): the tester couldn't tell where this list comes from —
+          CR-036-style simulated QA-domain data, same source EISA Registration reads. */}
+      <p className="text-xs text-gray-400">
+        This list is learners already enrolled with "{record.sdpName}" for this Skills Programme, as recorded by the Quality
+        Assurance domain's learner enrolment (simulated data for this build).
+      </p>
       {error && (
         <Alert className="border-red-400 bg-red-50">
           <AlertCircle className="h-4 w-4 text-red-600" />
@@ -98,6 +111,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
   const actorId = person.id;
   const actorName = person.name;
   const registrationAction = useFisaRegistrationAction();
+  const removeLearner = useRemoveFisaRegistrationLearner();
 
   if (!record) {
     return (
@@ -144,7 +158,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {['Learner', 'SOR'].map((h) => (
+                        {['Learner', 'SOR', ...(isBuilding ? [''] : [])].map((h) => (
                           <TableHead key={h} className="whitespace-nowrap">
                             {h}
                           </TableHead>
@@ -161,6 +175,20 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                           <TableCell>
                             <LearnerSorCell record={record} learnerId={l.learnerId} />
                           </TableCell>
+                          {isBuilding && (
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                disabled={removeLearner.isPending}
+                                onClick={() => removeLearner.mutate({ registrationId: record.id, learnerId: l.learnerId })}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Remove
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>

@@ -6,9 +6,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useV2Role } from '../../../shared/ui/useV2Role';
-import { useCreateRplToolkitApplication } from '../hooks';
+import { useApprovedRplToolkitsForQp, useCreateRplToolkitApplication } from '../hooks';
 import type { NewRplToolkitInput, RplToolkitType } from '../types';
 
 interface FormValues {
@@ -34,15 +35,28 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
     },
   });
   const [toolkitType, setToolkitType] = useState<RplToolkitType>('new');
+  const [updatesToolkitId, setUpdatesToolkitId] = useState('');
   const createApplication = useCreateRplToolkitApplication();
+  const qpId = person.qpId ?? person.id;
+  const { data: approvedToolkits = [] } = useApprovedRplToolkitsForQp(qpId);
 
   const resetAll = () => {
     reset();
     setToolkitType('new');
+    setUpdatesToolkitId('');
   };
 
+  const canSubmitType = toolkitType === 'new' || !!updatesToolkitId;
+
   const onSubmit = (values: FormValues) => {
-    const input: NewRplToolkitInput = { ...values, qpId: person.qpId ?? person.id, qpName: person.name, toolkitType };
+    if (!canSubmitType) return;
+    const input: NewRplToolkitInput = {
+      ...values,
+      qpId,
+      qpName: person.name,
+      toolkitType,
+      ...(toolkitType === 'updated' ? { updatesToolkitId } : {}),
+    };
     createApplication.mutate(input, {
       onSuccess: () => {
         onOpenChange(false);
@@ -78,7 +92,14 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
           </div>
           <div className="space-y-2">
             <Label>Submission Type *</Label>
-            <RadioGroup value={toolkitType} onValueChange={(v) => setToolkitType(v as RplToolkitType)} className="flex gap-6">
+            <RadioGroup
+              value={toolkitType}
+              onValueChange={(v) => {
+                setToolkitType(v as RplToolkitType);
+                if (v === 'new') setUpdatesToolkitId('');
+              }}
+              className="flex gap-6"
+            >
               <div className="flex items-center gap-1.5">
                 <RadioGroupItem id="rpl-type-new" value="new" />
                 <Label htmlFor="rpl-type-new" className="text-sm font-normal">
@@ -93,6 +114,26 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
               </div>
             </RadioGroup>
           </div>
+          {toolkitType === 'updated' && (
+            <div className="space-y-2">
+              <Label>Which toolkit is this updating? *</Label>
+              <Select value={updatesToolkitId} onValueChange={setUpdatesToolkitId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select one of your approved toolkits" />
+                </SelectTrigger>
+                <SelectContent>
+                  {approvedToolkits.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.toolkitTitle} (v{t.version})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {approvedToolkits.length === 0 && (
+                <p className="text-xs text-gray-400">You have no approved toolkits yet to update.</p>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="rpl-description">Description *</Label>
             <Textarea id="rpl-description" rows={3} {...register('description', { required: true })} placeholder="What does this toolkit assess?" />
@@ -111,7 +152,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={createApplication.isPending} className="gap-2">
+            <Button type="submit" disabled={createApplication.isPending || !canSubmitType} className="gap-2">
               <Upload className="h-4 w-4" />
               Submit
             </Button>

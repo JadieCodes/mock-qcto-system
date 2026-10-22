@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
+import { generateLetter } from '../../../shared/letters/templates';
+import { LetterView } from '../../../shared/letters/LetterView';
 import { personsForRole } from '../../../shared/people/directory';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary, FieldError } from '../../../shared/validation/ValidationSummary';
@@ -20,6 +22,8 @@ import {
   useRplOutcomeAction,
   useRplToolkitApplication,
   useSaveRplEvaluationReport,
+  useSaveRplIacEndorsementNote,
+  useSaveRplModerationChecklist,
   useSaveRplToolkitChecklist,
 } from '../hooks';
 import { RPL_EVAL_WORKFLOW, RPL_OUTCOME_WORKFLOW } from '../workflow';
@@ -33,6 +37,8 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
   const outcomeAction = useRplOutcomeAction();
   const saveChecklist = useSaveRplToolkitChecklist();
   const saveReport = useSaveRplEvaluationReport();
+  const saveModerationChecklist = useSaveRplModerationChecklist();
+  const saveIacEndorsementNote = useSaveRplIacEndorsementNote();
   const [allocatedAsdId, setAllocatedAsdId] = useState('');
   const asdOptions = personsForRole('ASD');
 
@@ -44,6 +50,16 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
   const editableChecklist = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
   const canAllocate = role === 'Assistant Director' && application.evalState.stageId === 'ad-allocation';
   const decided = application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined';
+
+  // Row 46: Director & Team moderation (a checklist, comment on every line) sits before the
+  // IAC, who then reviews and endorses the report with its own note — the IAC does not tick
+  // the evaluation checklist, it endorses on top of it.
+  const moderationEditable = role === 'Director & Team' && application.evalState.stageId === 'director-team-review';
+  const moderationComplete = isChecklistComplete(application.moderationChecklist, true);
+  const iacNoteEditable = role === 'IAC' && application.evalState.stageId === 'iac-review';
+  const showModerationBox = application.evalState.stageId === 'director-team-review';
+  const showIacBox = application.evalState.stageId === 'iac-review';
+  const { data: linkedToolkit } = useRplToolkitApplication(application.updatesToolkitId);
 
   return (
     <Tabs defaultValue="details">
@@ -74,7 +90,10 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
               <Award className="h-4 w-4 text-gray-400 mt-0.5" />
               <div>
                 <p className="text-xs text-gray-400 uppercase">Submission Type</p>
-                <p className="text-sm font-medium">{application.toolkitType === 'new' ? 'New toolkit' : 'Updated toolkit'}</p>
+                <p className="text-sm font-medium">
+                  {application.toolkitType === 'new' ? 'New toolkit' : 'Updated toolkit'} — version {application.version}
+                  {linkedToolkit && ` (updates "${linkedToolkit.toolkitTitle}" v${linkedToolkit.version})`}
+                </p>
               </div>
             </div>
             <div className="flex items-start gap-3 py-2.5">
@@ -176,13 +195,45 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
           </div>
         </div>
 
+        {showModerationBox && (
+          <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Director & Team Moderation</p>
+            <p className="text-xs text-gray-400">
+              Team-level moderation before the IAC (Ask QCTO — confirm the order of moderation, IAC endorsement and CEO signature).
+            </p>
+            <Checklist
+              sections={application.moderationChecklist}
+              readonly={!moderationEditable}
+              onChange={(sections) => saveModerationChecklist.mutate({ applicationId: application.id, sections })}
+            />
+          </div>
+        )}
+
+        {showIacBox && (
+          <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">IAC Review & Endorsement</p>
+            <Label>Endorsement note</Label>
+            <Textarea
+              rows={3}
+              value={application.iacEndorsementNote}
+              disabled={!iacNoteEditable}
+              placeholder="Record the IAC's review of the moderated report before endorsing it..."
+              onChange={(e) => saveIacEndorsementNote.mutate({ applicationId: application.id, note: e.target.value })}
+            />
+          </div>
+        )}
+
         <ActionBar
           definition={RPL_EVAL_WORKFLOW}
           stageId={application.evalState.stageId}
           role={role}
-          disabledActionIds={
-            application.evalState.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['rpl-asd-send-to-dd'] : []
-          }
+          disabledActionIds={[
+            ...(application.evalState.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['rpl-asd-send-to-dd'] : []),
+            ...(application.evalState.stageId === 'director-team-review' && !moderationComplete ? ['rpl-director-team-send-to-iac'] : []),
+            ...(application.evalState.stageId === 'iac-review' && !application.iacEndorsementNote.trim()
+              ? ['rpl-iac-approve', 'rpl-iac-decline', 'rpl-iac-remediation']
+              : []),
+          ]}
           onRun={(actionId, note) => evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })}
         />
 
@@ -196,15 +247,31 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
       <TabsContent value="outcome" className="space-y-4">
         {!decided ? (
           <p className="text-sm text-gray-400">Not yet available — the IAC has not reached a decision.</p>
-        ) : application.outcomeState.stageId === 'signed' ? (
-          <p className="text-sm text-emerald-700 font-medium">Signed by {application.outcomeState.submittedBy}.</p>
         ) : (
-          <ActionBar
-            definition={RPL_OUTCOME_WORKFLOW}
-            stageId={application.outcomeState.stageId}
-            role={role}
-            onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })}
-          />
+          <>
+            {/* Row 45 (test findings J-04/K-08): the outcome letter is generated from the same
+                shared template system as the QSA Addendum — the CEO signs it, no checklist. */}
+            <LetterView
+              letter={generateLetter('outcome', application.id, {
+                qpName: application.qpName,
+                qualificationTitle: application.toolkitTitle,
+                date: new Date().toISOString().split('T')[0],
+                notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
+                signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
+                signatoryTitle: 'CEO',
+              })}
+            />
+            {application.outcomeState.stageId === 'signed' ? (
+              <p className="text-sm text-emerald-700 font-medium">Signed by {application.outcomeState.submittedBy}.</p>
+            ) : (
+              <ActionBar
+                definition={RPL_OUTCOME_WORKFLOW}
+                stageId={application.outcomeState.stageId}
+                role={role}
+                onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })}
+              />
+            )}
+          </>
         )}
       </TabsContent>
     </Tabs>

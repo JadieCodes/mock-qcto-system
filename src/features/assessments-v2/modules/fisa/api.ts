@@ -436,6 +436,22 @@ export async function addFisaRegistrationLearner(registrationId: string, learner
   return updated;
 }
 
+// Row 44 (test findings): the SDP can remove a learner they added, same as adding, only while
+// the registration is still being built.
+export async function removeFisaRegistrationLearner(registrationId: string, learnerId: string): Promise<FisaRegistrationRecord> {
+  const all = loadRegistrations();
+  const record = getRegistrationOrThrow(all, registrationId);
+  if (record.workflow.stageId !== 'sdp-submission') {
+    throw new Error('Learners can only be removed while the registration is still being built.');
+  }
+  const updated: FisaRegistrationRecord = {
+    ...record,
+    learners: record.learners.filter((l) => l.learnerId !== learnerId),
+  };
+  saveRegistrations(replaceRegistration(all, updated));
+  return updated;
+}
+
 export async function uploadFisaLearnerSor(
   registrationId: string,
   learnerId: string,

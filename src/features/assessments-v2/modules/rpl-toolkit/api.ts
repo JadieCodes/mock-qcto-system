@@ -1,4 +1,5 @@
 import { buildRplToolkitChecklist } from '../../mock/data/rplToolkitChecklistItems';
+import { buildRplToolkitModerationChecklist } from '../../mock/data/rplToolkitModerationChecklistItems';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { addNotification } from '../../shared/notifications/store';
 import { getPerson } from '../../shared/people/directory';
@@ -36,7 +37,29 @@ export async function getRplToolkitApplication(id: string): Promise<RplToolkitAp
   return loadAll().find((a) => a.id === id);
 }
 
+// Row 48 (test findings J-05): the QP's own approved toolkits, offered when they pick
+// "Updated toolkit" so the new submission can be linked to the one it supersedes.
+export async function listApprovedRplToolkitsForQp(qpId: string): Promise<RplToolkitApplication[]> {
+  return loadAll().filter((a) => a.qpId === qpId && a.evalState.stageId === 'approved');
+}
+
 export async function createRplToolkitApplication(input: NewRplToolkitInput): Promise<RplToolkitApplication> {
+  let version = 1;
+  let updatesToolkitId: string | null = null;
+
+  if (input.toolkitType === 'updated') {
+    if (!input.updatesToolkitId) {
+      throw new Error('Pick the existing approved toolkit this update is for.');
+    }
+    const approved = await listApprovedRplToolkitsForQp(input.qpId);
+    const previous = approved.find((a) => a.id === input.updatesToolkitId);
+    if (!previous) {
+      throw new Error('The selected toolkit is not one of your approved toolkits.');
+    }
+    version = previous.version + 1;
+    updatesToolkitId = previous.id;
+  }
+
   const app: RplToolkitApplication = {
     id: crypto.randomUUID(),
     ...input,
@@ -46,6 +69,10 @@ export async function createRplToolkitApplication(input: NewRplToolkitInput): Pr
     allocatedAsdName: null,
     checklist: buildRplToolkitChecklist(),
     evaluationReport: { findings: '', recommendation: '' },
+    moderationChecklist: buildRplToolkitModerationChecklist(),
+    iacEndorsementNote: '',
+    version,
+    updatesToolkitId,
     createdBy: input.qpName,
     createdAt: new Date().toISOString(),
   };
@@ -65,6 +92,26 @@ export async function saveRplEvaluationReport(applicationId: string, report: Rpl
   const all = loadAll();
   const app = getOrThrow(all, applicationId);
   const updated = { ...app, evaluationReport: report };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// Row 46: the Director & Team's own moderation checklist, separate from the ASD's evaluation
+// checklist — CR-011's mandatory per-line comment applies here too.
+export async function saveRplModerationChecklist(applicationId: string, sections: ChecklistSection[]): Promise<RplToolkitApplication> {
+  const all = loadAll();
+  const app = getOrThrow(all, applicationId);
+  const updated = { ...app, moderationChecklist: sections };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// Row 46: the IAC's own endorsement note, required before it can approve, decline or send for
+// remediation — mirrors the QSA Addendum's "IAC Summary Presentation" gate.
+export async function saveRplIacEndorsementNote(applicationId: string, note: string): Promise<RplToolkitApplication> {
+  const all = loadAll();
+  const app = getOrThrow(all, applicationId);
+  const updated = { ...app, iacEndorsementNote: note };
   saveAll(replace(all, updated));
   return updated;
 }
@@ -93,6 +140,18 @@ export async function performRplEvaluationAction(params: EvalActionParams): Prom
     if (!app.evaluationReport.findings.trim() || !app.evaluationReport.recommendation) {
       throw new Error('Complete the evaluation report (findings and recommendation) before sending to the Deputy Director.');
     }
+  }
+  // Row 46: the Director & Team must complete the moderation checklist before sending to IAC.
+  if (params.actionId === 'rpl-director-team-send-to-iac' && !isChecklistComplete(app.moderationChecklist, true)) {
+    throw new Error('Every moderation checklist line needs an answer and a comment before sending to the IAC.');
+  }
+  // Row 46: the IAC must record an endorsement note before it can approve, decline or send for
+  // remediation — mirrors the QSA Addendum's mandatory IAC presentation gate.
+  if (
+    (params.actionId === 'rpl-iac-approve' || params.actionId === 'rpl-iac-decline' || params.actionId === 'rpl-iac-remediation') &&
+    !app.iacEndorsementNote.trim()
+  ) {
+    throw new Error('Record the IAC endorsement note before reaching a decision.');
   }
 
   const nextState = performAction({

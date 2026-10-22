@@ -4,10 +4,13 @@ import type { ChecklistSection } from '../../shared/checklist/types';
 import {
   createRplToolkitApplication,
   getRplToolkitApplication,
+  listApprovedRplToolkitsForQp,
   listRplToolkitApplications,
   performRplEvaluationAction,
   performRplOutcomeAction,
   saveRplEvaluationReport,
+  saveRplIacEndorsementNote,
+  saveRplModerationChecklist,
   saveRplToolkitChecklist,
 } from './api';
 import type { NewRplToolkitInput, RplEvaluationReport, RplToolkitApplication } from './types';
@@ -65,4 +68,22 @@ export function useRplEvaluationAction() {
 
 export function useRplOutcomeAction() {
   return useRplToolkitMutation(performRplOutcomeAction);
+}
+
+export function useSaveRplModerationChecklist() {
+  return useRplToolkitMutation((args: { applicationId: string; sections: ChecklistSection[] }) =>
+    saveRplModerationChecklist(args.applicationId, args.sections),
+  );
+}
+
+export function useSaveRplIacEndorsementNote() {
+  return useRplToolkitMutation((args: { applicationId: string; note: string }) => saveRplIacEndorsementNote(args.applicationId, args.note));
+}
+
+export function useApprovedRplToolkitsForQp(qpId: string | null) {
+  return useQuery({
+    queryKey: ['rpl-toolkit', 'approved-for-qp', qpId ?? 'none'],
+    queryFn: () => listApprovedRplToolkitsForQp(qpId as string),
+    enabled: !!qpId,
+  });
 }

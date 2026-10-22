@@ -16,6 +16,7 @@ import {
   performFisaRegistrationAction,
   performFisaValidationAction,
   performStandardAction,
+  removeFisaRegistrationLearner,
   saveFisaStandardChecklist,
   saveFisaStandardEvaluationReport,
   saveFisaValidationChecklist,
@@ -202,6 +203,12 @@ export function useStartFisaRegistration() {
 export function useAddFisaRegistrationLearner() {
   return useRegistrationMutation((args: { registrationId: string; learnerId: string }) =>
     addFisaRegistrationLearner(args.registrationId, args.learnerId),
+  );
+}
+
+export function useRemoveFisaRegistrationLearner() {
+  return useRegistrationMutation((args: { registrationId: string; learnerId: string }) =>
+    removeFisaRegistrationLearner(args.registrationId, args.learnerId),
   );
 }
 
