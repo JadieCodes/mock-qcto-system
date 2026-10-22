@@ -1,13 +1,15 @@
 import { roleDescriptor } from '../../config/roles';
 import { navForPortal } from '../../config/nav';
+import { isModuleVisible } from '../visibility/moduleAccess';
 import type { Portal } from '../../types';
 import { useV2Role } from './useV2Role';
 
 export function Dashboard({ portal }: { portal: Portal }) {
   const { role, person } = useV2Role();
   const descriptor = roleDescriptor(role);
-  // CR-018: SDPs must not see EISA Instrument Validation at all — not even listed here.
-  const modules = navForPortal(portal).filter((item) => item.path !== 'dashboard' && !item.hiddenForRoles?.includes(role));
+  // 09-visibility-matrix.md item 1: tiles are filtered by the active role's teams (internal)
+  // or QP/SDP ownership rules (external) — the same rule the nav and route guard use.
+  const modules = navForPortal(portal).filter((item) => item.path !== 'dashboard' && isModuleVisible(portal, item.path, role));
 
   return (
     <div className="space-y-6">

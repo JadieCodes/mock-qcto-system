@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { ConfirmationStatusBadge } from '../components/StatusBadge';
 import { useConfirmationRecords, useGenerateConfirmation, useSittingsReadyToConfirm } from '../hooks';
 
@@ -11,15 +13,20 @@ export function InternalDashboard() {
   const { person } = useV2Role();
   const actorName = person.name;
   const { data: ready = [] } = useSittingsReadyToConfirm();
-  const { data: records = [] } = useConfirmationRecords();
+  const { data: allRecords = [] } = useConfirmationRecords();
   const generate = useGenerateConfirmation();
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [scope, setScope] = useState<ListScope>('mine');
+  const records = filterByScope(allRecords, scope, person.id, (r) => [r.generatedById]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">EISA Confirmation</h2>
-        <p className="text-sm text-gray-500 mt-1">Generate the consolidated learner list once registration for a sitting is complete.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">EISA Confirmation</h2>
+          <p className="text-sm text-gray-500 mt-1">Generate the consolidated learner list once registration for a sitting is complete.</p>
+        </div>
+        <ScopeToggle scope={scope} onChange={setScope} />
       </div>
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -54,7 +61,10 @@ export function InternalDashboard() {
                         disabled={generate.isPending && generatingId === s.id}
                         onClick={() => {
                           setGeneratingId(s.id);
-                          generate.mutate({ sittingId: s.id, generatedBy: actorName }, { onSettled: () => setGeneratingId(null) });
+                          generate.mutate(
+                            { sittingId: s.id, generatedBy: actorName, generatedById: person.id },
+                            { onSettled: () => setGeneratingId(null) },
+                          );
                         }}
                       >
                         Generate EISA Confirmation

@@ -1,16 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { listSdps } from '../../../mock/api/qaDomain';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS } from '../config';
-import { useCreateVisit, useSchedulableSittings } from '../hooks';
+import { useCreateVisit, useSchedulableSittings, useSdpsForSitting } from '../hooks';
 import { VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
 import type { NotificationFlag, VisitType } from '../types';
 
@@ -19,28 +17,31 @@ const NO_SITTING = '__none__';
 // CR-044/CR-048/CR-049/CR-050/CR-051: everything except the automatic RPL/ARPL item is created
 // here by an official — visit type, QP/qualification, optional sitting link, venue, and the
 // notified/unannounced flag with its lead time are all captured up front.
+// G-06: there is no SDP picker here — an SDP has no access to Site Visits at all
+// (09-visibility-matrix.md), so a planner should never be choosing one by hand. When the visit
+// is linked to a sitting, the SDP(s) already registered against it are shown as plain
+// read-only text (sourced from EISA Registration), never an editable field.
 export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { person } = useV2Role();
   const { data: sittings = [] } = useSchedulableSittings();
-  const { data: sdps = [] } = useQuery({ queryKey: ['site-visits', 'sdps'], queryFn: listSdps });
   const createVisit = useCreateVisit();
 
   const [visitType, setVisitType] = useState<VisitType>('eisa-readiness');
   const [sittingId, setSittingId] = useState<string>(NO_SITTING);
   const [qpId, setQpId] = useState('');
   const [qualificationTitle, setQualificationTitle] = useState('');
-  const [sdpId, setSdpId] = useState<string>(NO_SITTING);
   const [visitDate, setVisitDate] = useState('');
   const [venue, setVenue] = useState('');
   const [notificationFlag, setNotificationFlag] = useState<NotificationFlag>('notified');
   const [leadTimeDays, setLeadTimeDays] = useState(DEFAULT_NOTICE_LEAD_TIME_DAYS);
+
+  const { data: linkedSdps = [] } = useSdpsForSitting(sittingId === NO_SITTING ? null : sittingId);
 
   const reset = () => {
     setVisitType('eisa-readiness');
     setSittingId(NO_SITTING);
     setQpId('');
     setQualificationTitle('');
-    setSdpId(NO_SITTING);
     setVisitDate('');
     setVenue('');
     setNotificationFlag('notified');
@@ -59,19 +60,19 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   };
 
   const selectedQp = QP_DIRECTORY.find((q) => q.qpId === qpId);
-  const selectedSdp = sdps.find((s) => s.sdpId === sdpId);
   const canSubmit = qpId && qualificationTitle.trim() && visitDate && venue.trim();
 
   const onSubmit = () => {
     if (!canSubmit || !selectedQp) return;
+    const linkedSdp = linkedSdps[0] ?? null;
     createVisit.mutate(
       {
         visitType,
         qpId: selectedQp.qpId,
         qpName: selectedQp.name,
         qualificationTitle: qualificationTitle.trim(),
-        sdpId: sdpId === NO_SITTING ? null : sdpId,
-        sdpName: sdpId === NO_SITTING ? null : selectedSdp?.name ?? null,
+        sdpId: linkedSdp?.sdpId ?? null,
+        sdpName: linkedSdp?.sdpName ?? null,
         sittingId: sittingId === NO_SITTING ? null : sittingId,
         visitDate,
         venue: venue.trim(),
@@ -149,20 +150,16 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           </div>
 
           <div className="space-y-2">
-            <Label>SDP (optional)</Label>
-            <Select value={sdpId} onValueChange={setSdpId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Not applicable" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SITTING}>Not applicable</SelectItem>
-                {sdps.map((s) => (
-                  <SelectItem key={s.sdpId} value={s.sdpId}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>SDP</Label>
+            {/* G-06: information only — an SDP cannot be picked here, since the SDP role has
+                no access to Site Visits at all. */}
+            {sittingId === NO_SITTING ? (
+              <p className="text-sm text-gray-400">Not applicable — link a sitting to see the registered SDP.</p>
+            ) : linkedSdps.length === 0 ? (
+              <p className="text-sm text-gray-400">No SDP has registered learners for this sitting yet.</p>
+            ) : (
+              <p className="text-sm text-gray-700">{linkedSdps.map((s) => s.sdpName).join(', ')}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches, useSittingsAwaitingSubmission } from '../hooks';
@@ -18,8 +19,8 @@ function QpResultsView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitSittingId, setSubmitSittingId] = useState<string | null>(null);
 
-  const myAwaiting = awaiting.filter((a) => a.qpId === person.qpId);
-  const myBatches = batches.filter((b) => b.qpId === person.qpId);
+  const myAwaiting = filterExternalRecords(awaiting, person, { qpIdOf: (a) => a.qpId });
+  const myBatches = filterExternalRecords(batches, person, { qpIdOf: (b) => b.qpId });
 
   return (
     <div className="space-y-6">

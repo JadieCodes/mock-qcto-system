@@ -1,13 +1,30 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import { useRplToolkitApplications } from '../hooks';
+import type { RplToolkitApplication } from '../types';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
+
+function myItemIds(app: RplToolkitApplication): (string | null | undefined)[] {
+  return [app.evalState.submittedById, app.outcomeState.submittedById, app.allocatedAsdId];
+}
 
 // PM-09: RPL Toolkit Team. Self-contained — no inbound or outbound links to the other maps.
 export function InternalDashboard() {
-  const { data: applications = [] } = useRplToolkitApplications();
+  const { role, person } = useV2Role();
+  const { data: allApplications = [] } = useRplToolkitApplications();
+  const [scope, setScope] = useState<ListScope>('mine');
+
+  // B-19-style fix, same as QSA Addendum: the CEO only ever sees the signature queue.
+  const isCeo = role === 'CEO';
+  const applications = isCeo
+    ? allApplications.filter((a) => a.outcomeState.stageId === 'ceo-signature')
+    : filterByScope(allApplications, scope, person.id, myItemIds);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const adCount = applications.filter((a) => a.evalState.stageId === 'ad-allocation').length;
@@ -19,11 +36,16 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">RPL Toolkit Evaluation — RPL Toolkit Team</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          PM-09 — not in the change request register yet. Open one to act on it — only the actions your current role may perform are shown.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">RPL Toolkit Evaluation — RPL Toolkit Team</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            {isCeo
+              ? 'Applications awaiting your outcome-letter signature only.'
+              : 'PM-09 — not in the change request register yet. Open one to act on it — only the actions your current role may perform are shown.'}
+          </p>
+        </div>
+        {!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">

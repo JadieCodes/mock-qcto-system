@@ -1,12 +1,30 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
+import type { QsaAddendumApplication } from '../types';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 
+function myItemIds(app: QsaAddendumApplication): (string | null | undefined)[] {
+  return [app.ackState.submittedById, app.evalState.submittedById, app.outcomeState.submittedById, app.approvalState?.submittedById];
+}
+
 export function InternalDashboard() {
-  const { data: applications = [] } = useQsaAddendumApplications();
+  const { role, person } = useV2Role();
+  const { data: allApplications = [] } = useQsaAddendumApplications();
+  const [scope, setScope] = useState<ListScope>('mine');
+
+  // B-19: the CEO only ever gets the "awaiting my signature" queue, not the team's full list —
+  // the My items/All in my team switch doesn't apply to this already-maximally-filtered view.
+  const isCeo = role === 'CEO';
+  const applications = isCeo
+    ? allApplications.filter((a) => a.outcomeState.stageId === 'ceo-signature')
+    : filterByScope(allApplications, scope, person.id, myItemIds);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const asdCount = applications.filter((a) => a.evalState.stageId === 'asd-evaluation' || a.ackState.stageId === 'asd-preview').length;
@@ -16,9 +34,16 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">QSA Addendum — QSA Evaluation Team</h2>
-        <p className="text-sm text-gray-500 mt-1">All applications. Open one to act on it — only the actions your current role may perform are shown.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">QSA Addendum — QSA Evaluation Team</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            {isCeo
+              ? 'Applications awaiting your outcome-letter signature only.'
+              : 'Open one to act on it — only the actions your current role may perform are shown.'}
+          </p>
+        </div>
+        {!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -37,7 +62,7 @@ export function InternalDashboard() {
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">Applications</h3>
+          <h3 className="text-base font-semibold text-gray-900">{isCeo ? 'Awaiting Your Signature' : 'Applications'}</h3>
         </div>
         {applications.length === 0 ? (
           <div className="text-center py-16">

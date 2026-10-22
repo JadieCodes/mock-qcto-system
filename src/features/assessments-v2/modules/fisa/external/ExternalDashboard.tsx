@@ -3,6 +3,8 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { FisaRegistrationStatusBadge, FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaRegistrations, useFisaValidations } from '../hooks';
 import { NewRegistrationDialog } from './NewRegistrationDialog';
@@ -11,10 +13,15 @@ import { RegistrationDetail } from './RegistrationDetail';
 import { ValidationDetail } from './ValidationDetail';
 
 // CR-026: FISA is a fully independent process for Skills Programmes — the SDP's own screen
-// here never links back to EISA Instrument Validation or EISA Registration.
+// here never links back to EISA Instrument Validation or EISA Registration. QP is now
+// nav/route-hidden from FISA entirely (09-visibility-matrix.md); the SDP sees only their own
+// validations/registrations (sdpId).
 export function ExternalDashboard() {
-  const { data: validations = [] } = useFisaValidations();
-  const { data: registrations = [] } = useFisaRegistrations();
+  const { person } = useV2Role();
+  const { data: allValidations = [] } = useFisaValidations();
+  const { data: allRegistrations = [] } = useFisaRegistrations();
+  const validations = filterExternalRecords(allValidations, person, { sdpIdOf: (r) => r.sdpId });
+  const registrations = filterExternalRecords(allRegistrations, person, { sdpIdOf: (r) => r.sdpId });
   const [isValidationFormOpen, setIsValidationFormOpen] = useState(false);
   const [selectedValidationId, setSelectedValidationId] = useState<string | null>(null);
   const [isRegistrationFormOpen, setIsRegistrationFormOpen] = useState(false);

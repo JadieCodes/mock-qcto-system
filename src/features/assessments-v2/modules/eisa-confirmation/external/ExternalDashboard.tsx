@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { ConfirmationStatusBadge } from '../components/StatusBadge';
 import { useConfirmationRecords } from '../hooks';
 import { ConfirmationDetail } from './ConfirmationDetail';
 
-// CR-043: the QP views, acknowledges and confirms. No CR restricts SDP visibility here, so an
-// SDP sees the same list read-only (ConfirmationDetail only offers QP actions to the QP role).
+// CR-043: the QP views, acknowledges and confirms. SDP is now nav/route-hidden from this
+// module entirely (09-visibility-matrix.md). The QP sees only their own confirmations (qpId).
 export function ExternalDashboard() {
-  const { data: records = [] } = useConfirmationRecords();
+  const { person } = useV2Role();
+  const { data: allRecords = [] } = useConfirmationRecords();
+  const records = filterExternalRecords(allRecords, person, { qpIdOf: (r) => r.qpId });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   return (

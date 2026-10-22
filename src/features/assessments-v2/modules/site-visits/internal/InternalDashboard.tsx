@@ -5,12 +5,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { LABELS } from '../../../config/labels';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
 import { VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
 import type { SiteVisit } from '../types';
+
+function myItemIds(v: SiteVisit): (string | null | undefined)[] {
+  return [v.planningWorkflow.submittedById, v.reportWorkflow.submittedById, v.reroutedToId];
+}
 
 const REPORT_RECEIVED_STAGES = new Set(['approved', 'outcome-shared', 'closed']);
 const PLANNING_PENDING_STAGES = new Set(['ad-planning', 'dd-recommend', 'domain-director-approval', 'sda-booking']);
@@ -59,9 +66,12 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
 }
 
 export function InternalDashboard() {
-  const { data: visits = [] } = useSiteVisits();
+  const { person } = useV2Role();
+  const { data: allVisits = [] } = useSiteVisits();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [scope, setScope] = useState<ListScope>('mine');
+  const visits = filterByScope(allVisits, scope, person.id, myItemIds);
 
   const pendingPlanning = visits.filter((v) => PLANNING_PENDING_STAGES.has(v.planningWorkflow.stageId));
   // CR-045: "Reports Received" replaces "Results Received"; there is no "Schedules Received" metric.
@@ -77,10 +87,13 @@ export function InternalDashboard() {
             A standalone hub (CR-044) — every visit type is scheduled here, independently of the registration pipeline.
           </p>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Plan a New Visit
-        </Button>
+        <div className="flex items-center gap-3">
+          <ScopeToggle scope={scope} onChange={setScope} />
+          <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Plan a New Visit
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="dashboard">

@@ -5,6 +5,7 @@ import {
   createVisit,
   getVisit,
   listSchedulableSittings,
+  listSdpsForSitting,
   listVisits,
   performPlanningAction,
   performReportAction,
@@ -32,6 +33,15 @@ export function useSiteVisit(id: string | null) {
 
 export function useSchedulableSittings() {
   return useQuery({ queryKey: SITTINGS_KEY, queryFn: listSchedulableSittings });
+}
+
+// G-06: read-only information once a sitting is linked — never a picker.
+export function useSdpsForSitting(sittingId: string | null) {
+  return useQuery({
+    queryKey: ['site-visits', 'sdps-for-sitting', sittingId ?? 'none'],
+    queryFn: () => listSdpsForSitting(sittingId as string),
+    enabled: !!sittingId,
+  });
 }
 
 function useSiteVisitMutation<TArgs>(mutationFn: (args: TArgs) => Promise<SiteVisit>) {

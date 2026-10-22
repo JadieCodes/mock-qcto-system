@@ -5,6 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotificationBanner } from '../../../shared/notifications/NotificationBanner';
 import { useNotifications } from '../../../shared/notifications/useNotifications';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { SittingListView } from '../components/SittingListView';
 import { SittingMonthView } from '../components/SittingMonthView';
 import { UpcomingDeadlinesBanner } from '../components/UpcomingDeadlinesBanner';
@@ -13,14 +15,17 @@ import { useEisaSittingBatches, useEisaSittings } from '../hooks';
 import { batchDisplayStatus } from '../workflow';
 import { ProposeDatesForm } from './ProposeDatesForm';
 
-// Assumption (same as the QSA Addendum module): there is no QP login, so this shows every
-// QP's submissions and calendar sittings rather than filtering to "my own" — see progress.md.
+// 09-visibility-matrix.md: "My Submissions" is filtered to this QP's own proposed batches
+// (qpId). Month/List View deliberately stay unfiltered — the QP needs to see the whole
+// published calendar to plan around it, the matrix's one external "See all" carve-out.
 export function QpCalendarView() {
-  const { data: batches = [] } = useEisaSittingBatches();
+  const { person } = useV2Role();
+  const { data: allBatches = [] } = useEisaSittingBatches();
   const { data: sittings = [] } = useEisaSittings();
   const { notifications, dismiss } = useNotifications('QP');
   const [formOpen, setFormOpen] = useState(false);
 
+  const batches = filterExternalRecords(allBatches, person, { qpIdOf: (b) => b.qpId });
   const sortedBatches = [...batches].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   return (

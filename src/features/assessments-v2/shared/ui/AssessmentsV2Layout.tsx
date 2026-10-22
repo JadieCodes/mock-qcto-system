@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { navForPortal } from '../../config/nav';
 import { resetDemoData } from '../../mock/api/storage';
+import { isModuleVisible } from '../visibility/moduleAccess';
 import type { Portal } from '../../types';
 import { DemoBanner } from './DemoBanner';
 import { RoleSwitcher } from './RoleSwitcher';
@@ -13,8 +14,8 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
   const location = useLocation();
   const { role } = useV2Role();
   const basePath = `/assessments-v2/${portal}`;
-  // CR-018: SDPs must not see EISA Instrument Validation at all — not even the nav link.
-  const navItems = navForPortal(portal).filter((item) => !item.hiddenForRoles?.includes(role));
+  // 09-visibility-matrix.md Tables A/B, enforced in one place: shared/visibility/moduleAccess.ts.
+  const navItems = navForPortal(portal).filter((item) => isModuleVisible(portal, item.path, role));
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

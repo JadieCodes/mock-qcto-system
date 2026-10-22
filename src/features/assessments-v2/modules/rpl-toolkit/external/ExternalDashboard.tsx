@@ -2,15 +2,20 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import { useRplToolkitApplications } from '../hooks';
 import { ApplicationDetail } from './ApplicationDetail';
 import { NewApplicationForm } from './NewApplicationForm';
 
 // PM-09: self-contained — no inbound or outbound links to the other maps. The QP submits a
-// toolkit here; SDPs later use an approved toolkit to run RPL/ARPL assessments elsewhere.
+// toolkit here; SDP is now nav/route-hidden from this module entirely
+// (09-visibility-matrix.md). The QP sees only their own submissions (qpId).
 export function ExternalDashboard() {
-  const { data: applications = [] } = useRplToolkitApplications();
+  const { person } = useV2Role();
+  const { data: allApplications = [] } = useRplToolkitApplications();
+  const applications = filterExternalRecords(allApplications, person, { qpIdOf: (a) => a.qpId });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

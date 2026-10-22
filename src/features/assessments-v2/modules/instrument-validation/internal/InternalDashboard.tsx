@@ -2,16 +2,27 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
 import { useInstrumentValidationRecords } from '../hooks';
+import type { InstrumentValidationRecord } from '../types';
 import { StatusDashboard } from './StatusDashboard';
 import { ValidationWorkspace } from './ValidationWorkspace';
+
+function myItemIds(record: InstrumentValidationRecord): (string | null | undefined)[] {
+  return [record.scheduling.workflow.submittedById, record.validationWorkflow.submittedById];
+}
 
 // CR-018/CR-019: a section separate from EISA Registration. SDPs cannot see this at all —
 // blocked at the route level (see shared/ui/RoleBlocked.tsx wired in index.tsx), not just
 // hidden from this screen.
 export function InternalDashboard() {
-  const { data: records = [] } = useInstrumentValidationRecords();
+  const { person } = useV2Role();
+  const { data: allRecords = [] } = useInstrumentValidationRecords();
+  const [scope, setScope] = useState<ListScope>('mine');
+  const records = filterByScope(allRecords, scope, person.id, myItemIds);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const schedulingCount = records.filter((r) => r.scheduling.workflow.stageId !== 'agreed').length;
@@ -22,9 +33,12 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">EISA Instrument Validation — Instrument Validation Team</h2>
-        <p className="text-sm text-gray-500 mt-1">A separate section from EISA Registration. SDPs cannot see this section.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">EISA Instrument Validation — Instrument Validation Team</h2>
+          <p className="text-sm text-gray-500 mt-1">A separate section from EISA Registration. SDPs cannot see this section.</p>
+        </div>
+        <ScopeToggle scope={scope} onChange={setScope} />
       </div>
 
       <Tabs defaultValue="queue">

@@ -89,6 +89,7 @@ export async function generateConfirmation(input: GenerateConfirmationInput): Pr
     moderationDate: null,
     workflow: { stageId: 'awaiting-qp-ack' },
     generatedBy: input.generatedBy,
+    generatedById: input.generatedById,
     generatedAt: new Date().toISOString(),
   };
   saveAll([record, ...all]);

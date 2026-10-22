@@ -12,6 +12,7 @@ import { buildRplArplMonitoringVisitSections } from '../../mock/data/rplArplVisi
 import type { Role } from '../../types';
 import { listPublishedSittings } from '../eisa-calendar/api';
 import type { EisaSitting } from '../eisa-calendar/types';
+import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api';
 import {
   DEFAULT_NOTICE_LEAD_TIME_DAYS,
   PLAN_APPROVER_ROLE,
@@ -118,6 +119,17 @@ export async function getVisit(id: string): Promise<SiteVisit | undefined> {
 // CR-050: the visit can optionally be linked to a published EISA Calendar sitting.
 export async function listSchedulableSittings(): Promise<EisaSitting[]> {
   return listPublishedSittings();
+}
+
+// G-06: there is no SDP picker on the planning form any more — an SDP has no access to Site
+// Visits at all (09-visibility-matrix.md), so a planner should never be choosing one by hand.
+// When a visit is linked to a sitting, this reads the real SDP(s) already registered against
+// it (read-only information, not a selectable field).
+export async function listSdpsForSitting(sittingId: string): Promise<{ sdpId: string; sdpName: string }[]> {
+  const registrations = await listRegisteredRegistrationsForSitting(sittingId);
+  const seen = new Map<string, string>();
+  for (const r of registrations) seen.set(r.sdpId, r.sdpName);
+  return [...seen.entries()].map(([sdpId, sdpName]) => ({ sdpId, sdpName }));
 }
 
 export async function createVisit(input: NewVisitInput): Promise<SiteVisit> {

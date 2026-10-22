@@ -35,12 +35,14 @@ export interface EisaConfirmationRecord {
   workflow: WorkflowRecordState;
 
   generatedBy: string;
+  generatedById: string;
   generatedAt: string;
 }
 
 export interface GenerateConfirmationInput {
   sittingId: string;
   generatedBy: string;
+  generatedById: string;
 }
 
 export interface ConfirmDetailsInput {

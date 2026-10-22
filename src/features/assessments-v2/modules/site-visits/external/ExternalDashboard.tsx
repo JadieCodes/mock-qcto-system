@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByVisibilityScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
+import { visibilityScopeForRole } from '../config';
 import { useSiteVisits } from '../hooks';
 import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
 import { VisitDetail } from './VisitDetail';
 
-// CR-047: QPs only see their own visits and schedules — matched against the acting QP's
-// identity rather than a manual "viewing as" picker now that named QPs exist.
+// CR-047/CR-054: QPs only see their own visits and schedules, driven by the same
+// REPORT_VISIBILITY_RULES table (config.ts) the internal side reads — matched against the
+// acting QP's identity rather than a qualification proxy (G-05/G-19) or a manual picker.
 function QpVisitsView() {
-  const { person } = useV2Role();
+  const { role, person } = useV2Role();
   const { data: visits = [] } = useSiteVisits();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const myVisits = visits.filter((v) => v.qpId === person.qpId);
+  const myVisits = filterByVisibilityScope(visits, visibilityScopeForRole(role), person, (v) => v.qpId);
 
   return (
     <div className="space-y-6">

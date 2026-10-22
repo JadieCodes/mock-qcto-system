@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
@@ -55,8 +58,11 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
 // construction, since this name was never used for anything else anywhere in v2's nav
 // (config/nav.ts), only placeholders flagged for Phase 6 (see progress.md).
 export function InternalDashboard() {
-  const { data: batches = [] } = useResultsBatches();
+  const { person } = useV2Role();
+  const { data: allBatches = [] } = useResultsBatches();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [scope, setScope] = useState<ListScope>('mine');
+  const batches = filterByScope(allBatches, scope, person.id, (b) => [b.workflow.submittedById]);
 
   const pending = batches.filter((b) => PENDING_STAGES.has(b.workflow.stageId));
   const approved = batches.filter((b) => b.workflow.stageId === 'approved');
@@ -64,11 +70,14 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Approval of Results</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          QP results-batch submissions, checked through Assistant Director → Deputy Director → Director → Chief Director (CR-059).
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Approval of Results</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            QP results-batch submissions, checked through Assistant Director → Deputy Director → Director → Chief Director (CR-059).
+          </p>
+        </div>
+        <ScopeToggle scope={scope} onChange={setScope} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

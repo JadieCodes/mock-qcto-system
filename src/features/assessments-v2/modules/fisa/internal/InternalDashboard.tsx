@@ -3,6 +3,9 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { FisaRegistrationStatusBadge, FisaStandardStatusBadge, FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaRegistrations, useFisaStandards, useFisaValidations } from '../hooks';
 import { NewStandardDialog } from './NewStandardDialog';
@@ -13,9 +16,15 @@ import { ValidationWorkspace } from './ValidationWorkspace';
 // CR-026: FISA Team. Fully independent of the QSA Evaluation / Instrument Validation /
 // Registration Teams — no shared records with the EISA flow, only shared components.
 export function InternalDashboard() {
-  const { data: standards = [] } = useFisaStandards();
-  const { data: validations = [] } = useFisaValidations();
-  const { data: registrations = [] } = useFisaRegistrations();
+  const { person } = useV2Role();
+  const { data: allStandards = [] } = useFisaStandards();
+  const { data: allValidations = [] } = useFisaValidations();
+  const { data: allRegistrations = [] } = useFisaRegistrations();
+  const [scope, setScope] = useState<ListScope>('mine');
+
+  const standards = filterByScope(allStandards, scope, person.id, (s) => [s.workflow.submittedById]);
+  const validations = filterByScope(allValidations, scope, person.id, (v) => [v.workflow.submittedById, v.allocatedAsdId]);
+  const registrations = filterByScope(allRegistrations, scope, person.id, (r) => [r.workflow.submittedById]);
 
   const [isStandardFormOpen, setIsStandardFormOpen] = useState(false);
   const [selectedStandardId, setSelectedStandardId] = useState<string | null>(null);
@@ -24,11 +33,14 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">FISA — Skills Programme Track</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          A fully independent process. Never triggered by the SAQA gate check; shares nothing with EISA except shared components.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">FISA — Skills Programme Track</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            A fully independent process. Never triggered by the SAQA gate check; shares nothing with EISA except shared components.
+          </p>
+        </div>
+        <ScopeToggle scope={scope} onChange={setScope} />
       </div>
 
       <Tabs defaultValue="standards">

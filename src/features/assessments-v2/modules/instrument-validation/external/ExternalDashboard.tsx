@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
 import { useInstrumentValidationRecords } from '../hooks';
 import { NewValidationDialog } from './NewValidationDialog';
@@ -9,8 +11,11 @@ import { ValidationDetail } from './ValidationDetail';
 
 // CR-018: this is the QP's own screen. The SDP role never reaches this component at all —
 // it is blocked at the route level (see shared/ui/RoleBlocked.tsx wired in index.tsx).
+// 09-visibility-matrix.md: further filtered to only this QP's own records (qpId).
 export function ExternalDashboard() {
-  const { data: records = [] } = useInstrumentValidationRecords();
+  const { person } = useV2Role();
+  const { data: allRecords = [] } = useInstrumentValidationRecords();
+  const records = filterExternalRecords(allRecords, person, { qpIdOf: (r) => r.qpId });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

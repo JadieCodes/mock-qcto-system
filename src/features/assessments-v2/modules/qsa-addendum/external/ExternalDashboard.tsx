@@ -2,13 +2,19 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
 import { ApplicationDetail } from './ApplicationDetail';
 import { NewApplicationForm } from './NewApplicationForm';
 
+// 09-visibility-matrix.md: a QP sees only their own applications, matched by qpId now that
+// named QP identity exists (Fix 1B-i) — this used to show every QP's applications.
 export function ExternalDashboard() {
-  const { data: applications = [] } = useQsaAddendumApplications();
+  const { person } = useV2Role();
+  const { data: allApplications = [] } = useQsaAddendumApplications();
+  const applications = filterExternalRecords(allApplications, person, { qpIdOf: (a) => a.qpId });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

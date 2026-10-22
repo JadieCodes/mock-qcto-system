@@ -17,6 +17,7 @@ import { Dashboard } from './shared/ui/Dashboard';
 import { PortalPicker } from './shared/ui/PortalPicker';
 import { RoleBlocked } from './shared/ui/RoleBlocked';
 import { RoleProvider } from './shared/ui/RoleContext';
+import { isModuleVisible } from './shared/visibility/moduleAccess';
 import { useV2Role } from './shared/ui/useV2Role';
 import type { Portal } from './types';
 
@@ -25,12 +26,12 @@ import type { Portal } from './types';
 // this cache is only used for request/loading/error ergonomics around those calls.
 const queryClient = new QueryClient();
 
-// CR-018: SDPs must not see EISA Instrument Validation at all. This guards a direct URL
-// visit too, not just the hidden nav link — the real module component never even mounts
-// (so none of its hooks/mock-api calls run) for a role it's hidden for.
+// 09-visibility-matrix.md Tables A/B: a role that cannot see a module gets RoleBlocked even on
+// a direct URL visit, not just a hidden nav link — the real module component never even
+// mounts (so none of its hooks/mock-api calls run) for a role it's blocked for.
 function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   const { role } = useV2Role();
-  if (item.hiddenForRoles?.includes(role)) return <RoleBlocked />;
+  if (!isModuleVisible(portal, item.path, role)) return <RoleBlocked />;
 
   if (item.path === 'qsa-addendum') return portal === 'internal' ? <QsaAddendumInternal /> : <QsaAddendumExternal />;
   if (item.path === 'instrument-validation') {

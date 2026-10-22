@@ -3,17 +3,18 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import { useRegistrationRecords } from '../hooks';
 import { NewRegistrationDialog } from './NewRegistrationDialog';
 import { RegistrationDetail } from './RegistrationDetail';
 
-// CR-036/CR-024: the SDP builds registrations here. No CR restricts QP visibility (unlike
-// CR-018's SDP block on Instrument Validation), so a QP sees the same list read-only —
-// "Start Registration" is only offered to the SDP role.
+// CR-036/CR-024: the SDP builds registrations here. QP is now nav/route-hidden from this
+// module entirely (09-visibility-matrix.md). SDPs see only their own registrations (sdpId).
 export function ExternalDashboard() {
-  const { role } = useV2Role();
-  const { data: records = [] } = useRegistrationRecords();
+  const { role, person } = useV2Role();
+  const { data: allRecords = [] } = useRegistrationRecords();
+  const records = filterExternalRecords(allRecords, person, { sdpIdOf: (r) => r.sdpId });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

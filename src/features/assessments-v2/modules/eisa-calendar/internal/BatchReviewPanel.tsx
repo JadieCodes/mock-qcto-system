@@ -3,7 +3,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
+import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { EisaSittingStatusBadge } from '../components/StatusBadge';
 import { useBatchAction, useEisaSittingBatches } from '../hooks';
 import { BATCH_WORKFLOW, batchDisplayStatus } from '../workflow';
@@ -12,27 +14,37 @@ import type { EisaSittingBatch } from '../types';
 // CR-028/CR-032: the review queue — QCTO approves, rejects with a mandatory reason, or
 // publishes an approved batch to the calendar.
 export function BatchReviewPanel() {
-  const { data: batches = [] } = useEisaSittingBatches();
+  const { data: allBatches = [] } = useEisaSittingBatches();
   const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
   const batchAction = useBatchAction();
   const [rejectTarget, setRejectTarget] = useState<EisaSittingBatch | null>(null);
+  const [scope, setScope] = useState<ListScope>('mine');
 
   const canReview = canActInStage(BATCH_WORKFLOW, 'qcto-review', role);
 
+  const batches = filterByScope(allBatches, scope, person.id, (b) => [b.state.submittedById]);
   const sorted = [...batches].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
-        <p className="text-sm text-gray-500">No EISA sitting date submissions yet.</p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-end">
+          <ScopeToggle scope={scope} onChange={setScope} />
+        </div>
+        <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
+          <p className="text-sm text-gray-500">No EISA sitting date submissions yet.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <>
+      <div className="flex items-center justify-end mb-3">
+        <ScopeToggle scope={scope} onChange={setScope} />
+      </div>
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <Table>

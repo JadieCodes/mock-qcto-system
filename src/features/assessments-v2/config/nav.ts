@@ -1,13 +1,15 @@
 import { RPL_TOOLKIT_ENABLED } from './featureFlags';
-import type { Portal, Role } from '../types';
+import type { Portal } from '../types';
 
 export interface NavItem {
   path: string;
   label: string;
   comingInPhase?: number;
-  // CR-018: SDPs must not see EISA Instrument Validation at all — not even the nav link.
-  hiddenForRoles?: Role[];
 }
+
+// Role-based hiding for every nav item now lives in ONE place:
+// shared/visibility/moduleAccess.ts (isModuleVisible), backed by shared/visibility/config.ts's
+// data tables — not scattered hiddenForRoles flags on individual NavItems.
 
 export const INTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
@@ -27,7 +29,7 @@ export const INTERNAL_NAV: NavItem[] = [
 export const EXTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
   { path: 'qsa-addendum', label: 'QSA Addendum' },
-  { path: 'instrument-validation', label: 'EISA Instrument Validation', hiddenForRoles: ['SDP'] },
+  { path: 'instrument-validation', label: 'EISA Instrument Validation' },
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'EISA Registration' },
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
