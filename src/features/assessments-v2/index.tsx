@@ -1,12 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { RPL_TOOLKIT_ENABLED } from './config/featureFlags';
 import { navForPortal, type NavItem } from './config/nav';
 import { ApprovalOfResultsExternal, ApprovalOfResultsInternal } from './modules/approval-of-results';
 import { EisaCalendarExternal, EisaCalendarInternal } from './modules/eisa-calendar';
 import { EisaConfirmationExternal, EisaConfirmationInternal } from './modules/eisa-confirmation';
 import { EisaRegistrationExternal, EisaRegistrationInternal } from './modules/eisa-registration';
+import { FisaExternal, FisaInternal } from './modules/fisa';
 import { InstrumentValidationExternal, InstrumentValidationInternal } from './modules/instrument-validation';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
+import { RplToolkitExternal, RplToolkitInternal } from './modules/rpl-toolkit';
 import { SiteVisitsExternal, SiteVisitsInternal } from './modules/site-visits';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
 import { ComingSoon } from './shared/ui/ComingSoon';
@@ -38,6 +41,14 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;
   if (item.path === 'site-visits') return portal === 'internal' ? <SiteVisitsInternal /> : <SiteVisitsExternal />;
   if (item.path === 'approval-of-results') return portal === 'internal' ? <ApprovalOfResultsInternal /> : <ApprovalOfResultsExternal />;
+  // CR-026: fully independent of the EISA/QSA Addendum flow — never gated by the SAQA check.
+  if (item.path === 'fisa') return portal === 'internal' ? <FisaInternal /> : <FisaExternal />;
+  // PM-09: not in the change request register yet — the route itself is blocked (not just the
+  // nav link) the moment the feature flag is off, same defence-in-depth as CR-018's RoleBlocked.
+  if (item.path === 'rpl-toolkit') {
+    if (!RPL_TOOLKIT_ENABLED) return <RoleBlocked />;
+    return portal === 'internal' ? <RplToolkitInternal /> : <RplToolkitExternal />;
+  }
   return <ComingSoon item={item} />;
 }
 

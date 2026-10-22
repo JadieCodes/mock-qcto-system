@@ -1,3 +1,4 @@
+import { RPL_TOOLKIT_ENABLED } from './featureFlags';
 import type { Portal, Role } from '../types';
 
 export interface NavItem {
@@ -17,8 +18,10 @@ export const INTERNAL_NAV: NavItem[] = [
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
   { path: 'site-visits', label: 'Site Visits & Monitoring' },
   { path: 'approval-of-results', label: 'Approval of Results' },
-  { path: 'fisa', label: 'FISA', comingInPhase: 7 },
-  { path: 'rpl-toolkit', label: 'RPL Toolkit', comingInPhase: 7 },
+  // CR-026: fully independent of the EISA/QSA Addendum flow — never triggered by the SAQA gate check.
+  { path: 'fisa', label: 'FISA' },
+  // PM-09: not in the change request register yet — built behind a feature flag pending a raised CR.
+  { path: 'rpl-toolkit', label: 'RPL Toolkit' },
 ];
 
 export const EXTERNAL_NAV: NavItem[] = [
@@ -30,8 +33,13 @@ export const EXTERNAL_NAV: NavItem[] = [
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
   { path: 'site-visits', label: 'Site Visits & Monitoring' },
   { path: 'approval-of-results', label: 'Approval of Results' },
+  { path: 'fisa', label: 'FISA' },
+  { path: 'rpl-toolkit', label: 'RPL Toolkit' },
 ];
 
 export function navForPortal(portal: Portal): NavItem[] {
-  return portal === 'internal' ? INTERNAL_NAV : EXTERNAL_NAV;
+  const items = portal === 'internal' ? INTERNAL_NAV : EXTERNAL_NAV;
+  // PM-09: hide the RPL Toolkit nav entry entirely (not just block the route) while the
+  // feature flag is off — flip the flag once QCTO raises the change request.
+  return RPL_TOOLKIT_ENABLED ? items : items.filter((item) => item.path !== 'rpl-toolkit');
 }

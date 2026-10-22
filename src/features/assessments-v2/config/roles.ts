@@ -8,9 +8,27 @@ export const ROLE_DESCRIPTORS: RoleDescriptor[] = [
   // CR-027/CR-032 open question: the register names no specific role for the EISA Calendar,
   // only "QCTO officials" — the ASD already owns the two stages either side of it on the
   // highway (QSA evaluation, instrument validation), so it picks up this team too.
-  { role: 'ASD', portal: 'internal', label: 'ASD', teams: ['qsa-evaluation', 'instrument-validation', 'eisa-calendar', 'site-visits'] },
-  { role: 'Assistant Director', portal: 'internal', label: 'Assistant Director', teams: ['registration', 'site-visits', 'fisa', 'approval-of-results'] },
-  { role: 'Deputy Director', portal: 'internal', label: 'Deputy Director', teams: ['qsa-evaluation', 'site-visits', 'approval-of-results'] },
+  {
+    role: 'ASD',
+    portal: 'internal',
+    label: 'ASD',
+    // CR-026/PM-09: ASD also evaluates FISA Standards and FISA/RPL Toolkit instruments.
+    teams: ['qsa-evaluation', 'instrument-validation', 'eisa-calendar', 'site-visits', 'fisa', 'rpl-toolkit'],
+  },
+  {
+    role: 'Assistant Director',
+    portal: 'internal',
+    label: 'Assistant Director',
+    // PM-09: also allocates RPL Toolkit submissions, same pattern as FISA Instrument Validation.
+    teams: ['registration', 'site-visits', 'fisa', 'approval-of-results', 'rpl-toolkit'],
+  },
+  {
+    role: 'Deputy Director',
+    portal: 'internal',
+    label: 'Deputy Director',
+    // CR-026/PM-09: reviews FISA Standards and RPL Toolkit evaluations too.
+    teams: ['qsa-evaluation', 'site-visits', 'approval-of-results', 'fisa', 'rpl-toolkit'],
+  },
   { role: 'Director', portal: 'internal', label: 'Director', teams: ['approval-of-results'] },
   { role: 'Domain Director', portal: 'internal', label: 'Domain Director', teams: ['site-visits'] },
   { role: 'Chief Director', portal: 'internal', label: 'Chief Director', teams: ['approval-of-results'] },

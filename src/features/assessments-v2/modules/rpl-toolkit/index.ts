@@ -1,2 +1,2 @@
-// Built in Phase 7 (PM-09, pending a raised CR). Folder holds external/, internal/, components/, workflow.ts, types.ts.
-export {};
+export { ExternalDashboard as RplToolkitExternal } from './external/ExternalDashboard';
+export { InternalDashboard as RplToolkitInternal } from './internal/InternalDashboard';
