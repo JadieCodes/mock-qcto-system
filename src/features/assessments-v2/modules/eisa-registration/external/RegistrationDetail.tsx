@@ -1,5 +1,16 @@
 import { useRef, useState } from 'react';
 import { AlertCircle, Plus, Upload } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -7,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
+import { SorStatusBadge } from '../components/SorStatusBadge';
 import {
   useAddLearner,
   useEnrollableLearners,
@@ -15,6 +27,7 @@ import {
   useSetLearnerRplArpl,
   useUploadLearnerSor,
   useUploadSupportingDocument,
+  useWithdrawRegistration,
 } from '../hooks';
 import type { EisaRegistrationRecord } from '../types';
 
@@ -130,6 +143,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
   const setRplArpl = useSetLearnerRplArpl();
   const uploadSupportingDocument = useUploadSupportingDocument();
   const registrationAction = useRegistrationAction();
+  const withdrawRegistration = useWithdrawRegistration();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!record) {
@@ -194,7 +208,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {['Learner', 'SOR', 'RPL/ARPL', ''].map((h) => (
+                        {['Learner', 'SOR', 'SOR Status', 'RPL/ARPL'].map((h) => (
                           <TableHead key={h} className="whitespace-nowrap">
                             {h}
                           </TableHead>
@@ -212,16 +226,15 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                             <LearnerSorCell record={record} learnerId={l.learnerId} canAct={canAct} actorId={actorId} actorName={actorName} />
                           </TableCell>
                           <TableCell>
+                            <SorStatusBadge status={l.sorStatus} />
+                            {l.sorStatus === 'flagged' && <p className="mt-1 text-xs text-red-600 max-w-[180px]">{l.sorFlagReason}</p>}
+                          </TableCell>
+                          <TableCell>
                             <Switch
                               checked={l.rplArpl}
                               disabled={!canAct || !isBuilding}
                               onCheckedChange={(checked) => setRplArpl.mutate({ registrationId: record.id, learnerId: l.learnerId, rplArpl: checked })}
                             />
-                          </TableCell>
-                          <TableCell>
-                            {l.sorStatus === 'flagged' && (
-                              <p className="text-xs text-red-600 max-w-[180px]">Flagged: {l.sorFlagReason}</p>
-                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -284,6 +297,33 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
+          {canAct && isBuilding && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="text-red-600 hover:text-red-700" disabled={withdrawRegistration.isPending}>
+                  Withdraw registration
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Withdraw this draft registration?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This deletes the draft for "{record.qualificationTitle}" (sitting {record.sittingDate}) and every learner added to it. This
+                    cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep it</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => withdrawRegistration.mutate({ registrationId: record.id, actorId, actorName }, { onSuccess: onClose })}
+                  >
+                    Withdraw
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {canAct && isBuilding && (
             <Button
               disabled={!canSubmit || registrationAction.isPending}

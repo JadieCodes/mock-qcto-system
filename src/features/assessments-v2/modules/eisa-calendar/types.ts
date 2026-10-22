@@ -16,9 +16,17 @@ export interface EisaSitting {
   status: EisaSittingStatus;
   rejectionReason: string | null;
   postponementReason: string | null;
+  // Row 22/23 (D-11): optional, ASD-entered when postponing — shown in the SDP notification
+  // and the audit trail. No negotiation; the QP/SDP cannot counter it.
+  proposedNewDate: string | null;
   cancellationReason: string | null;
   createdBy: string;
   createdAt: string;
+}
+
+export interface BatchRejectionHistoryEntry {
+  reason: string;
+  rejectedAt: string;
 }
 
 // CR-030: a QP submits several dates at once for one qualification/year; the whole batch is
@@ -33,6 +41,9 @@ export interface EisaSittingBatch {
   dates: string[];
   state: WorkflowRecordState; // stageId: 'qcto-review' | 'approved' | 'rejected' | 'published'
   rejectionReason: string | null;
+  // Row 21 (D-08): every past rejection stays visible even after the QP corrects and
+  // resubmits — `rejectionReason` only ever holds the latest one.
+  rejectionHistory: BatchRejectionHistoryEntry[];
   submittedBy: string;
   submittedAt: string;
 }

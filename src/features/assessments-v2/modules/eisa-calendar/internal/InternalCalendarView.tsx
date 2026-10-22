@@ -9,14 +9,24 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { SittingListView } from '../components/SittingListView';
 import { SittingMonthView } from '../components/SittingMonthView';
 import { UpcomingDeadlinesBanner } from '../components/UpcomingDeadlinesBanner';
-import { useAddSitting, useDeleteSitting, useEditSitting, useEisaSittings, useSittingLifecycleAction } from '../hooks';
+import {
+  useAddSitting,
+  useDeleteSitting,
+  useEditSitting,
+  useEisaSittings,
+  useSittingIdsWithRegistrations,
+  useSittingLifecycleAction,
+} from '../hooks';
 import { SITTING_LIFECYCLE_WORKFLOW } from '../workflow';
 import type { EisaSitting } from '../types';
 import { AddEditSittingDialog } from './AddEditSittingDialog';
 import { BatchReviewPanel } from './BatchReviewPanel';
+import { PostponeSittingDialog } from './PostponeSittingDialog';
 
 export function InternalCalendarView() {
   const { data: sittings = [] } = useEisaSittings();
+  const { data: sittingIdsWithRegistrations = [] } = useSittingIdsWithRegistrations();
+  const sittingIdsWithRegistrationsSet = new Set(sittingIdsWithRegistrations);
   const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
@@ -28,9 +38,8 @@ export function InternalCalendarView() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EisaSitting | null>(null);
-  const [reasonTarget, setReasonTarget] = useState<{ sitting: EisaSitting; actionId: 'sitting-postpone' | 'sitting-cancel' } | null>(
-    null,
-  );
+  const [cancelTarget, setCancelTarget] = useState<EisaSitting | null>(null);
+  const [postponeTarget, setPostponeTarget] = useState<EisaSitting | null>(null);
 
   const canManage = canActInStage(SITTING_LIFECYCLE_WORKFLOW, 'published', role);
 
@@ -76,8 +85,8 @@ export function InternalCalendarView() {
         <TabsContent value="list" className="pt-4">
           <SittingListView
             sittings={sittings}
-            onPostpone={canManage ? (s) => setReasonTarget({ sitting: s, actionId: 'sitting-postpone' }) : undefined}
-            onCancel={canManage ? (s) => setReasonTarget({ sitting: s, actionId: 'sitting-cancel' }) : undefined}
+            onPostpone={canManage ? (s) => setPostponeTarget(s) : undefined}
+            onCancel={canManage ? (s) => setCancelTarget(s) : undefined}
             onEdit={
               canManage
                 ? (s) => {
@@ -87,6 +96,7 @@ export function InternalCalendarView() {
                 : undefined
             }
             onDelete={canManage ? (s) => deleteSitting.mutate({ id: s.id, actorId, actorName }) : undefined}
+            sittingIdsWithRegistrations={sittingIdsWithRegistrationsSet}
           />
         </TabsContent>
 
@@ -109,23 +119,31 @@ export function InternalCalendarView() {
       />
 
       <ReasonDialog
-        open={!!reasonTarget}
-        title={reasonTarget?.actionId === 'sitting-postpone' ? 'Postpone this sitting' : 'Cancel this sitting'}
-        description={
-          reasonTarget ? `"${reasonTarget.sitting.qualificationTitle}" on ${reasonTarget.sitting.date} — the affected SDPs will be notified.` : undefined
-        }
-        confirmLabel={reasonTarget?.actionId === 'sitting-postpone' ? 'Postpone' : 'Cancel sitting'}
-        destructive={reasonTarget?.actionId === 'sitting-cancel'}
-        onOpenChange={(open) => !open && setReasonTarget(null)}
+        open={!!cancelTarget}
+        title="Cancel this sitting"
+        description={cancelTarget ? `"${cancelTarget.qualificationTitle}" on ${cancelTarget.date} — the affected SDPs will be notified.` : undefined}
+        confirmLabel="Cancel sitting"
+        destructive
+        onOpenChange={(open) => !open && setCancelTarget(null)}
         onConfirm={(reason) => {
-          if (!reasonTarget) return;
+          if (!cancelTarget) return;
+          lifecycleAction.mutate({ sittingId: cancelTarget.id, actionId: 'sitting-cancel', actorRole: role, actorId, actorName, reason });
+        }}
+      />
+
+      <PostponeSittingDialog
+        sitting={postponeTarget}
+        onOpenChange={(open) => !open && setPostponeTarget(null)}
+        onConfirm={(reason, proposedNewDate) => {
+          if (!postponeTarget) return;
           lifecycleAction.mutate({
-            sittingId: reasonTarget.sitting.id,
-            actionId: reasonTarget.actionId,
+            sittingId: postponeTarget.id,
+            actionId: 'sitting-postpone',
             actorRole: role,
             actorId,
             actorName,
             reason,
+            proposedNewDate,
           });
         }}
       />

@@ -57,12 +57,15 @@ export const VALIDATION_WORKFLOW: WorkflowDefinition = {
       kind: 'advance',
     },
     { id: 'val-approve', label: 'Record outcome: Approved', fromStage: 'asd-validation', toStage: 'validated', kind: 'complete' },
+    // Row 17 (C-11): the conditions themselves are mandatory, not optional free text — the
+    // QP must see exactly what they still need to meet.
     {
       id: 'val-approve-with-conditions',
       label: 'Record outcome: Approved with conditions',
       fromStage: 'asd-validation',
       toStage: 'validated',
       kind: 'complete',
+      requiresNote: true,
     },
     // CR-023: "changes required" loops straight back to the QP — no Deputy Director stop.
     {

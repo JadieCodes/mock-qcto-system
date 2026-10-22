@@ -19,7 +19,10 @@ export function ExternalDashboard() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-gray-900">EISA Confirmation</h2>
-        <p className="text-sm text-gray-500 mt-1">Review the consolidated learner list and confirm centres, counts and dates.</p>
+        <p className="text-sm text-gray-500 mt-1">
+          After registration is complete you confirm centres, learner counts and marking/moderation dates here. RPL monitoring items in Site
+          Visits come from the registration, not from Confirmation.
+        </p>
       </div>
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">

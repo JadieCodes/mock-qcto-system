@@ -7,10 +7,12 @@ import {
   listBatches,
   listEligibleQualifications,
   listPublishedSittings,
+  listSittingIdsWithRegistrations,
   listSittings,
   performBatchAction,
   performSittingLifecycleAction,
   proposeSittingBatch,
+  resubmitBatch,
 } from './api';
 import type { AddSittingInput, EditSittingInput, ProposeSittingBatchInput } from './types';
 
@@ -33,6 +35,10 @@ export function usePublishedEisaSittings() {
 
 export function useEligibleQualifications() {
   return useQuery({ queryKey: ELIGIBLE_KEY, queryFn: listEligibleQualifications });
+}
+
+export function useSittingIdsWithRegistrations() {
+  return useQuery({ queryKey: ['eisa-calendar', 'sitting-ids-with-registrations'] as const, queryFn: listSittingIdsWithRegistrations });
 }
 
 function useInvalidateCalendar() {
@@ -61,6 +67,18 @@ export function useBatchAction() {
   return useMutation({
     mutationFn: performBatchAction,
     onSuccess: () => invalidate(),
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
+}
+
+export function useResubmitBatch() {
+  const invalidate = useInvalidateCalendar();
+  return useMutation({
+    mutationFn: resubmitBatch,
+    onSuccess: () => {
+      invalidate();
+      toast.success('Corrected dates resubmitted for QCTO review.');
+    },
     onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });
 }

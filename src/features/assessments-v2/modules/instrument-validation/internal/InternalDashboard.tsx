@@ -48,7 +48,10 @@ export function InternalDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">EISA Instrument Validation — Instrument Validation Team</h2>
-          <p className="text-sm text-gray-500 mt-1">A separate section from EISA Registration. SDPs cannot see this section.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            An ASD checks the QP's assessment instrument against the checklist before an EISA sitting — a separate section from EISA
+            Registration; SDPs cannot see this section.
+          </p>
         </div>
         <ScopeToggle scope={scope} onChange={setScope} />
       </div>

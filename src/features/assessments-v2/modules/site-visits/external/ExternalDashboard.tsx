@@ -22,7 +22,10 @@ function QpVisitsView() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-gray-900">Site Visits &amp; Monitoring</h2>
-        <p className="text-sm text-gray-500 mt-1">View your own visits and their status. Scheduling and execution are managed by QCTO.</p>
+        <p className="text-sm text-gray-500 mt-1">
+          View your own visits and their status — scheduling and execution are managed by QCTO. An RPL/ARPL monitoring item here comes
+          automatically from your registration, not from EISA Confirmation.
+        </p>
       </div>
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">

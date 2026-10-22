@@ -1,17 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
+  acceptLearnerSor,
   addLearner,
   flagLearnerSor,
   getRecord,
   listEnrollableLearners,
   listRecords,
   listRegistrableSittings,
+  markLearnerSorUnderReview,
   performRegistrationAction,
   setLearnerRplArpl,
   startRegistration,
   uploadLearnerSor,
   uploadSupportingDocument,
+  withdrawRegistration,
 } from './api';
 import type { EisaRegistrationRecord, NewRegistrationInput } from './types';
 
@@ -94,6 +97,31 @@ export function useFlagLearnerSor() {
   );
 }
 
+export function useMarkLearnerSorUnderReview() {
+  return useRegistrationMutation((args: { registrationId: string; learnerId: string; actorId: string; actorName: string }) =>
+    markLearnerSorUnderReview(args.registrationId, args.learnerId, args.actorId, args.actorName),
+  );
+}
+
+export function useAcceptLearnerSor() {
+  return useRegistrationMutation((args: { registrationId: string; learnerId: string; actorId: string; actorName: string }) =>
+    acceptLearnerSor(args.registrationId, args.learnerId, args.actorId, args.actorName),
+  );
+}
+
 export function useRegistrationAction() {
   return useRegistrationMutation(performRegistrationAction);
+}
+
+export function useWithdrawRegistration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { registrationId: string; actorId: string; actorName: string }) =>
+      withdrawRegistration(args.registrationId, args.actorId, args.actorName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      toast.success('Draft registration withdrawn.');
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
 }

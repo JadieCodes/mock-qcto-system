@@ -87,7 +87,10 @@ export function InternalDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">EISA Registration — Registration Team</h2>
-          <p className="text-sm text-gray-500 mt-1">A separate section from EISA Instrument Validation. Split by category.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            The Assistant Director reviews each learner's SOR and creates the registration number — a separate section from EISA Instrument
+            Validation, split here by category.
+          </p>
         </div>
         <ScopeToggle scope={scope} onChange={setScope} />
       </div>

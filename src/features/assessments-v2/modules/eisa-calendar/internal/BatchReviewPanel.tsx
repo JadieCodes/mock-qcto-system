@@ -72,7 +72,11 @@ export function BatchReviewPanel() {
                     <TableCell className="text-xs text-gray-500">{batch.dates.join(', ')}</TableCell>
                     <TableCell>
                       <EisaSittingStatusBadge status={status} />
-                      {batch.rejectionReason && <p className="mt-1 text-xs text-red-600">{batch.rejectionReason}</p>}
+                      {batch.rejectionHistory.map((entry, i) => (
+                        <p key={i} className="mt-1 text-xs text-red-600">
+                          {entry.reason}
+                        </p>
+                      ))}
                     </TableCell>
                     <TableCell className="whitespace-nowrap space-x-1">
                       {canReview && batch.state.stageId === 'qcto-review' && (

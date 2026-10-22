@@ -11,12 +11,16 @@ export function SittingListView({
   onCancel,
   onEdit,
   onDelete,
+  sittingIdsWithRegistrations,
 }: {
   sittings: EisaSitting[];
   onPostpone?: (sitting: EisaSitting) => void;
   onCancel?: (sitting: EisaSitting) => void;
   onEdit?: (sitting: EisaSitting) => void;
   onDelete?: (sitting: EisaSitting) => void;
+  // Row 22/23 (D-17): sittings in this set already have registrations against them — Delete
+  // is blocked for those; Postpone/Cancel are offered instead.
+  sittingIdsWithRegistrations?: Set<string>;
 }) {
   const canManage = !!(onPostpone || onCancel || onEdit || onDelete);
   const sorted = [...sittings].sort((a, b) => a.date.localeCompare(b.date));
@@ -52,7 +56,12 @@ export function SittingListView({
                 <TableCell>
                   <EisaSittingStatusBadge status={s.status} />
                   {s.status === 'rejected' && s.rejectionReason && <p className="mt-1 text-xs text-red-600">{s.rejectionReason}</p>}
-                  {s.status === 'postponed' && s.postponementReason && <p className="mt-1 text-xs text-purple-600">{s.postponementReason}</p>}
+                  {s.status === 'postponed' && s.postponementReason && (
+                    <p className="mt-1 text-xs text-purple-600">
+                      {s.postponementReason}
+                      {s.proposedNewDate && <span className="block">Proposed new date: {s.proposedNewDate}</span>}
+                    </p>
+                  )}
                   {s.status === 'cancelled' && s.cancellationReason && <p className="mt-1 text-xs text-gray-500">{s.cancellationReason}</p>}
                 </TableCell>
                 {canManage && (
@@ -72,10 +81,21 @@ export function SittingListView({
                         Edit
                       </Button>
                     )}
-                    {onDelete && (
-                      <Button size="sm" variant="ghost" onClick={() => onDelete(s)}>
+                    {onDelete && sittingIdsWithRegistrations?.has(s.id) ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled
+                        title="This sitting already has registrations — use Postpone or Cancel instead."
+                      >
                         Delete
                       </Button>
+                    ) : (
+                      onDelete && (
+                        <Button size="sm" variant="ghost" onClick={() => onDelete(s)}>
+                          Delete
+                        </Button>
+                      )
                     )}
                   </TableCell>
                 )}

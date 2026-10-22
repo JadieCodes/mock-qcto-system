@@ -3,6 +3,7 @@ import { addNotification } from '../../shared/notifications/store';
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { performAction } from '../../shared/workflow/engine';
 import { listApprovedQsaAddenda } from '../qsa-addendum/api';
+import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listRegisteredSittingIds } from '../eisa-registration/api';
 import type { Role } from '../../types';
 import { CALENDAR_REVIEWER_ROLE } from './config';
 import { checkSittingDate } from './dateChecks';
@@ -100,6 +101,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     dates: [...input.dates].sort(),
     state: { stageId: 'qcto-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     rejectionReason: null,
+    rejectionHistory: [],
     submittedBy: input.submittedBy,
     submittedAt: new Date().toISOString(),
   };
@@ -115,6 +117,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     status: 'proposed',
     rejectionReason: null,
     postponementReason: null,
+    proposedNewDate: null,
     cancellationReason: null,
     createdBy: input.submittedBy,
     createdAt: new Date().toISOString(),
@@ -155,6 +158,10 @@ export async function performBatchAction(params: BatchActionParams): Promise<Eis
     ...batch,
     state: nextState,
     rejectionReason: params.actionId === 'batch-reject' ? (params.note ?? null) : batch.rejectionReason,
+    rejectionHistory:
+      params.actionId === 'batch-reject'
+        ? [...batch.rejectionHistory, { reason: params.note ?? '', rejectedAt: new Date().toISOString() }]
+        : batch.rejectionHistory,
   };
   saveBatches(batches.map((b) => (b.id === batch.id ? updatedBatch : b)));
 
@@ -195,6 +202,88 @@ export async function performBatchAction(params: BatchActionParams): Promise<Eis
   return updatedBatch;
 }
 
+interface ResubmitBatchParams {
+  batchId: string;
+  dates: string[];
+  actorRole: Role;
+  actorId: string;
+  actorName: string;
+}
+
+// Row 21 (D-08): a rejected batch does not have to be abandoned — the QP corrects the dates
+// and resubmits the same batch for review. The earlier rejection reason stays on
+// `rejectionHistory` (never cleared), so it's still visible after this.
+export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSittingBatch> {
+  const batches = loadBatches();
+  const batch = batches.find((b) => b.id === params.batchId);
+  if (!batch) throw new Error('EISA sitting batch not found.');
+
+  if (params.dates.length !== batch.requiredCount) {
+    throw new Error(`"${batch.qualificationTitle}" is approved for ${batch.requiredCount} sitting(s) per year — you submitted ${params.dates.length}.`);
+  }
+  if (new Set(params.dates).size !== params.dates.length) {
+    throw new Error('Duplicate dates are not allowed in the same submission.');
+  }
+  for (const date of params.dates) {
+    if (Number(date.slice(0, 4)) !== batch.year) {
+      throw new Error(`${date} is not in ${batch.year}.`);
+    }
+    const check = checkSittingDate(date);
+    if (!check.ok) {
+      throw new Error(`${date}: ${check.reasons.join(' ')}`);
+    }
+  }
+
+  const nextState = performAction({
+    definition: BATCH_WORKFLOW,
+    record: batch.state,
+    actionId: 'batch-resubmit',
+    actorRole: params.actorRole,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    recordType: 'eisa-calendar-batch',
+    recordId: batch.id,
+  });
+
+  const updatedBatch: EisaSittingBatch = { ...batch, dates: [...params.dates].sort(), state: nextState };
+  saveBatches(batches.map((b) => (b.id === batch.id ? updatedBatch : b)));
+
+  // Fresh sitting rows for the corrected dates — same shape as a brand-new proposal. The
+  // batch's own rejectionHistory (not touched here) is what keeps the earlier reason visible.
+  const otherSittings = loadSittings().filter((s) => s.batchId !== batch.id);
+  const newSittings: EisaSitting[] = updatedBatch.dates.map((date) => ({
+    id: crypto.randomUUID(),
+    batchId: batch.id,
+    qualificationTitle: batch.qualificationTitle,
+    qpId: batch.qpId,
+    qpName: batch.qpName,
+    year: batch.year,
+    date,
+    status: 'proposed',
+    rejectionReason: null,
+    postponementReason: null,
+    proposedNewDate: null,
+    cancellationReason: null,
+    createdBy: params.actorName,
+    createdAt: new Date().toISOString(),
+  }));
+  saveSittings([...newSittings, ...otherSittings]);
+
+  addNotification({
+    recipientRole: CALENDAR_REVIEWER_ROLE,
+    title: 'EISA sitting dates resubmitted',
+    body: `"${batch.qualificationTitle}" (${batch.year}) dates were corrected and resubmitted for review.`,
+  });
+
+  return updatedBatch;
+}
+
+// Row 22/23 (D-17): lets the internal calendar view disable/explain the Delete action before
+// the QP even tries it, instead of only surfacing the block as an error after the click.
+export async function listSittingIdsWithRegistrations(): Promise<string[]> {
+  return listRegisteredSittingIds();
+}
+
 // CR-027: QCTO can add a sitting directly — it goes straight to "published", no QP proposal
 // or review needed, since the person adding it is the approving authority.
 export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
@@ -209,6 +298,7 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
     status: 'published',
     rejectionReason: null,
     postponementReason: null,
+    proposedNewDate: null,
     cancellationReason: null,
     createdBy: input.createdBy,
     createdAt: new Date().toISOString(),
@@ -246,10 +336,20 @@ export async function editSitting(id: string, patch: EditSittingInput, actorId: 
   return updated;
 }
 
+// Row 22/23 (D-17): deleting a sitting that already has registrations against it would orphan
+// them, so it's blocked outright — postpone or cancel is the correct action once registrations
+// exist. Edit is unaffected by this rule.
 export async function deleteSitting(id: string, actorId: string, actorName: string): Promise<void> {
   const sittings = loadSittings();
   const existing = sittings.find((s) => s.id === id);
   if (!existing) throw new Error('Sitting not found.');
+
+  const registrations = await listRegistrationsForSitting(id);
+  if (registrations.length > 0) {
+    throw new Error(
+      `This sitting already has ${registrations.length} registration(s) against it and cannot be deleted. Postpone or cancel it instead.`,
+    );
+  }
 
   saveSittings(sittings.filter((s) => s.id !== id));
   appendAuditEntry({
@@ -269,6 +369,9 @@ interface SittingLifecycleParams {
   actorId: string;
   actorName: string;
   reason: string;
+  // Row 22/23 (D-11): optional, postpone-only — no negotiation, just a proposed replacement
+  // date carried in the SDP/QP notification and the audit trail note.
+  proposedNewDate?: string | null;
 }
 
 // CR-034: cancellation/postponement — QCTO-initiated only, reason required, notifies the
@@ -278,6 +381,9 @@ export async function performSittingLifecycleAction(params: SittingLifecyclePara
   const sitting = sittings.find((s) => s.id === params.sittingId);
   if (!sitting) throw new Error('Sitting not found.');
 
+  const proposedNewDate = params.actionId === 'sitting-postpone' ? (params.proposedNewDate ?? null) : null;
+  const auditNote = proposedNewDate ? `${params.reason} (Proposed new date: ${proposedNewDate})` : params.reason;
+
   const nextState = performAction({
     definition: SITTING_LIFECYCLE_WORKFLOW,
     record: { stageId: sitting.status },
@@ -285,7 +391,7 @@ export async function performSittingLifecycleAction(params: SittingLifecyclePara
     actorRole: params.actorRole,
     actorId: params.actorId,
     actorName: params.actorName,
-    note: params.reason,
+    note: auditNote,
     recordType: 'eisa-calendar-sitting',
     recordId: sitting.id,
   });
@@ -294,20 +400,22 @@ export async function performSittingLifecycleAction(params: SittingLifecyclePara
     ...sitting,
     status: nextState.stageId as EisaSitting['status'],
     postponementReason: params.actionId === 'sitting-postpone' ? params.reason : sitting.postponementReason,
+    proposedNewDate: params.actionId === 'sitting-postpone' ? proposedNewDate : sitting.proposedNewDate,
     cancellationReason: params.actionId === 'sitting-cancel' ? params.reason : sitting.cancellationReason,
   };
   saveSittings(sittings.map((s) => (s.id === sitting.id ? updated : s)));
 
   const verb = params.actionId === 'sitting-postpone' ? 'postponed' : 'cancelled';
+  const dateNote = proposedNewDate ? ` A new date of ${proposedNewDate} has been proposed.` : '';
   addNotification({
     recipientRole: 'SDP',
     title: `EISA sitting ${verb}`,
-    body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}`,
+    body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}${dateNote}`,
   });
   addNotification({
     recipientRole: 'QP',
     title: `EISA sitting ${verb}`,
-    body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}`,
+    body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}${dateNote}`,
   });
 
   return updated;

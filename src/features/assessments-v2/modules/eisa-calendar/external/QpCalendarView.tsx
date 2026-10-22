@@ -13,7 +13,9 @@ import { UpcomingDeadlinesBanner } from '../components/UpcomingDeadlinesBanner';
 import { EisaSittingStatusBadge } from '../components/StatusBadge';
 import { useEisaSittingBatches, useEisaSittings } from '../hooks';
 import { batchDisplayStatus } from '../workflow';
+import type { EisaSittingBatch } from '../types';
 import { ProposeDatesForm } from './ProposeDatesForm';
+import { ResubmitBatchDialog } from './ResubmitBatchDialog';
 
 // 09-visibility-matrix.md: "My Submissions" is filtered to this QP's own proposed batches
 // (qpId). Month/List View deliberately stay unfiltered — the QP needs to see the whole
@@ -24,6 +26,7 @@ export function QpCalendarView() {
   const { data: sittings = [] } = useEisaSittings();
   const { notifications, dismiss } = useNotifications('QP');
   const [formOpen, setFormOpen] = useState(false);
+  const [resubmitTarget, setResubmitTarget] = useState<EisaSittingBatch | null>(null);
 
   const batches = filterExternalRecords(allBatches, person, { qpIdOf: (b) => b.qpId });
   const sortedBatches = [...batches].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
@@ -62,7 +65,7 @@ export function QpCalendarView() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {['Qualification', 'Year', 'Dates', 'Status'].map((h) => (
+                      {['Qualification', 'Year', 'Dates', 'Status', ''].map((h) => (
                         <TableHead key={h} className="whitespace-nowrap">
                           {h}
                         </TableHead>
@@ -77,7 +80,19 @@ export function QpCalendarView() {
                         <TableCell className="text-xs text-gray-500">{batch.dates.join(', ')}</TableCell>
                         <TableCell>
                           <EisaSittingStatusBadge status={batchDisplayStatus(batch)} />
-                          {batch.rejectionReason && <p className="mt-1 text-xs text-red-600">{batch.rejectionReason}</p>}
+                          {/* Row 21 (D-08): every past rejection stays visible, not just the latest. */}
+                          {batch.rejectionHistory.map((entry, i) => (
+                            <p key={i} className="mt-1 text-xs text-red-600">
+                              {entry.reason}
+                            </p>
+                          ))}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {batch.state.stageId === 'rejected' && (
+                            <Button size="sm" variant="outline" onClick={() => setResubmitTarget(batch)}>
+                              Correct & resubmit
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -98,6 +113,7 @@ export function QpCalendarView() {
       </Tabs>
 
       <ProposeDatesForm open={formOpen} onOpenChange={setFormOpen} />
+      <ResubmitBatchDialog batch={resubmitTarget} onClose={() => setResubmitTarget(null)} />
     </div>
   );
 }

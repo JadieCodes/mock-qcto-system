@@ -15,16 +15,17 @@ export interface SupportingDocument {
   uploadedAt: string;
 }
 
-// CR-038: a flag lives on the individual learner's SOR, not on the whole registration — the
+// Row 25 (E-10): a per-learner SOR status, independent of the registration's own workflow
+// stage. `null` means no SOR has been uploaded yet. CR-038's flag still lives here too — the
 // SDP corrects and re-uploads just that learner's SOR without the record leaving AD review.
-export type SorStatus = 'pending' | 'flagged';
+export type SorStatus = 'uploaded' | 'under-review' | 'accepted' | 'flagged' | 'replaced';
 
 export interface RegistrationLearner {
   learnerId: string;
   fullName: string;
   idNumber: string;
   sor: SorFile | null;
-  sorStatus: SorStatus;
+  sorStatus: SorStatus | null;
   sorFlagReason: string | null;
   // CR-042: drives the automatic Site Visits monitoring-item trigger.
   rplArpl: boolean;

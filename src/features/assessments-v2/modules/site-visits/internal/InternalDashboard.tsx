@@ -99,7 +99,8 @@ export function InternalDashboard() {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Site Visits &amp; Monitoring</h2>
           <p className="text-sm text-gray-500 mt-1">
-            A standalone hub (CR-044) — every visit type is scheduled here, independently of the registration pipeline.
+            A standalone hub (CR-044) for EISA Readiness, Marking &amp; Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits — an
+            RPL/ARPL monitoring item is created automatically from a registration, never from EISA Confirmation.
           </p>
         </div>
         <div className="flex items-center gap-3">

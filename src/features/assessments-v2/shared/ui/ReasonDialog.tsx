@@ -11,6 +11,8 @@ export function ReasonDialog({
   title,
   description,
   confirmLabel = 'Confirm',
+  fieldLabel = 'Reason *',
+  placeholder = 'Explain why...',
   destructive,
   onOpenChange,
   onConfirm,
@@ -19,6 +21,8 @@ export function ReasonDialog({
   title: string;
   description?: string;
   confirmLabel?: string;
+  fieldLabel?: string;
+  placeholder?: string;
   destructive?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (reason: string) => void;
@@ -39,8 +43,8 @@ export function ReasonDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="reason-dialog-textarea">Reason *</Label>
-          <Textarea id="reason-dialog-textarea" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain why..." />
+          <Label htmlFor="reason-dialog-textarea">{fieldLabel}</Label>
+          <Textarea id="reason-dialog-textarea" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={placeholder} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

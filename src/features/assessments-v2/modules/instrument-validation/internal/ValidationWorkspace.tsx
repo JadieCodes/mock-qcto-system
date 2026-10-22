@@ -3,41 +3,18 @@ import { Award, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
+import { InstrumentValidationAuditTrail } from '../components/AuditTrail';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
 import { useInstrumentValidationRecord, useSaveValidationChecklist, useValidationAction } from '../hooks';
 import type { InstrumentValidationRecord } from '../types';
-
-function AuditTrail({ recordId }: { recordId: string }) {
-  const entries = [
-    ...getAuditTrail('instrument-validation-scheduling', recordId),
-    ...getAuditTrail('instrument-validation-validation', recordId),
-  ].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-  if (entries.length === 0) return <p className="text-xs text-gray-400">No actions recorded yet.</p>;
-
-  return (
-    <div className="space-y-2">
-      {entries.map((entry) => (
-        <div key={entry.id} className="rounded-xl border bg-gray-50 px-3 py-2 text-xs">
-          <p className="font-medium text-gray-700">
-            {entry.action} — <span className="text-gray-500">{entry.actorName} ({entry.actorRole})</span>
-          </p>
-          {entry.note && <p className="text-gray-500 mt-0.5 whitespace-pre-wrap">{entry.note}</p>}
-          <p className="text-gray-400 mt-0.5">{new Date(entry.timestamp).toLocaleString('en-ZA')}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRecord }) {
   const { role, person } = useV2Role();
@@ -46,6 +23,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
   const saveChecklist = useSaveValidationChecklist();
   const validationAction = useValidationAction();
   const [notApprovedOpen, setNotApprovedOpen] = useState(false);
+  const [conditionsOpen, setConditionsOpen] = useState(false);
 
   const canValidate = role === 'ASD' && record.validationWorkflow.stageId === 'asd-validation';
   const checklistComplete = isChecklistComplete(record.checklist, true);
@@ -119,7 +97,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
         )}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Audit Trail</p>
-          <AuditTrail recordId={record.id} />
+          <InstrumentValidationAuditTrail recordId={record.id} />
         </div>
       </TabsContent>
 
@@ -172,7 +150,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
                   size="sm"
                   variant="outline"
                   disabled={!outcomeReady || validationAction.isPending}
-                  onClick={() => runOutcome('val-approve-with-conditions')}
+                  onClick={() => setConditionsOpen(true)}
                 >
                   Approved with conditions
                 </Button>
@@ -204,6 +182,17 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
               confirmLabel="Record outcome"
               destructive
               onConfirm={(reason) => runOutcome('val-not-approved', reason)}
+            />
+
+            <ReasonDialog
+              open={conditionsOpen}
+              onOpenChange={setConditionsOpen}
+              title="Approved with conditions"
+              description="List the conditions the QP must meet. The QP will see this note."
+              fieldLabel="Conditions *"
+              placeholder="List the conditions..."
+              confirmLabel="Record outcome"
+              onConfirm={(reason) => runOutcome('val-approve-with-conditions', reason)}
             />
           </>
         )}

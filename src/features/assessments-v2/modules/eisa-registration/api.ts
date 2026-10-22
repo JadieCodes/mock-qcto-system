@@ -11,7 +11,7 @@ import { listPublishedSittings } from '../eisa-calendar/api';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX } from './config';
 import { REGISTRATION_WORKFLOW } from './workflow';
-import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SupportingDocument } from './types';
+import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SorStatus, SupportingDocument } from './types';
 
 const KEY = 'eisaRegistration:records';
 
@@ -66,6 +66,9 @@ export async function findConcurrentRegistration(
 }
 
 // CR-041: the SDP compliance gate check blocks starting a registration at all.
+// Row 24 (E-07): an SDP cannot have two open (not yet `registered`) registrations against the
+// same sitting — this is the actual root cause of the "stuck duplicate" bug, not something to
+// patch after the fact.
 export async function startRegistration(input: NewRegistrationInput): Promise<EisaRegistrationRecord> {
   const sittings = await listPublishedSittings();
   const sitting = sittings.find((s) => s.id === input.sittingId);
@@ -74,6 +77,15 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
   const compliant = await getSdpComplianceStatus(input.sdpName);
   if (!compliant) {
     throw new Error(`"${input.sdpName}" is not compliant and is blocked from submitting an EISA registration.`);
+  }
+
+  const existingOpen = loadAll().find(
+    (r) => r.sdpId === input.sdpId && r.sittingId === input.sittingId && r.workflow.stageId !== 'registered',
+  );
+  if (existingOpen) {
+    throw new Error(
+      `"${input.sdpName}" already has an open registration for this sitting (${existingOpen.workflow.stageId === 'sdp-submission' ? 'still building' : 'with the Assistant Director'}). Open it to continue, or withdraw it first.`,
+    );
   }
 
   const record: EisaRegistrationRecord = {
@@ -97,6 +109,26 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
   };
   saveAll([record, ...loadAll()]);
   return record;
+}
+
+// Row 24 (E-07): the SDP can delete/withdraw a draft registration outright — the other half of
+// closing off the "stuck duplicate" bug (the SDP now has a way out of a draft they no longer
+// want, instead of it sitting there unusable).
+export async function withdrawRegistration(registrationId: string, actorId: string, actorName: string): Promise<void> {
+  const all = loadAll();
+  const record = getOrThrow(all, registrationId);
+  if (record.workflow.stageId !== 'sdp-submission') {
+    throw new Error('Only a registration that is still being built can be withdrawn.');
+  }
+  saveAll(all.filter((r) => r.id !== registrationId));
+  appendAuditEntry({
+    recordType: 'eisa-registration',
+    recordId: registrationId,
+    actorRole: 'SDP',
+    actorId,
+    actorName,
+    action: `Withdrew the draft registration for "${record.qualificationTitle}" (sitting ${record.sittingDate})`,
+  });
 }
 
 // CR-036/CR-039: adds one enrolled learner to the draft registration, with the CR-040 duplicate
@@ -134,7 +166,7 @@ export async function addLearner(registrationId: string, learnerId: string): Pro
         fullName: learner.fullName,
         idNumber: learner.idNumber,
         sor: null,
-        sorStatus: 'pending',
+        sorStatus: null,
         sorFlagReason: null,
         rplArpl: false,
         addedAt: new Date().toISOString(),
@@ -182,9 +214,12 @@ export async function uploadLearnerSor(
 
   const sor: SorFile = { ...file, uploadedAt: new Date().toISOString() };
   const wasFlagged = learner.sorStatus === 'flagged';
+  // Row 25 (E-10): the first SOR for a learner is "Uploaded"; any file replacing an existing
+  // one (including a flagged one being corrected) is "Replaced".
+  const nextStatus: SorStatus = learner.sor ? 'replaced' : 'uploaded';
   const updated: EisaRegistrationRecord = {
     ...record,
-    learners: record.learners.map((l) => (l.learnerId === learnerId ? { ...l, sor, sorStatus: 'pending', sorFlagReason: null } : l)),
+    learners: record.learners.map((l) => (l.learnerId === learnerId ? { ...l, sor, sorStatus: nextStatus, sorFlagReason: null } : l)),
   };
   saveAll(replace(all, updated));
 
@@ -255,6 +290,69 @@ export async function flagLearnerSor(
     body: `${learner.fullName}'s SOR for "${record.qualificationTitle}" was flagged: ${reason}`,
   });
 
+  return updated;
+}
+
+// Row 25 (E-10): the Assistant Director's own two non-flag review outcomes — starting a
+// review, and accepting the SOR outright. Neither moves the registration's own stage, same
+// as the existing flag action.
+export async function markLearnerSorUnderReview(
+  registrationId: string,
+  learnerId: string,
+  actorId: string,
+  actorName: string,
+): Promise<EisaRegistrationRecord> {
+  const all = loadAll();
+  const record = getOrThrow(all, registrationId);
+  if (record.workflow.stageId !== 'ad-review') {
+    throw new Error('SORs can only be reviewed while the registration is with the Assistant Director.');
+  }
+  const learner = record.learners.find((l) => l.learnerId === learnerId);
+  if (!learner) throw new Error('Learner not found on this registration.');
+
+  const updated: EisaRegistrationRecord = {
+    ...record,
+    learners: record.learners.map((l) => (l.learnerId === learnerId ? { ...l, sorStatus: 'under-review' } : l)),
+  };
+  saveAll(replace(all, updated));
+  appendAuditEntry({
+    recordType: 'eisa-registration',
+    recordId: record.id,
+    actorRole: 'Assistant Director',
+    actorId,
+    actorName,
+    action: `Started reviewing ${learner.fullName}'s SOR`,
+  });
+  return updated;
+}
+
+export async function acceptLearnerSor(
+  registrationId: string,
+  learnerId: string,
+  actorId: string,
+  actorName: string,
+): Promise<EisaRegistrationRecord> {
+  const all = loadAll();
+  const record = getOrThrow(all, registrationId);
+  if (record.workflow.stageId !== 'ad-review') {
+    throw new Error('SORs can only be accepted while the registration is with the Assistant Director.');
+  }
+  const learner = record.learners.find((l) => l.learnerId === learnerId);
+  if (!learner) throw new Error('Learner not found on this registration.');
+
+  const updated: EisaRegistrationRecord = {
+    ...record,
+    learners: record.learners.map((l) => (l.learnerId === learnerId ? { ...l, sorStatus: 'accepted' } : l)),
+  };
+  saveAll(replace(all, updated));
+  appendAuditEntry({
+    recordType: 'eisa-registration',
+    recordId: record.id,
+    actorRole: 'Assistant Director',
+    actorId,
+    actorName,
+    action: `Accepted ${learner.fullName}'s SOR`,
+  });
   return updated;
 }
 
@@ -371,7 +469,19 @@ export async function listRegisteredRegistrationsForSitting(sittingId: string): 
   return loadAll().filter((r) => r.sittingId === sittingId && r.workflow.stageId === 'registered');
 }
 
+// Row 22/23 (D-17): read by EISA Calendar's delete guard — any registration (draft or
+// complete) against a sitting blocks deleting that sitting outright.
+export async function listRegistrationsForSitting(sittingId: string): Promise<EisaRegistrationRecord[]> {
+  return loadAll().filter((r) => r.sittingId === sittingId);
+}
+
 export async function listSittingIdsWithCompletedRegistrations(): Promise<string[]> {
   const all = loadAll();
   return [...new Set(all.filter((r) => r.workflow.stageId === 'registered').map((r) => r.sittingId))];
+}
+
+// Row 22/23 (D-17): read by EISA Calendar's delete guard/UI — any registration (draft or
+// complete) against a sitting, not only completed ones.
+export async function listSittingIdsWithRegistrations(): Promise<string[]> {
+  return [...new Set(loadAll().map((r) => r.sittingId))];
 }

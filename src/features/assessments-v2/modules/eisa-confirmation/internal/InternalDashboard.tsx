@@ -24,7 +24,10 @@ export function InternalDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">EISA Confirmation</h2>
-          <p className="text-sm text-gray-500 mt-1">Generate the consolidated learner list once registration for a sitting is complete.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            After registration is complete the QP confirms centres, learner counts and marking/moderation dates. RPL monitoring items in Site
+            Visits come from the registration, not from Confirmation.
+          </p>
         </div>
         <ScopeToggle scope={scope} onChange={setScope} />
       </div>
