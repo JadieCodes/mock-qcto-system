@@ -6,10 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
-import { isChecklistComplete } from '../../../shared/checklist/types';
+import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { availableActions, canActInStage } from '../../../shared/workflow/engine';
 import type { WorkflowAction } from '../../../shared/workflow/types';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import type { ValidationIssue } from '../../../shared/validation/types';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../../site-visits/config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
@@ -204,6 +206,13 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
   const editable = role === 'Assistant Director' && batch.workflow.stageId === 'ad-review';
   const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
   const notesComplete = batch.complianceReviewNotes.trim().length > 0 && batch.evidenceEvaluationNotes.trim().length > 0;
+  const advanceIssues: ValidationIssue[] = editable
+    ? [
+        ...(batch.complianceReviewNotes.trim() ? [] : [{ field: 'complianceReviewNotes', message: 'Compliance review notes are required.' }]),
+        ...(batch.evidenceEvaluationNotes.trim() ? [] : [{ field: 'evidenceEvaluationNotes', message: 'Evidence evaluation notes are required.' }]),
+        ...getChecklistIssues(batch.complianceChecklist, true),
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -243,12 +252,15 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
       </div>
 
       {batch.workflow.stageId === 'ad-review' && (
-        <ActionBar
-          stageId={batch.workflow.stageId}
-          role={role}
-          disabledActionIds={!(checklistComplete && notesComplete) ? ['ad-advance'] : []}
-          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
-        />
+        <>
+          <ValidationSummary issues={advanceIssues} title="Complete these before advancing to the Deputy Director:" />
+          <ActionBar
+            stageId={batch.workflow.stageId}
+            role={role}
+            disabledActionIds={!(checklistComplete && notesComplete) ? ['ad-advance'] : []}
+            onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
+          />
+        </>
       )}
     </div>
   );

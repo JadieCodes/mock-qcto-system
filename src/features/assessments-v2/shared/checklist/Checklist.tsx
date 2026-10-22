@@ -2,7 +2,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { CHECKLIST_REQUIRE_COMMENT_PER_LINE } from '../../config/featureFlags';
-import type { ChecklistSection } from './types';
+import { ValidationSummary } from '../validation/ValidationSummary';
+import { getChecklistIssues, type ChecklistSection } from './types';
 
 // CR-011: every line gets a comment field; it is mandatory before the checklist can be
 // saved/submitted. One component, reused by QSA evaluation, FISA Standards evaluation,
@@ -31,8 +32,11 @@ export function Checklist({
     );
   };
 
+  const issues = readonly ? [] : getChecklistIssues(sections, requireComment);
+
   return (
     <div className="space-y-6">
+      <ValidationSummary issues={issues} title="Complete every line before you can submit:" />
       {sections.map((section) => (
         <div key={section.id} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b">

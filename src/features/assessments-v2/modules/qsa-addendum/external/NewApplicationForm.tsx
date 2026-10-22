@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { checkSaqaRegistration, type SaqaRegistryDocument } from '../../../mock/api/saqaRegistry';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import type { ValidationIssue } from '../../../shared/validation/types';
 import { useCreateQsaAddendumApplication } from '../hooks';
 import type { NewApplicationInput, RequiredDocument } from '../types';
 
@@ -82,6 +84,16 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
   const gateReady =
     gateOutcome === 'registered' ||
     (gateOutcome === 'not-registered' && UPLOAD_SLOTS.every((slot) => uploads[slot.key] !== null));
+
+  // Row 11 (test finding B-05): Submit used to just go disabled with no explanation for the
+  // SAQA gate check / NQF Level, which aren't part of react-hook-form's own field errors.
+  const submitIssues: ValidationIssue[] = [];
+  if (!nqfLevel) submitIssues.push({ field: 'nqfLevel', message: 'Select an NQF Level.' });
+  if (gateOutcome === null) {
+    submitIssues.push({ field: 'gateCheck', message: 'Run the SAQA Gate Check (Registered or Not Registered).' });
+  } else if (!gateReady) {
+    submitIssues.push({ field: 'gateCheck', message: 'Upload all 3 required documents before submitting.' });
+  }
 
   const onSubmit = (values: FormValues) => {
     if (!nqfLevel || !gateOutcome || !gateReady) return;
@@ -157,6 +169,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
                   ))}
                 </SelectContent>
               </Select>
+              {!nqfLevel && <p className="text-xs text-red-600">Required.</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="credits">Credits *</Label>
@@ -247,6 +260,8 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
               </Button>
             )}
           </div>
+
+          <ValidationSummary issues={submitIssues} title="Before you can submit:" />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

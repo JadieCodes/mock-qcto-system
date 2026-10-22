@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
-import { isChecklistComplete } from '../../../shared/checklist/types';
+import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaValidation, useFisaValidationAction, useSaveFisaValidationChecklist } from '../hooks';
 import type { FisaValidationRecord } from '../types';
@@ -138,6 +139,9 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
             )}
 
             {canValidate && (
+              <ValidationSummary issues={getChecklistIssues(record.checklist, true)} title="Complete these before recording an outcome:" />
+            )}
+            {canValidate && (
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button size="sm" className="gap-2 bg-emerald-600 hover:bg-emerald-700" disabled={!checklistComplete || validationAction.isPending} onClick={() => runOutcome('fval-approve')}>
                   <CheckCircle2 className="h-4 w-4" />
@@ -151,9 +155,6 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
                   Not approved
                 </Button>
               </div>
-            )}
-            {!checklistComplete && canValidate && (
-              <p className="text-xs text-amber-600">Answer every checklist line with a comment before recording an outcome.</p>
             )}
 
             {record.instrumentStatus === 'validated' && (

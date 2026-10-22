@@ -15,6 +15,8 @@ import { LetterView } from '../../../shared/letters/LetterView';
 import { canActInStage, availableActions } from '../../../shared/workflow/engine';
 import type { WorkflowAction, WorkflowDefinition } from '../../../shared/workflow/types';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { FieldError, ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import type { ValidationIssue } from '../../../shared/validation/types';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
 import { QsaStatusBadge } from '../components/StatusBadge';
@@ -158,12 +160,31 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
   const savePresentation = useSaveIacPresentation();
 
   const checklistComplete = isChecklistComplete(application.qsaChecklist, true);
-  const reportComplete =
-    application.evaluationReport.findings.trim().length > 0 &&
-    application.evaluationReport.recommendation !== '' &&
-    application.evaluationReport.approvedEisaSittingsPerYear != null;
+  const reportIssues: ValidationIssue[] = [];
+  if (!application.evaluationReport.findings.trim()) {
+    reportIssues.push({ field: 'findings', message: 'Findings are required.' });
+  }
+  if (application.evaluationReport.recommendation === '') {
+    reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
+  }
+  if (application.evaluationReport.approvedEisaSittingsPerYear == null) {
+    reportIssues.push({ field: 'approvedEisaSittingsPerYear', message: 'Enter the approved EISA sittings per year.' });
+  }
+  const reportComplete = reportIssues.length === 0;
   const ddChecklistComplete = isChecklistComplete(application.ddReviewChecklist, true);
   const decided = application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined';
+  const asdEditable = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
+  const ddEditable = role === 'Deputy Director' && application.evalState.stageId === 'dd-review';
+
+  // Row 10 (test finding B-08): the DD's reason for sending the acknowledgement letter back
+  // must be captured and shown to the ASD, not just silently bounced.
+  const latestAckSendBackNote =
+    application.ackState.stageId === 'asd-preview'
+      ? getAuditTrail('qsa-addendum-acknowledgement', application.id)
+          .slice()
+          .reverse()
+          .find((entry) => entry.action === 'Send back to ASD')?.note
+      : undefined;
 
   return (
     <Tabs defaultValue="details">
@@ -218,14 +239,24 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
         {application.ackState.stageId === 'acknowledged' ? (
           <p className="text-sm text-emerald-700 font-medium">Acknowledged by {application.ackState.submittedBy}.</p>
         ) : (
-          <ActionBar
-            definition={ACK_WORKFLOW}
-            stageId={application.ackState.stageId}
-            role={role}
-            onRun={(actionId, note) =>
-              ackAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
-            }
-          />
+          <>
+            {latestAckSendBackNote && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
+                  Deputy Director — reason for sending back
+                </p>
+                <p className="whitespace-pre-wrap">{latestAckSendBackNote}</p>
+              </div>
+            )}
+            <ActionBar
+              definition={ACK_WORKFLOW}
+              stageId={application.ackState.stageId}
+              role={role}
+              onRun={(actionId, note) =>
+                ackAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
+              }
+            />
+          </>
         )}
       </TabsContent>
 
@@ -234,140 +265,147 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QSA Addendum Preliminary Checklist (44 items)</p>
           <Checklist
             sections={application.qsaChecklist}
-            readonly={!(role === 'ASD' && application.evalState.stageId === 'asd-evaluation')}
+            readonly={!asdEditable}
             onChange={(sections) => saveChecklist.mutate({ applicationId: application.id, sections })}
           />
         </div>
 
         <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Evaluation Report</p>
-          {(() => {
-            const editable = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
-            return (
-              <>
-                <div className="space-y-2">
-                  <Label>Findings</Label>
-                  <Textarea
-                    rows={3}
-                    value={application.evaluationReport.findings}
-                    disabled={!editable}
-                    onChange={(e) =>
-                      saveReport.mutate({
-                        applicationId: application.id,
-                        report: { ...application.evaluationReport, findings: e.target.value },
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Recommendation</Label>
-                    <Select
-                      value={application.evaluationReport.recommendation}
-                      disabled={!editable}
-                      onValueChange={(value) =>
-                        saveReport.mutate({
-                          applicationId: application.id,
-                          report: { ...application.evaluationReport, recommendation: value as 'recommended' | 'not-recommended' },
-                        })
-                      }
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select a recommendation" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="recommended">Recommended for approval</SelectItem>
-                        <SelectItem value="not-recommended">Not recommended</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Approved EISA sittings per year</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      disabled={!editable}
-                      value={application.evaluationReport.approvedEisaSittingsPerYear ?? ''}
-                      onChange={(e) =>
-                        saveReport.mutate({
-                          applicationId: application.id,
-                          report: {
-                            ...application.evaluationReport,
-                            approvedEisaSittingsPerYear: e.target.value === '' ? null : Number(e.target.value),
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              </>
-            );
-          })()}
+          {asdEditable && <ValidationSummary issues={reportIssues} title="Complete the report before sending to the Deputy Director:" />}
+          <div className="space-y-2">
+            <Label>Findings</Label>
+            <Textarea
+              rows={3}
+              value={application.evaluationReport.findings}
+              disabled={!asdEditable}
+              onChange={(e) =>
+                saveReport.mutate({
+                  applicationId: application.id,
+                  report: { ...application.evaluationReport, findings: e.target.value },
+                })
+              }
+            />
+            {asdEditable && <FieldError message={reportIssues.find((i) => i.field === 'findings')?.message} />}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Recommendation</Label>
+              <Select
+                value={application.evaluationReport.recommendation}
+                disabled={!asdEditable}
+                onValueChange={(value) =>
+                  saveReport.mutate({
+                    applicationId: application.id,
+                    report: { ...application.evaluationReport, recommendation: value as 'recommended' | 'not-recommended' },
+                  })
+                }
+              >
+                <SelectTrigger><SelectValue placeholder="Select a recommendation" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recommended">Recommended for approval</SelectItem>
+                  <SelectItem value="not-recommended">Not recommended</SelectItem>
+                </SelectContent>
+              </Select>
+              {asdEditable && <FieldError message={reportIssues.find((i) => i.field === 'recommendation')?.message} />}
+            </div>
+            <div className="space-y-2">
+              <Label>Approved EISA sittings per year</Label>
+              <Input
+                type="number"
+                min={0}
+                disabled={!asdEditable}
+                value={application.evaluationReport.approvedEisaSittingsPerYear ?? ''}
+                onChange={(e) =>
+                  saveReport.mutate({
+                    applicationId: application.id,
+                    report: {
+                      ...application.evaluationReport,
+                      approvedEisaSittingsPerYear: e.target.value === '' ? null : Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              {asdEditable && <FieldError message={reportIssues.find((i) => i.field === 'approvedEisaSittingsPerYear')?.message} />}
+            </div>
+          </div>
         </div>
 
         {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}
 
-        <ActionBar
-          definition={EVAL_WORKFLOW}
-          stageId={application.evalState.stageId}
-          role={role}
-          disabledActionIds={!(checklistComplete && reportComplete) ? ['eval-send-to-dd'] : []}
-          onRun={(actionId, note) =>
-            evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
-          }
-        />
-
-        <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Deputy Director Review</p>
-          <Checklist
-            sections={application.ddReviewChecklist}
-            readonly={!(role === 'Deputy Director' && application.evalState.stageId === 'dd-review')}
-            onChange={(sections) => saveDdChecklist.mutate({ applicationId: application.id, sections })}
-          />
+        {/* Rows 5/6 (test findings B-10, B-11, B-15): each stage renders exactly ONE action
+            bar, shown only while that stage is the current stage — not driven off whatever the
+            current stage happens to be, which is what produced the duplicate/triple buttons and
+            let the ASD see the Deputy Director's checklist and button ahead of time. */}
+        {application.evalState.stageId === 'asd-evaluation' && (
           <ActionBar
             definition={EVAL_WORKFLOW}
             stageId={application.evalState.stageId}
             role={role}
-            disabledActionIds={!ddChecklistComplete ? ['eval-dd-send-to-iac'] : []}
+            disabledActionIds={!(checklistComplete && reportComplete) ? ['eval-send-to-dd'] : []}
             onRun={(actionId, note) =>
               evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
             }
           />
-        </div>
+        )}
 
-        <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">IAC Summary Presentation</p>
-          {role === 'IAC' && application.evalState.stageId === 'iac-review' ? (
-            <Input
-              type="file"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) savePresentation.mutate({ applicationId: application.id, fileName: file.name });
-              }}
+        {application.evalState.stageId === 'dd-review' && (
+          <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Deputy Director Review</p>
+            <Checklist
+              sections={application.ddReviewChecklist}
+              readonly={!ddEditable}
+              onChange={(sections) => saveDdChecklist.mutate({ applicationId: application.id, sections })}
             />
-          ) : null}
-          <p className="text-sm text-gray-700">
-            {application.iacPresentationFileName ? (
-              <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{application.iacPresentationFileName}</span>
-            ) : (
-              <span className="text-gray-400">No presentation uploaded yet.</span>
-            )}
-          </p>
-          {application.evalState.stageId === 'iac-review' && (
             <ActionBar
               definition={EVAL_WORKFLOW}
               stageId={application.evalState.stageId}
               role={role}
-              disabledActionIds={!application.iacPresentationFileName ? ['eval-iac-approve', 'eval-iac-decline', 'eval-iac-remediation'] : []}
+              disabledActionIds={!ddChecklistComplete ? ['eval-dd-send-to-iac'] : []}
               onRun={(actionId, note) =>
                 evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
               }
             />
-          )}
-          {decided && (
-            <p className={`text-sm font-semibold ${application.evalState.stageId === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>
-              {application.evalState.stageId === 'approved' ? 'Approved by IAC.' : 'Declined by IAC.'}
+          </div>
+        )}
+
+        {(application.evalState.stageId === 'iac-review' || decided) && (
+          <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">IAC Summary Presentation</p>
+            {role === 'IAC' && application.evalState.stageId === 'iac-review' ? (
+              <Input
+                type="file"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) savePresentation.mutate({ applicationId: application.id, fileName: file.name });
+                }}
+              />
+            ) : null}
+            <p className="text-sm text-gray-700">
+              {application.iacPresentationFileName ? (
+                <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{application.iacPresentationFileName}</span>
+              ) : (
+                <span className="text-gray-400">No presentation uploaded yet.</span>
+              )}
             </p>
-          )}
-        </div>
+            {application.evalState.stageId === 'iac-review' && (
+              <ActionBar
+                definition={EVAL_WORKFLOW}
+                stageId={application.evalState.stageId}
+                role={role}
+                disabledActionIds={!application.iacPresentationFileName ? ['eval-iac-approve', 'eval-iac-decline', 'eval-iac-remediation'] : []}
+                onRun={(actionId, note) =>
+                  evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
+                }
+              />
+            )}
+            {decided && (
+              <p className={`text-sm font-semibold ${application.evalState.stageId === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>
+                {application.evalState.stageId === 'approved' ? 'Approved by IAC.' : 'Declined by IAC.'}
+              </p>
+            )}
+          </div>
+        )}
       </TabsContent>
 
       <TabsContent value="outcome" className="space-y-4">

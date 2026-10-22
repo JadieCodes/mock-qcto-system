@@ -5,9 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Checklist } from '../../../shared/checklist/Checklist';
-import { isChecklistComplete } from '../../../shared/checklist/types';
+import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import type { ValidationIssue } from '../../../shared/validation/types';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
@@ -49,6 +51,14 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
   const checklistComplete = isChecklistComplete(record.checklist, true);
   const fieldsComplete = record.prefilledFields.every((f) => f.action !== null);
   const outcomeReady = checklistComplete && fieldsComplete;
+  const outcomeIssues: ValidationIssue[] = canValidate
+    ? [
+        ...record.prefilledFields
+          .filter((f) => f.action === null)
+          .map((f): ValidationIssue => ({ field: f.key, message: `${f.label} — confirm or recapture this field.` })),
+        ...getChecklistIssues(record.checklist, true),
+      ]
+    : [];
 
   const runOutcome = (actionId: string, note?: string) => {
     validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorId, actorName, note });
@@ -145,6 +155,9 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
             </div>
 
             {canValidate && (
+              <ValidationSummary issues={outcomeIssues} title="Complete these before recording an outcome:" />
+            )}
+            {canValidate && (
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button
                   size="sm"
@@ -174,12 +187,6 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
                   Not approved
                 </Button>
               </div>
-            )}
-            {!outcomeReady && canValidate && (
-              <p className="text-xs text-amber-600">
-                Answer every checklist line with a comment, and confirm or recapture every pre-filled field, before recording an
-                outcome.
-              </p>
             )}
 
             {record.instrumentStatus === 'validated' && (

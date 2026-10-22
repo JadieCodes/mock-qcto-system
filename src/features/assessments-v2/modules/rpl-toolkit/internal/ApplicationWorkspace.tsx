@@ -11,6 +11,8 @@ import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import { personsForRole } from '../../../shared/people/directory';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary, FieldError } from '../../../shared/validation/ValidationSummary';
+import type { ValidationIssue } from '../../../shared/validation/types';
 import { ActionBar } from '../components/ActionBar';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import {
@@ -35,7 +37,10 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
   const asdOptions = personsForRole('ASD');
 
   const checklistComplete = isChecklistComplete(application.checklist, true);
-  const reportComplete = application.evaluationReport.findings.trim().length > 0 && application.evaluationReport.recommendation !== '';
+  const reportIssues: ValidationIssue[] = [];
+  if (!application.evaluationReport.findings.trim()) reportIssues.push({ field: 'findings', message: 'Findings are required.' });
+  if (application.evaluationReport.recommendation === '') reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
+  const reportComplete = reportIssues.length === 0;
   const editableChecklist = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
   const canAllocate = role === 'Assistant Director' && application.evalState.stageId === 'ad-allocation';
   const decided = application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined';
@@ -136,6 +141,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
 
         <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Evaluation Report</p>
+          {editableChecklist && <ValidationSummary issues={reportIssues} title="Complete the report before sending to the Deputy Director:" />}
           <div className="space-y-2">
             <Label>Findings</Label>
             <Textarea
@@ -144,6 +150,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
               disabled={!editableChecklist}
               onChange={(e) => saveReport.mutate({ applicationId: application.id, report: { ...application.evaluationReport, findings: e.target.value } })}
             />
+            {editableChecklist && <FieldError message={reportIssues.find((i) => i.field === 'findings')?.message} />}
           </div>
           <div className="space-y-2">
             <Label>Recommendation</Label>
@@ -165,6 +172,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
                 <SelectItem value="not-recommended">Not recommended</SelectItem>
               </SelectContent>
             </Select>
+            {editableChecklist && <FieldError message={reportIssues.find((i) => i.field === 'recommendation')?.message} />}
           </div>
         </div>
 
@@ -177,9 +185,6 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
           }
           onRun={(actionId, note) => evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })}
         />
-        {application.evalState.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) && (
-          <p className="text-xs text-amber-600">Answer every checklist line with a comment, and complete the evaluation report, before sending to the Deputy Director.</p>
-        )}
 
         {decided && (
           <p className={`text-sm font-semibold ${application.evalState.stageId === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>

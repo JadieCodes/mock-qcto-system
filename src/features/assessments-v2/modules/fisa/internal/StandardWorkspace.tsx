@@ -7,6 +7,8 @@ import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { FieldError, ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import type { ValidationIssue } from '../../../shared/validation/types';
 import { ActionBar } from '../components/ActionBar';
 import { FisaStandardStatusBadge } from '../components/StatusBadge';
 import { useFisaStandard, useSaveFisaStandardChecklist, useSaveFisaStandardEvaluationReport, useStandardAction } from '../hooks';
@@ -22,7 +24,10 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
   const saveReport = useSaveFisaStandardEvaluationReport();
 
   const checklistComplete = isChecklistComplete(record.checklist, true);
-  const reportComplete = record.evaluationReport.findings.trim().length > 0 && record.evaluationReport.recommendation !== '';
+  const reportIssues: ValidationIssue[] = [];
+  if (!record.evaluationReport.findings.trim()) reportIssues.push({ field: 'findings', message: 'Findings are required.' });
+  if (record.evaluationReport.recommendation === '') reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
+  const reportComplete = reportIssues.length === 0;
   const editable = role === 'ASD' && record.workflow.stageId === 'asd-evaluation';
 
   return (
@@ -60,13 +65,6 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           </div>
         )}
 
-        <ActionBar
-          definition={FISA_STANDARD_WORKFLOW}
-          stageId={record.workflow.stageId}
-          role={role}
-          onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
-        />
-
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Audit Trail</p>
           <AuditTrailView recordTypes={['fisa-standard']} recordId={record.id} />
@@ -81,6 +79,7 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
 
         <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Evaluation Report</p>
+          {editable && <ValidationSummary issues={reportIssues} title="Complete the report before sending to the Deputy Director:" />}
           <div className="space-y-2">
             <Label>Findings</Label>
             <Textarea
@@ -89,6 +88,7 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
               disabled={!editable}
               onChange={(e) => saveReport.mutate({ standardId: record.id, report: { ...record.evaluationReport, findings: e.target.value } })}
             />
+            {editable && <FieldError message={reportIssues.find((i) => i.field === 'findings')?.message} />}
           </div>
           <div className="space-y-2">
             <Label>Recommendation</Label>
@@ -107,6 +107,7 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
                 <SelectItem value="not-recommended">Not recommended</SelectItem>
               </SelectContent>
             </Select>
+            {editable && <FieldError message={reportIssues.find((i) => i.field === 'recommendation')?.message} />}
           </div>
         </div>
 
@@ -117,9 +118,6 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           disabledActionIds={record.workflow.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['standard-asd-send-to-dd'] : []}
           onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
         />
-        {record.workflow.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) && (
-          <p className="text-xs text-amber-600">Answer every checklist line with a comment, and complete the evaluation report, before sending to the Deputy Director.</p>
-        )}
 
         {record.workflow.stageId === 'approved' && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">

@@ -8,9 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
+import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { ExecutionForm } from '../components/ExecutionForm';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE } from '../config';
@@ -254,6 +256,10 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
   const stage = visit.reportWorkflow.stageId;
   const canExecute = role === REPORT_SUBMITTER_ROLE && stage === 'awaiting-execution';
   const canReview = role === REPORT_APPROVER_ROLE && stage === 'dd-report-review';
+  // Item 2 (module audit): the Submit button had no completeness gate at all, letting the ASD
+  // submit a report with a blank checklist (CR-011).
+  const checklistComplete = isChecklistComplete(visit.checklist, true);
+  const submitIssues = canExecute ? getChecklistIssues(visit.checklist, true) : [];
 
   const dialogCopy: Record<Exclude<ReportDialogAction, null>, { title: string; confirmLabel: string; destructive?: boolean; actionId: string }> = {
     'report-send-back': { title: 'Send back for clarification', confirmLabel: 'Send back', actionId: 'report-send-back' },
@@ -271,16 +277,19 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       )}
 
       {canExecute && (
-        <div className="flex justify-end">
-          <Button
-            className="gap-2"
-            disabled={reportAction.isPending}
-            onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'report-submit', actorRole: role, actorId, actorName })}
-          >
-            <Send className="h-4 w-4" />
-            Submit Report
-          </Button>
-        </div>
+        <>
+          <ValidationSummary issues={submitIssues} title="Complete every checklist line before you can submit the report:" />
+          <div className="flex justify-end">
+            <Button
+              className="gap-2"
+              disabled={!checklistComplete || reportAction.isPending}
+              onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'report-submit', actorRole: role, actorId, actorName })}
+            >
+              <Send className="h-4 w-4" />
+              Submit Report
+            </Button>
+          </div>
+        </>
       )}
 
       {canReview && (

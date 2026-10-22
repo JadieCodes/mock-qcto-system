@@ -13,7 +13,16 @@ export const ACK_WORKFLOW: WorkflowDefinition = {
   ],
   actions: [
     { id: 'ack-send-to-dd', label: 'Send to Deputy Director', fromStage: 'asd-preview', toStage: 'dd-review', kind: 'advance' },
-    { id: 'ack-send-back', label: 'Send back to ASD', fromStage: 'dd-review', toStage: 'asd-preview', kind: 'send-back' },
+    {
+      id: 'ack-send-back',
+      label: 'Send back to ASD',
+      fromStage: 'dd-review',
+      toStage: 'asd-preview',
+      kind: 'send-back',
+      // Row 10 (test finding B-08): the DD's reason for sending it back must be captured and
+      // shown to the ASD, not just silently bounced.
+      requiresNote: true,
+    },
     {
       id: 'ack-acknowledge',
       label: 'Acknowledge',
