@@ -9,12 +9,13 @@ import {
   performApprovalLetterAction,
   performEvaluationAction,
   performOutcomeAction,
+  saveApprovalLetterDraft,
   saveDdReviewChecklist,
   saveEvaluationReport,
   saveIacPresentation,
   saveQsaChecklist,
 } from './api';
-import type { EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
+import type { ApprovalLetterDraft, EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
 
 const LIST_KEY = ['qsa-addendum', 'applications'] as const;
 const detailKey = (id: string) => ['qsa-addendum', 'applications', id] as const;
@@ -99,5 +100,11 @@ export function useSaveEvaluationReport() {
 export function useSaveIacPresentation() {
   return useQsaAddendumMutation((args: { applicationId: string; fileName: string }) =>
     saveIacPresentation(args.applicationId, args.fileName),
+  );
+}
+
+export function useSaveApprovalLetterDraft() {
+  return useQsaAddendumMutation((args: { applicationId: string; draft: ApprovalLetterDraft }) =>
+    saveApprovalLetterDraft(args.applicationId, args.draft),
   );
 }

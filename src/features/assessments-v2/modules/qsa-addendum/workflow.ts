@@ -1,4 +1,4 @@
-import type { WorkflowDefinition } from '../../shared/workflow/types';
+import type { WorkflowDefinition, WorkflowRecordState } from '../../shared/workflow/types';
 import { APPROVAL_LETTER_SIGNER_ROLE } from './config';
 import type { QsaAddendumApplication } from './types';
 
@@ -35,6 +35,13 @@ export const ACK_WORKFLOW: WorkflowDefinition = {
 };
 
 // CR-014 Flow 1: evaluation approval — ASD -> DD -> IAC. The CEO never appears here (CR-008).
+//
+// Row 7 (test findings): the ASD does not choose between `eval-send-to-dd` and
+// `eval-return-to-qp` — the mock/integrations/aiValidation.ts `autoEvaluateQsaChecklist`
+// result picks exactly one of these two for them (positive -> DD, negative -> QP), enforced
+// again server-side in api.ts's `performEvaluationAction`. Both actions stay as two separate
+// workflow actions (not one conditional one) so the engine's normal fromStage/toStage shape
+// still applies — only the UI/API layer decides which one is actually reachable.
 export const EVAL_WORKFLOW: WorkflowDefinition = {
   id: 'qsa-addendum-evaluation',
   stages: [
@@ -55,7 +62,6 @@ export const EVAL_WORKFLOW: WorkflowDefinition = {
       fromStage: 'asd-evaluation',
       toStage: 'qp-corrections',
       kind: 'send-back',
-      requiresNote: true,
     },
     { id: 'eval-qp-resubmit', label: 'Resubmit to ASD', fromStage: 'qp-corrections', toStage: 'asd-evaluation', kind: 'advance' },
     {
@@ -107,16 +113,48 @@ export const OUTCOME_WORKFLOW: WorkflowDefinition = {
   actions: [{ id: 'outcome-sign', label: 'Sign outcome letter', fromStage: 'ceo-signature', toStage: 'signed', kind: 'complete' }],
 };
 
-// The approval letter only exists once the outcome is "approved". The signer role is the
-// config constant above — see the open question in progress.md.
+// Row 13 (test findings): the approval letter only exists once the outcome is "approved".
+// New flow — the ASD drafts and edits it, submits to the Deputy Director (the signer role is
+// the config constant above), who signs or declines it back to the ASD with a mandatory note;
+// once signed, the ASD is the one who forwards it to the QP (there is still no DD -> QP
+// shortcut, same CR-012 rule as the evaluation flow).
 export const APPROVAL_LETTER_WORKFLOW: WorkflowDefinition = {
   id: 'qsa-addendum-approval-letter',
   stages: [
-    { id: 'pending-signature', label: 'Awaiting signature', allowedRoles: [APPROVAL_LETTER_SIGNER_ROLE] },
-    { id: 'signed', label: 'Signed', allowedRoles: [] },
+    { id: 'asd-draft', label: 'ASD drafting', allowedRoles: ['ASD'] },
+    { id: 'dd-review', label: 'Awaiting signature', allowedRoles: [APPROVAL_LETTER_SIGNER_ROLE] },
+    { id: 'signed', label: 'Signed — awaiting send to QP', allowedRoles: ['ASD'] },
+    { id: 'sent-to-qp', label: 'Sent to QP', allowedRoles: [] },
   ],
-  actions: [{ id: 'approval-sign', label: 'Sign approval letter', fromStage: 'pending-signature', toStage: 'signed', kind: 'complete' }],
+  actions: [
+    { id: 'approval-submit-to-dd', label: 'Submit to Deputy Director', fromStage: 'asd-draft', toStage: 'dd-review', kind: 'advance' },
+    {
+      id: 'approval-decline',
+      label: 'Decline',
+      fromStage: 'dd-review',
+      toStage: 'asd-draft',
+      kind: 'send-back',
+      requiresNote: true,
+    },
+    {
+      id: 'approval-sign',
+      label: 'Sign approval letter',
+      fromStage: 'dd-review',
+      toStage: 'signed',
+      kind: 'complete',
+      requiresDifferentActor: true,
+    },
+    { id: 'approval-send-to-qp', label: 'Send to QP', fromStage: 'signed', toStage: 'sent-to-qp', kind: 'complete' },
+  ],
 };
+
+// `approvalState.stageId === 'signed'` only means the Deputy Director has signed — the letter
+// is still sitting with the ASD to forward. Other modules (EISA Instrument Validation, the
+// EISA Calendar) care about "is this QSA Addendum approved", not about letter delivery, so
+// both `signed` and `sent-to-qp` count as final for that purpose.
+export function isApprovalLetterFinal(state: WorkflowRecordState | null): boolean {
+  return state?.stageId === 'signed' || state?.stageId === 'sent-to-qp';
+}
 
 export function qsaOverallStatusLabel(app: QsaAddendumApplication): string {
   switch (app.evalState.stageId) {
@@ -132,9 +170,11 @@ export function qsaOverallStatusLabel(app: QsaAddendumApplication): string {
       return app.outcomeState.stageId === 'signed' ? 'Declined' : 'Declined — outcome letter pending CEO signature';
     case 'approved':
       if (app.outcomeState.stageId !== 'signed') return 'Approved — outcome letter pending CEO signature';
-      if (!app.approvalState || app.approvalState.stageId === 'pending-signature') {
-        return 'Approved — approval letter pending signature';
+      if (!app.approvalState || app.approvalState.stageId === 'asd-draft') {
+        return 'Approved — approval letter drafted by ASD';
       }
+      if (app.approvalState.stageId === 'dd-review') return 'Approved — approval letter awaiting Deputy Director signature';
+      if (app.approvalState.stageId === 'signed') return 'Approved — approval letter signed, awaiting ASD to send to QP';
       return 'Approved';
     default:
       return app.evalState.stageId;
@@ -156,7 +196,7 @@ export function qsaOverallStatusTone(app: QsaAddendumApplication): QsaStatusTone
     case 'declined':
       return 'red';
     case 'approved':
-      return app.approvalState?.stageId === 'signed' ? 'emerald' : 'blue';
+      return app.approvalState?.stageId === 'sent-to-qp' ? 'emerald' : 'blue';
     default:
       return 'blue';
   }

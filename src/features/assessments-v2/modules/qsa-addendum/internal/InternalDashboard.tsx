@@ -9,7 +9,7 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
 import type { QsaAddendumApplication } from '../types';
-import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, OUTCOME_WORKFLOW } from '../workflow';
+import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from '../workflow';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 
 function myItemIds(app: QsaAddendumApplication): (string | null | undefined)[] {
@@ -44,7 +44,7 @@ export function InternalDashboard() {
   const asdCount = applications.filter((a) => a.evalState.stageId === 'asd-evaluation' || a.ackState.stageId === 'asd-preview').length;
   const ddCount = applications.filter((a) => a.evalState.stageId === 'dd-review' || a.ackState.stageId === 'dd-review').length;
   const iacCount = applications.filter((a) => a.evalState.stageId === 'iac-review').length;
-  const approvedCount = applications.filter((a) => a.approvalState?.stageId === 'signed').length;
+  const approvedCount = applications.filter((a) => isApprovalLetterFinal(a.approvalState)).length;
 
   return (
     <div className="space-y-6">

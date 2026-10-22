@@ -2,8 +2,10 @@ import { type ComponentType, type ReactNode } from 'react';
 import { Award, BookOpen, Calendar, Hash, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
+import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
 import { QsaStatusBadge } from '../components/StatusBadge';
@@ -23,6 +25,9 @@ function DetailRow({ icon: Icon, label, value }: { icon: ComponentType<{ classNa
   );
 }
 
+// Row 14 (test findings): on the QP view, each letter (acknowledgement, outcome, approval)
+// gets its own tab, and the audit trail moves out of the Details tab into its own tab too —
+// same pattern as the internal workspace.
 export function ApplicationDetail({ applicationId, onClose }: { applicationId: string | null; onClose: () => void }) {
   const { data: application } = useQsaAddendumApplication(applicationId);
 
@@ -35,33 +40,42 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
               <DialogTitle>{application.qualificationTitle}</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">Status</span>
-                <QsaStatusBadge application={application} />
-              </div>
+            <Tabs defaultValue="details">
+              <TabsList>
+                <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="acknowledgement">Acknowledgement</TabsTrigger>
+                <TabsTrigger value="outcome">Outcome Letter</TabsTrigger>
+                <TabsTrigger value="approval">Approval Letter</TabsTrigger>
+                <TabsTrigger value="audit">Audit Trail</TabsTrigger>
+              </TabsList>
 
-              <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 border-b">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QP & Qualification</p>
+              <TabsContent value="details" className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Status</span>
+                  <QsaStatusBadge application={application} />
                 </div>
-                <div className="px-4 divide-y divide-gray-50">
-                  <DetailRow icon={User} label="Name of QP" value={application.qpName} />
-                  <DetailRow icon={BookOpen} label="Qualification Title" value={application.qualificationTitle} />
-                  <DetailRow icon={Hash} label="SAQA ID" value={application.saqaId} />
-                  <DetailRow icon={Award} label="NQF Level" value={application.nqfLevel} />
-                  <DetailRow icon={Hash} label="Credits" value={application.credits} />
-                  <DetailRow icon={Calendar} label="Submission Date" value={application.submissionDate} />
+
+                <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QP & Qualification</p>
+                  </div>
+                  <div className="px-4 divide-y divide-gray-50">
+                    <DetailRow icon={User} label="Name of QP" value={application.qpName} />
+                    <DetailRow icon={BookOpen} label="Qualification Title" value={application.qualificationTitle} />
+                    <DetailRow icon={Hash} label="SAQA ID" value={application.saqaId} />
+                    <DetailRow icon={Award} label="NQF Level" value={application.nqfLevel} />
+                    <DetailRow icon={Hash} label="Credits" value={application.credits} />
+                    <DetailRow icon={Calendar} label="Submission Date" value={application.submissionDate} />
+                  </div>
                 </div>
-              </div>
 
-              <DocumentsList documents={application.documents} />
+                <DocumentsList documents={application.documents} />
 
-              {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}
+                {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}
+              </TabsContent>
 
-              {application.ackState.stageId === 'acknowledged' && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Acknowledgement Letter</p>
+              <TabsContent value="acknowledgement" className="space-y-2">
+                {application.ackState.stageId === 'acknowledged' ? (
                   <LetterView
                     letter={generateLetter('acknowledgement', application.id, {
                       qpName: application.qpName,
@@ -71,12 +85,13 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                       date: application.submissionDate,
                     })}
                   />
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-gray-400">Not yet available — the acknowledgement letter is still being reviewed internally.</p>
+                )}
+              </TabsContent>
 
-              {(application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined') && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Outcome Letter</p>
+              <TabsContent value="outcome" className="space-y-2">
+                {application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined' ? (
                   <LetterView
                     letter={generateLetter('outcome', application.id, {
                       qpName: application.qpName,
@@ -89,12 +104,15 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                       signatoryTitle: 'CEO',
                     })}
                   />
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-gray-400">Not yet available — the IAC has not reached a decision.</p>
+                )}
+              </TabsContent>
 
-              {application.approvalState?.stageId === 'signed' && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Approval Letter</p>
+              <TabsContent value="approval" className="space-y-2">
+                {/* Row 13: the QP only ever sees this once the ASD has sent the signed letter —
+                    the drafting/signing steps happen internally first. */}
+                {application.approvalState?.stageId === 'sent-to-qp' ? (
                   <LetterView
                     letter={generateLetter('approval', application.id, {
                       qpName: application.qpName,
@@ -102,13 +120,20 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                       saqaId: application.saqaId,
                       nqfLevel: application.nqfLevel,
                       date: new Date().toISOString().split('T')[0],
-                      signatoryName: application.approvalState.submittedBy,
+                      notes: application.approvalLetterDraft?.notes,
+                      signatoryName: application.approvalLetterSignedBy ?? undefined,
                       signatoryTitle: 'Deputy Director',
                     })}
                   />
-                </div>
-              )}
-            </div>
+                ) : (
+                  <p className="text-sm text-gray-400">Not yet available — the approval letter is still being drafted and signed internally.</p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="audit" className="space-y-2">
+                <QsaAuditTrail applicationId={application.id} />
+              </TabsContent>
+            </Tabs>
 
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Close</Button>

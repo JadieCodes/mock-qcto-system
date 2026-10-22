@@ -1,12 +1,14 @@
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { buildDdReviewChecklist } from '../../mock/data/ddReviewChecklistItems';
 import { buildQsaAddendumChecklist } from '../../mock/data/qsaChecklistItems';
+import { autoEvaluateQsaChecklist } from '../../mock/integrations/aiValidation';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
-import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, OUTCOME_WORKFLOW } from './workflow';
-import type { EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
+import { QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from './config';
+import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from './workflow';
+import type { ApprovalLetterDraft, EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
 
 const KEY = 'qsaAddendum:applications';
 
@@ -44,6 +46,8 @@ export async function createApplication(input: NewApplicationInput): Promise<Qsa
     evalState: { stageId: 'asd-evaluation' },
     outcomeState: { stageId: 'ceo-signature' },
     approvalState: null,
+    approvalLetterDraft: null,
+    approvalLetterSignedBy: null,
     qsaChecklist: buildQsaAddendumChecklist(),
     ddReviewChecklist: buildDdReviewChecklist(),
     evaluationReport: { findings: '', recommendation: '', approvedEisaSittingsPerYear: null },
@@ -93,15 +97,26 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
   const all = loadAll();
   const app = getOrThrow(all, params.applicationId);
 
-  if (params.actionId === 'eval-send-to-dd') {
+  // Row 7 (test findings): the ASD's outcome is generated automatically from the checklist —
+  // they cannot choose between sending to the Deputy Director or back to the QP. Whichever of
+  // these two actions they call, it must match what the auto-evaluation function computed.
+  if (params.actionId === 'eval-send-to-dd' || params.actionId === 'eval-return-to-qp') {
     if (!isChecklistComplete(app.qsaChecklist, true)) {
-      throw new Error('Every checklist line needs an answer and a comment before sending to the Deputy Director.');
+      throw new Error('Every checklist line needs an answer and a comment before the evaluation outcome can be generated.');
     }
     if (!app.evaluationReport.findings.trim() || !app.evaluationReport.recommendation) {
-      throw new Error('Complete the evaluation report (findings and recommendation) before sending to the Deputy Director.');
+      throw new Error('Complete the evaluation report (findings and recommendation) before the evaluation outcome can be generated.');
     }
     if (app.evaluationReport.approvedEisaSittingsPerYear == null) {
-      throw new Error('Record the approved EISA sittings per year before sending to the Deputy Director.');
+      throw new Error('Record the approved EISA sittings per year before the evaluation outcome can be generated.');
+    }
+    const outcome = autoEvaluateQsaChecklist(app.qsaChecklist, QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS);
+    const expectedActionId = outcome === 'negative' ? 'eval-return-to-qp' : 'eval-send-to-dd';
+    if (params.actionId !== expectedActionId) {
+      throw new Error(
+        `The automatic evaluation outcome is ${outcome.toUpperCase()} — ` +
+          `${expectedActionId === 'eval-return-to-qp' ? 'the report goes back to the QP' : 'the report goes to the Deputy Director'}. The ASD cannot override this.`,
+      );
     }
   }
   if (params.actionId === 'eval-dd-send-to-iac' && !isChecklistComplete(app.ddReviewChecklist, true)) {
@@ -131,8 +146,10 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
   if (nextState.stageId === 'qp-corrections') {
     addNotification({
       recipientRole: 'QP',
-      title: 'Corrections requested',
-      body: `Corrections were requested on "${app.qualificationTitle}": ${params.note ?? ''}`,
+      title: 'Negative evaluation outcome — corrections needed',
+      body: params.note
+        ? `The evaluation of "${app.qualificationTitle}" was negative. ASD notes: ${params.note}`
+        : `The evaluation of "${app.qualificationTitle}" was negative. See the evaluation report for details and correct and resubmit.`,
     });
   }
   if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
@@ -166,7 +183,8 @@ export async function performOutcomeAction(params: ActionParams): Promise<QsaAdd
 
   let updated: QsaAddendumApplication = { ...app, outcomeState: nextState };
   if (nextState.stageId === 'signed' && app.evalState.stageId === 'approved' && !updated.approvalState) {
-    updated = { ...updated, approvalState: { stageId: 'pending-signature' } };
+    // Row 13: the approval letter now starts as an ASD draft, not straight at the signer.
+    updated = { ...updated, approvalState: { stageId: 'asd-draft' }, approvalLetterDraft: { notes: '' } };
   }
   saveAll(replace(all, updated));
 
@@ -198,16 +216,29 @@ export async function performApprovalLetterAction(params: ActionParams): Promise
     recordType: 'qsa-addendum-approval-letter',
     recordId: app.id,
   });
-  const updated = { ...app, approvalState: nextState };
+  let updated = { ...app, approvalState: nextState };
+  // The Deputy Director's name needs to survive the later "send to QP" step, which
+  // overwrites `approvalState.submittedBy` with the ASD's name.
+  if (params.actionId === 'approval-sign') {
+    updated = { ...updated, approvalLetterSignedBy: nextState.submittedBy ?? null };
+  }
   saveAll(replace(all, updated));
 
-  if (nextState.stageId === 'signed') {
+  if (nextState.stageId === 'sent-to-qp') {
     addNotification({
       recipientRole: 'QP',
-      title: 'QSA Addendum approved',
-      body: `"${app.qualificationTitle}" is now approved and available to EISA Instrument Validation and the EISA Calendar.`,
+      title: 'Approval letter sent',
+      body: `The signed approval letter for "${app.qualificationTitle}" has been sent to you. It is now approved and available to EISA Instrument Validation and the EISA Calendar.`,
     });
   }
+  return updated;
+}
+
+export async function saveApprovalLetterDraft(applicationId: string, draft: ApprovalLetterDraft): Promise<QsaAddendumApplication> {
+  const all = loadAll();
+  const app = getOrThrow(all, applicationId);
+  const updated = { ...app, approvalLetterDraft: draft };
+  saveAll(replace(all, updated));
   return updated;
 }
 
@@ -246,5 +277,5 @@ export async function saveIacPresentation(applicationId: string, fileName: strin
 // CR: once approved, the QSA Addendum is available to EISA Instrument Validation and the
 // EISA Calendar (built in later phases) — they will read this list instead of all applications.
 export async function listApprovedQsaAddenda(): Promise<QsaAddendumApplication[]> {
-  return loadAll().filter((a) => a.approvalState?.stageId === 'signed');
+  return loadAll().filter((a) => isApprovalLetterFinal(a.approvalState));
 }

@@ -1,8 +1,28 @@
+import type { ChecklistSection } from '../../shared/checklist/types';
 import { notImplemented, type BackendStubResult } from './types';
 
 // CR-009: AI-assisted pre-checks ahead of the DD/ASD evaluation review.
 export function aiAssistedEvaluationPrecheck(submissionId: string): Promise<BackendStubResult> {
   return notImplemented('CR-009', `No AI-assisted pre-check available for submission "${submissionId}" yet.`);
+}
+
+export type QsaAutoEvaluationOutcome = 'positive' | 'negative';
+
+// Row 7 (test findings): a simulated stand-in for CR-009/CR-010's real AI-assisted evaluation
+// — this one actually runs (the stubs above don't), standing in only until the real backend
+// exists. A "No" on a mandatory line makes the outcome NEGATIVE; otherwise POSITIVE. Which
+// lines are mandatory is the caller's `mandatoryItemIds` ('all' = every line is mandatory,
+// the default in `qsa-addendum/config.ts`) so the rule can be narrowed without touching this
+// function.
+export function autoEvaluateQsaChecklist(
+  sections: ChecklistSection[],
+  mandatoryItemIds: string[] | 'all',
+): QsaAutoEvaluationOutcome {
+  const isMandatory = (itemId: string) => mandatoryItemIds === 'all' || mandatoryItemIds.includes(itemId);
+  const hasNegativeMandatoryAnswer = sections.some((section) =>
+    section.items.some((item) => isMandatory(item.id) && item.answer === 'no'),
+  );
+  return hasNegativeMandatoryAnswer ? 'negative' : 'positive';
 }
 
 // CR-010: hybrid automatic/manual validation of the 44-item QSA Addendum checklist —

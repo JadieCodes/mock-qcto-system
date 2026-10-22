@@ -6,6 +6,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
+import { isApprovalLetterFinal } from '../workflow';
 import { ApplicationDetail } from './ApplicationDetail';
 import { NewApplicationForm } from './NewApplicationForm';
 
@@ -22,7 +23,7 @@ export function ExternalDashboard() {
   const underReviewCount = applications.filter((a) =>
     ['asd-evaluation', 'dd-review', 'iac-review'].includes(a.evalState.stageId),
   ).length;
-  const approvedCount = applications.filter((a) => a.approvalState?.stageId === 'signed').length;
+  const approvedCount = applications.filter((a) => isApprovalLetterFinal(a.approvalState)).length;
 
   return (
     <div className="space-y-6">
