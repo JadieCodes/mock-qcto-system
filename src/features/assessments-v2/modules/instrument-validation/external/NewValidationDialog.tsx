@@ -2,15 +2,14 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useEligibleQsaAddenda, useStartValidation } from '../hooks';
 
 // CR entry rule: a QP can only start a validation for a qualification whose QSA Addendum is
 // Approved — the dropdown only ever lists those (`useEligibleQsaAddenda`).
 export function NewValidationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
+  const actorName = person.name;
   const { data: eligible = [] } = useEligibleQsaAddenda();
   const [selectedId, setSelectedId] = useState('');
   const startValidation = useStartValidation();
@@ -24,7 +23,13 @@ export function NewValidationDialog({ open, onOpenChange }: { open: boolean; onO
     const addendum = eligible.find((a) => a.id === selectedId);
     if (!addendum) return;
     startValidation.mutate(
-      { qsaAddendumId: addendum.id, qpName: addendum.qpName, qualificationTitle: addendum.qualificationTitle, createdBy: actorName },
+      {
+        qsaAddendumId: addendum.id,
+        qpId: addendum.qpId,
+        qpName: addendum.qpName,
+        qualificationTitle: addendum.qualificationTitle,
+        createdBy: actorName,
+      },
       { onSuccess: close },
     );
   };

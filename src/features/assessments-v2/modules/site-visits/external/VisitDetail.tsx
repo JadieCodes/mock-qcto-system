@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useReportAction, useSiteVisit } from '../hooks';
@@ -10,8 +9,9 @@ import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
 // shared, the QP's only action here is to acknowledge it.
 export function VisitDetail({ visitId, onClose }: { visitId: string | null; onClose: () => void }) {
   const { data: visit } = useSiteVisit(visitId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const reportAction = useReportAction();
 
   return (
@@ -50,7 +50,7 @@ export function VisitDetail({ visitId, onClose }: { visitId: string | null; onCl
                   <Button
                     size="sm"
                     disabled={reportAction.isPending}
-                    onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'qp-acknowledge-outcome', actorRole: role, actorName })}
+                    onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'qp-acknowledge-outcome', actorRole: role, actorId, actorName })}
                   >
                     Acknowledge Outcome
                   </Button>

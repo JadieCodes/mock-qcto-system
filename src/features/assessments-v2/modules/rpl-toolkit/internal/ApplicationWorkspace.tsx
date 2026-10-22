@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Award, BookOpen, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
-import { roleDescriptor } from '../../../config/roles';
+import { personsForRole } from '../../../shared/people/directory';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ActionBar } from '../components/ActionBar';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
@@ -25,13 +24,15 @@ import { RPL_EVAL_WORKFLOW, RPL_OUTCOME_WORKFLOW } from '../workflow';
 import type { RplToolkitApplication } from '../types';
 
 function ApplicationWorkspaceContent({ application }: { application: RplToolkitApplication }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const evaluationAction = useRplEvaluationAction();
   const outcomeAction = useRplOutcomeAction();
   const saveChecklist = useSaveRplToolkitChecklist();
   const saveReport = useSaveRplEvaluationReport();
-  const [allocatedAsdName, setAllocatedAsdName] = useState('');
+  const [allocatedAsdId, setAllocatedAsdId] = useState('');
+  const asdOptions = personsForRole('ASD');
 
   const checklistComplete = isChecklistComplete(application.checklist, true);
   const reportComplete = application.evaluationReport.findings.trim().length > 0 && application.evaluationReport.recommendation !== '';
@@ -90,13 +91,24 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
 
         {canAllocate && (
           <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-            <Label htmlFor="rpl-allocate-asd">Allocate to ASD *</Label>
+            <Label>Allocate to ASD *</Label>
             <div className="flex gap-2">
-              <Input id="rpl-allocate-asd" value={allocatedAsdName} onChange={(e) => setAllocatedAsdName(e.target.value)} placeholder="ASD name" />
+              <Select value={allocatedAsdId} onValueChange={setAllocatedAsdId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an ASD" />
+                </SelectTrigger>
+                <SelectContent>
+                  {asdOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
-                disabled={!allocatedAsdName.trim() || evaluationAction.isPending}
+                disabled={!allocatedAsdId || evaluationAction.isPending}
                 onClick={() =>
-                  evaluationAction.mutate({ applicationId: application.id, actionId: 'rpl-allocate', actorRole: role, actorName, allocatedAsdName })
+                  evaluationAction.mutate({ applicationId: application.id, actionId: 'rpl-allocate', actorRole: role, actorId, actorName, allocatedAsdId })
                 }
               >
                 Allocate
@@ -163,7 +175,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
           disabledActionIds={
             application.evalState.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['rpl-asd-send-to-dd'] : []
           }
-          onRun={(actionId, note) => evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName, note })}
+          onRun={(actionId, note) => evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })}
         />
         {application.evalState.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) && (
           <p className="text-xs text-amber-600">Answer every checklist line with a comment, and complete the evaluation report, before sending to the Deputy Director.</p>
@@ -186,7 +198,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
             definition={RPL_OUTCOME_WORKFLOW}
             stageId={application.outcomeState.stageId}
             role={role}
-            onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName })}
+            onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })}
           />
         )}
       </TabsContent>

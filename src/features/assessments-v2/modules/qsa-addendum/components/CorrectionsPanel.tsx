@@ -9,7 +9,7 @@ import type { QsaAddendumApplication } from '../types';
 // CR-012: corrections only ever travel DD -> ASD -> QP, so this panel is only actionable from
 // the external portal as QP. Internal roles see it read-only (there is no DD -> QP shortcut).
 export function CorrectionsPanel({ application }: { application: QsaAddendumApplication }) {
-  const { role, portal } = useV2Role();
+  const { role, portal, person } = useV2Role();
   const [response, setResponse] = useState('');
   const evaluationAction = useEvaluationAction();
 
@@ -40,7 +40,8 @@ export function CorrectionsPanel({ application }: { application: QsaAddendumAppl
                 applicationId: application.id,
                 actionId: 'eval-qp-resubmit',
                 actorRole: role,
-                actorName: application.qpName,
+                actorId: person.id,
+                actorName: person.name,
                 note: response || undefined,
               })
             }

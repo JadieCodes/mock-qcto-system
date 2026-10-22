@@ -2,7 +2,6 @@ import { type ComponentType, type ReactNode } from 'react';
 import { Award, BookOpen, Calendar, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import { useRplEvaluationAction, useRplToolkitApplication } from '../hooks';
@@ -23,8 +22,9 @@ function DetailRow({ icon: Icon, label, value }: { icon: ComponentType<{ classNa
 
 export function ApplicationDetail({ applicationId, onClose }: { applicationId: string | null; onClose: () => void }) {
   const { data: application } = useRplToolkitApplication(applicationId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const evaluationAction = useRplEvaluationAction();
 
   return (
@@ -67,7 +67,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                   <Button
                     size="sm"
                     onClick={() =>
-                      evaluationAction.mutate({ applicationId: application.id, actionId: 'rpl-qp-resubmit', actorRole: role, actorName })
+                      evaluationAction.mutate({ applicationId: application.id, actionId: 'rpl-qp-resubmit', actorRole: role, actorId, actorName })
                     }
                   >
                     Resubmit to ASD

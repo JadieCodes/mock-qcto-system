@@ -27,6 +27,7 @@ export interface ResultsBatch {
   sittingId: string;
   sittingDate: string;
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
 
   learnerCount: number;
@@ -58,4 +59,5 @@ export interface NewResultsBatchInput {
   competentCount: number;
   evidenceDocuments: EvidenceDocument[];
   submittedBy: string;
+  submittedById: string;
 }

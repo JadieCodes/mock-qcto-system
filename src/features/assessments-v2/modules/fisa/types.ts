@@ -75,6 +75,7 @@ export interface FisaValidationRecord {
   // Links back to the approved FISA Standard the instrument is developed against.
   fisaStandardId: string;
   skillsProgrammeTitle: string;
+  sdpId: string;
   sdpName: string;
   createdAt: string;
   createdBy: string;
@@ -86,6 +87,8 @@ export interface FisaValidationRecord {
   cycleCount: number;
 
   checklist: ChecklistSection[];
+  // PM-11: allocated to a named ASD person, not a free-text name.
+  allocatedAsdId: string | null;
   allocatedAsdName: string | null;
 
   // stageId: 'sdp-instrument' | 'awaiting-allocation' | 'asd-validation' | 'validated'
@@ -97,6 +100,7 @@ export interface FisaValidationRecord {
 
 export interface NewFisaValidationInput {
   fisaStandardId: string;
+  sdpId: string;
   sdpName: string;
   createdBy: string;
 }
@@ -127,6 +131,7 @@ export interface FisaRegistrationRecord {
   // Links back to the validated FISA instrument this sitting is being registered against.
   fisaValidationId: string;
   skillsProgrammeTitle: string;
+  sdpId: string;
   sdpName: string;
   sittingDate: string;
 
@@ -142,6 +147,7 @@ export interface FisaRegistrationRecord {
 
 export interface NewFisaRegistrationInput {
   fisaValidationId: string;
+  sdpId: string;
   sdpName: string;
   sittingDate: string;
   createdBy: string;

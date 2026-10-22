@@ -1,6 +1,7 @@
 import { buildRplToolkitChecklist } from '../../mock/data/rplToolkitChecklistItems';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { addNotification } from '../../shared/notifications/store';
+import { getPerson } from '../../shared/people/directory';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
@@ -39,8 +40,9 @@ export async function createRplToolkitApplication(input: NewRplToolkitInput): Pr
   const app: RplToolkitApplication = {
     id: crypto.randomUUID(),
     ...input,
-    evalState: { stageId: 'ad-allocation', submittedBy: input.qpName },
+    evalState: { stageId: 'ad-allocation', submittedBy: input.qpName, submittedById: input.qpId },
     outcomeState: { stageId: 'ceo-signature' },
+    allocatedAsdId: null,
     allocatedAsdName: null,
     checklist: buildRplToolkitChecklist(),
     evaluationReport: { findings: '', recommendation: '' },
@@ -71,17 +73,18 @@ interface EvalActionParams {
   applicationId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
-  allocatedAsdName?: string;
+  allocatedAsdId?: string;
 }
 
 export async function performRplEvaluationAction(params: EvalActionParams): Promise<RplToolkitApplication> {
   const all = loadAll();
   const app = getOrThrow(all, params.applicationId);
 
-  if (params.actionId === 'rpl-allocate' && !params.allocatedAsdName?.trim()) {
-    throw new Error('Name the ASD this RPL Toolkit is allocated to.');
+  if (params.actionId === 'rpl-allocate' && !params.allocatedAsdId) {
+    throw new Error('Pick the ASD this RPL Toolkit is allocated to.');
   }
   if (params.actionId === 'rpl-asd-send-to-dd') {
     if (!isChecklistComplete(app.checklist, true)) {
@@ -97,6 +100,7 @@ export async function performRplEvaluationAction(params: EvalActionParams): Prom
     record: app.evalState,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'rpl-toolkit-evaluation',
@@ -105,12 +109,14 @@ export async function performRplEvaluationAction(params: EvalActionParams): Prom
 
   let updated: RplToolkitApplication = { ...app, evalState: nextState };
 
-  if (params.actionId === 'rpl-allocate' && params.allocatedAsdName) {
-    updated = { ...updated, allocatedAsdName: params.allocatedAsdName.trim() };
+  if (params.actionId === 'rpl-allocate' && params.allocatedAsdId) {
+    const asd = getPerson(params.allocatedAsdId);
+    if (!asd || asd.role !== 'ASD') throw new Error('The allocation target must be a named ASD.');
+    updated = { ...updated, allocatedAsdId: asd.id, allocatedAsdName: asd.name };
     addNotification({
       recipientRole: 'ASD',
       title: 'RPL Toolkit allocated',
-      body: `"${app.toolkitTitle}" has been allocated to you for evaluation.`,
+      body: `"${app.toolkitTitle}" has been allocated to ${asd.name} for evaluation.`,
     });
   }
 
@@ -137,6 +143,7 @@ interface OutcomeActionParams {
   applicationId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
 }
 
@@ -152,6 +159,7 @@ export async function performRplOutcomeAction(params: OutcomeActionParams): Prom
     record: app.outcomeState,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     recordType: 'rpl-toolkit-outcome',
     recordId: app.id,

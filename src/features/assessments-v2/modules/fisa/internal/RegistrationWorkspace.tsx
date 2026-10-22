@@ -2,15 +2,15 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FisaRegistrationStatusBadge } from '../components/StatusBadge';
 import { useFisaRegistration, useFisaRegistrationAction } from '../hooks';
 import type { FisaRegistrationRecord } from '../types';
 
 function RegistrationWorkspaceContent({ record }: { record: FisaRegistrationRecord }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const registrationAction = useFisaRegistrationAction();
 
   const canProcess = role === 'Assistant Director' && record.workflow.stageId === 'ad-review';
@@ -86,7 +86,7 @@ function RegistrationWorkspaceContent({ record }: { record: FisaRegistrationReco
         <div className="flex justify-end">
           <Button
             disabled={record.learners.length === 0 || registrationAction.isPending}
-            onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'freg-create-number', actorRole: role, actorName })}
+            onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'freg-create-number', actorRole: role, actorId, actorName })}
           >
             Create Registration Number
           </Button>

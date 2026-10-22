@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ActionBar } from '../components/ActionBar';
 import { FisaStandardStatusBadge } from '../components/StatusBadge';
@@ -15,8 +14,9 @@ import { FISA_STANDARD_WORKFLOW } from '../workflow';
 import type { FisaStandardRecord } from '../types';
 
 function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const standardAction = useStandardAction();
   const saveChecklist = useSaveFisaStandardChecklist();
   const saveReport = useSaveFisaStandardEvaluationReport();
@@ -64,7 +64,7 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           definition={FISA_STANDARD_WORKFLOW}
           stageId={record.workflow.stageId}
           role={role}
-          onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorName, note })}
+          onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
         />
 
         <div className="space-y-2">
@@ -115,7 +115,7 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           stageId={record.workflow.stageId}
           role={role}
           disabledActionIds={record.workflow.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['standard-asd-send-to-dd'] : []}
-          onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorName, note })}
+          onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
         />
         {record.workflow.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) && (
           <p className="text-xs text-amber-600">Answer every checklist line with a comment, and complete the evaluation report, before sending to the Deputy Director.</p>

@@ -45,7 +45,9 @@ export function useGenerateConfirmation() {
 }
 
 export function useAcknowledgeConfirmation() {
-  return useConfirmationMutation((args: { recordId: string; actorName: string }) => acknowledgeConfirmation(args.recordId, args.actorName));
+  return useConfirmationMutation((args: { recordId: string; actorId: string; actorName: string }) =>
+    acknowledgeConfirmation(args.recordId, args.actorId, args.actorName),
+  );
 }
 
 export function useConfirmDetails() {

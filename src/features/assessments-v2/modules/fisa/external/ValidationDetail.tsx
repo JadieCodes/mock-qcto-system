@@ -2,15 +2,15 @@ import { useRef } from 'react';
 import { BookOpen, Building2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaValidation, useFisaValidationAction, useUploadFisaInstrument } from '../hooks';
 
 export function ValidationDetail({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   const { data: record } = useFisaValidation(recordId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const uploadInstrument = useUploadFisaInstrument();
   const validationAction = useFisaValidationAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,7 +91,7 @@ export function ValidationDetail({ recordId, onClose }: { recordId: string | nul
                       size="sm"
                       disabled={!canSubmit || validationAction.isPending}
                       onClick={() =>
-                        validationAction.mutate({ recordId: record.id, actionId: 'fval-submit', actorRole: role, actorName })
+                        validationAction.mutate({ recordId: record.id, actionId: 'fval-submit', actorRole: role, actorId, actorName })
                       }
                     >
                       {record.cycleCount > 1 ? 'Resubmit' : 'Notify QCTO'}

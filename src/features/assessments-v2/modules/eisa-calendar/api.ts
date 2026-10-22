@@ -38,6 +38,7 @@ export async function listEligibleQualifications(): Promise<EligibleQualificatio
   const approved = await listApprovedQsaAddenda();
   return approved.map((a) => ({
     qualificationTitle: a.qualificationTitle,
+    qpId: a.qpId,
     qpName: a.qpName,
     approvedEisaSittingsPerYear: a.evaluationReport.approvedEisaSittingsPerYear,
   }));
@@ -59,7 +60,7 @@ export async function listPublishedSittings(): Promise<EisaSitting[]> {
 
 export async function proposeSittingBatch(input: ProposeSittingBatchInput): Promise<EisaSittingBatch> {
   const eligible = await listEligibleQualifications();
-  const match = eligible.find((q) => q.qualificationTitle === input.qualificationTitle && q.qpName === input.qpName);
+  const match = eligible.find((q) => q.qualificationTitle === input.qualificationTitle && q.qpId === input.qpId);
   if (!match) {
     throw new Error('This qualification does not have an approved QSA Addendum yet.');
   }
@@ -92,11 +93,12 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
   const batch: EisaSittingBatch = {
     id: crypto.randomUUID(),
     qualificationTitle: input.qualificationTitle,
+    qpId: input.qpId,
     qpName: input.qpName,
     year: input.year,
     requiredCount: match.approvedEisaSittingsPerYear,
     dates: [...input.dates].sort(),
-    state: { stageId: 'qcto-review', submittedBy: input.submittedBy },
+    state: { stageId: 'qcto-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     rejectionReason: null,
     submittedBy: input.submittedBy,
     submittedAt: new Date().toISOString(),
@@ -106,6 +108,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     id: crypto.randomUUID(),
     batchId: batch.id,
     qualificationTitle: input.qualificationTitle,
+    qpId: input.qpId,
     qpName: input.qpName,
     year: input.year,
     date,
@@ -126,6 +129,7 @@ interface BatchActionParams {
   batchId: string;
   actionId: 'batch-approve' | 'batch-reject' | 'batch-publish';
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
 }
@@ -140,6 +144,7 @@ export async function performBatchAction(params: BatchActionParams): Promise<Eis
     record: batch.state,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'eisa-calendar-batch',
@@ -197,6 +202,7 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
     id: crypto.randomUUID(),
     batchId: null,
     qualificationTitle: input.qualificationTitle,
+    qpId: input.qpId,
     qpName: input.qpName,
     year: input.year,
     date: input.date,
@@ -212,13 +218,14 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
     recordType: 'eisa-calendar-sitting',
     recordId: sitting.id,
     actorRole: CALENDAR_REVIEWER_ROLE,
+    actorId: input.createdById,
     actorName: input.createdBy,
     action: `Added sitting directly to the calendar (${sitting.date})`,
   });
   return sitting;
 }
 
-export async function editSitting(id: string, patch: EditSittingInput, actorName: string): Promise<EisaSitting> {
+export async function editSitting(id: string, patch: EditSittingInput, actorId: string, actorName: string): Promise<EisaSitting> {
   const sittings = loadSittings();
   const existing = sittings.find((s) => s.id === id);
   if (!existing) throw new Error('Sitting not found.');
@@ -229,6 +236,7 @@ export async function editSitting(id: string, patch: EditSittingInput, actorName
     recordType: 'eisa-calendar-sitting',
     recordId: id,
     actorRole: CALENDAR_REVIEWER_ROLE,
+    actorId,
     actorName,
     action:
       patch.date !== existing.date
@@ -238,7 +246,7 @@ export async function editSitting(id: string, patch: EditSittingInput, actorName
   return updated;
 }
 
-export async function deleteSitting(id: string, actorName: string): Promise<void> {
+export async function deleteSitting(id: string, actorId: string, actorName: string): Promise<void> {
   const sittings = loadSittings();
   const existing = sittings.find((s) => s.id === id);
   if (!existing) throw new Error('Sitting not found.');
@@ -248,6 +256,7 @@ export async function deleteSitting(id: string, actorName: string): Promise<void
     recordType: 'eisa-calendar-sitting',
     recordId: id,
     actorRole: CALENDAR_REVIEWER_ROLE,
+    actorId,
     actorName,
     action: `Deleted sitting (${existing.qualificationTitle}, ${existing.date})`,
   });
@@ -257,6 +266,7 @@ interface SittingLifecycleParams {
   sittingId: string;
   actionId: 'sitting-postpone' | 'sitting-cancel';
   actorRole: Role;
+  actorId: string;
   actorName: string;
   reason: string;
 }
@@ -273,6 +283,7 @@ export async function performSittingLifecycleAction(params: SittingLifecyclePara
     record: { stageId: sitting.status },
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.reason,
     recordType: 'eisa-calendar-sitting',

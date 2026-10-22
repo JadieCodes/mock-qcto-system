@@ -29,6 +29,10 @@ export interface WorkflowDefinition {
 export interface WorkflowRecordState {
   stageId: string;
   submittedBy?: string;
+  // The id of the named person who last acted — what CR-053's "different person" check
+  // actually compares. Optional for backward compatibility with any in-flight mock state that
+  // predates per-person identity; the engine falls back to a name comparison when absent.
+  submittedById?: string;
 }
 
 // CR-056: send-back-for-clarification and reject must be available on every approval stage.

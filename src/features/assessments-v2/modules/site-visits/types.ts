@@ -12,8 +12,10 @@ export interface SiteVisit {
   visitType: VisitType;
 
   // CR-049: QP + qualification selectors at the top of every execution form.
+  qpId: string;
   qpName: string;
   qualificationTitle: string;
+  sdpId: string | null;
   sdpName: string | null;
 
   // CR-050: optional link to a published EISA Calendar sitting — when linked, the date is
@@ -35,6 +37,10 @@ export interface SiteVisit {
   // stageId: 'awaiting-execution' | 'dd-report-review' | 'approved' | 'rejected' |
   // 'outcome-shared' | 'closed'. CR-053: the ASD who submits can never be the DD who approves.
   reportWorkflow: WorkflowRecordState;
+  // CR-055: set when a Deputy Director re-routes the report to a named colleague with the
+  // same role. Does not change reportWorkflow.stageId — see api.ts's performReportAction.
+  reroutedToId: string | null;
+  reroutedToName: string | null;
 
   // CR-048: the checklist shape changes per visitType (built once, at creation time).
   checklist: ChecklistSection[];
@@ -61,8 +67,10 @@ export interface SiteVisit {
 
 export interface NewVisitInput {
   visitType: VisitType;
+  qpId: string;
   qpName: string;
   qualificationTitle: string;
+  sdpId: string | null;
   sdpName: string | null;
   sittingId: string | null;
   visitDate: string;
@@ -70,4 +78,5 @@ export interface NewVisitInput {
   notificationFlag: NotificationFlag;
   noticeLeadTimeDays: number | null;
   createdBy: string;
+  createdById: string;
 }

@@ -9,11 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { checkSaqaRegistration, type SaqaRegistryDocument } from '../../../mock/api/saqaRegistry';
+import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useCreateQsaAddendumApplication } from '../hooks';
 import type { NewApplicationInput, RequiredDocument } from '../types';
 
 interface FormValues {
-  qpName: string;
   qualificationTitle: string;
   saqaId: string;
   dateRegisteredWithSaqa: string;
@@ -30,6 +30,7 @@ const UPLOAD_SLOTS: { key: RequiredDocument['key']; label: string }[] = [
 ];
 
 export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { person } = useV2Role();
   const {
     register,
     handleSubmit,
@@ -37,7 +38,6 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
-      qpName: '',
       qualificationTitle: '',
       saqaId: '',
       dateRegisteredWithSaqa: '',
@@ -102,6 +102,8 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
 
     const input: NewApplicationInput = {
       ...values,
+      qpId: person.qpId ?? person.id,
+      qpName: person.name,
       nqfLevel,
       saqaGateOutcome: gateOutcome,
       documents,
@@ -126,9 +128,9 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
         <form className="space-y-4 py-2" onSubmit={handleSubmit(onSubmit)}>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="qpName">Name of QP *</Label>
-              <Input id="qpName" {...register('qpName', { required: true })} placeholder="Enter name of QP" />
-              {errors.qpName && <p className="text-xs text-red-600">Required.</p>}
+              <Label>Name of QP</Label>
+              <p className="text-sm font-medium py-2">{person.name}</p>
+              <p className="text-xs text-gray-400">Submitting as the acting QP — switch person in the header to submit as someone else.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="qualificationTitle">Qualification Title *</Label>

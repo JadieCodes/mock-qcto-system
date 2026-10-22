@@ -72,6 +72,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     sittingId: confirmation.sittingId,
     sittingDate: confirmation.sittingDate,
     qualificationTitle: confirmation.qualificationTitle,
+    qpId: confirmation.qpId,
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
     competentCount: input.competentCount,
@@ -79,7 +80,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     complianceReviewNotes: '',
     evidenceEvaluationNotes: '',
     complianceChecklist: buildResultsComplianceChecklist(),
-    workflow: { stageId: 'ad-review', submittedBy: input.submittedBy },
+    workflow: { stageId: 'ad-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     cycleCount: 1,
     declineHistory: [],
     submissionDeadline: submissionDeadlineFor(confirmation.sittingDate),
@@ -133,6 +134,7 @@ interface ResultsActionParams {
   batchId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
 }
@@ -161,6 +163,7 @@ export async function performResultsAction(params: ResultsActionParams): Promise
       record: batch.workflow,
       actionId: 'batch-resubmit',
       actorRole: params.actorRole,
+      actorId: params.actorId,
       actorName: params.actorName,
       recordType: 'results-batch',
       recordId: batch.id,
@@ -190,6 +193,7 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     record: batch.workflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'results-batch',
@@ -231,6 +235,7 @@ export async function performResultsAction(params: ResultsActionParams): Promise
       recordType: 'results-batch',
       recordId: batch.id,
       actorRole: params.actorRole,
+      actorId: params.actorId,
       actorName: params.actorName,
       action: 'Recommended to the Certification domain for certificate printing (simulated — no screen in that domain yet, CR-059 hand-off)',
     });
@@ -257,7 +262,7 @@ export async function listMarkingModerationVisitsForSitting(sittingId: string): 
 // unconfirmed with QCTO). Also closes the CR-057 loop: the created visit's "results approved"
 // flag is set immediately, since it genuinely is coming from an approved batch rather than a
 // manual toggle.
-export async function createPemVisitForBatch(batchId: string, actorName: string): Promise<ResultsBatch> {
+export async function createPemVisitForBatch(batchId: string, actorId: string, actorName: string): Promise<ResultsBatch> {
   const all = loadAll();
   const batch = getOrThrow(all, batchId);
   if (batch.workflow.stageId !== 'approved') {
@@ -272,8 +277,10 @@ export async function createPemVisitForBatch(batchId: string, actorName: string)
 
   const visit = await createVisit({
     visitType: 'post-eisa-monitoring',
+    qpId: batch.qpId,
     qpName: batch.qpName,
     qualificationTitle: batch.qualificationTitle,
+    sdpId: null,
     sdpName: null,
     sittingId: batch.sittingId,
     visitDate: batch.sittingDate,
@@ -281,6 +288,7 @@ export async function createPemVisitForBatch(batchId: string, actorName: string)
     notificationFlag: 'notified',
     noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
     createdBy: actorName,
+    createdById: actorId,
   });
   await setResultsApprovedForSitting(visit.id, true);
 

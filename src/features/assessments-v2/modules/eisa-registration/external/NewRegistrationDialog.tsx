@@ -8,39 +8,35 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listSdps } from '../../../mock/api/qaDomain';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useRegistrableSittings, useStartRegistration } from '../hooks';
 import type { RegistrationCategory } from '../types';
 
 // CR-024: only PUBLISHED sittings from the EISA Calendar can be registered against.
-// CR-041: the SDP compliance check runs as soon as an SDP is picked — a non-compliant SDP is
-// visually blocked before it can even try to submit.
+// CR-041: the SDP compliance check runs against the acting SDP's identity — a non-compliant
+// SDP is visually blocked before it can even try to submit.
 export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
   const { data: sittings = [] } = useRegistrableSittings();
   const { data: sdps = [] } = useQuery({ queryKey: ['eisa-registration', 'sdps'], queryFn: listSdps });
   const startRegistration = useStartRegistration();
 
   const [sittingId, setSittingId] = useState('');
-  const [sdpName, setSdpName] = useState('');
   const [category, setCategory] = useState<RegistrationCategory>('trades');
 
-  const selectedSdp = sdps.find((s) => s.name === sdpName);
+  const selectedSdp = sdps.find((s) => s.sdpId === person.sdpId);
   const blocked = !!selectedSdp && !selectedSdp.compliant;
-  const canSubmit = !!sittingId && !!sdpName && !blocked;
+  const canSubmit = !!sittingId && !blocked;
 
   const reset = () => {
     setSittingId('');
-    setSdpName('');
     setCategory('trades');
   };
 
   const onSubmit = () => {
     if (!canSubmit) return;
     startRegistration.mutate(
-      { sittingId, sdpName, category, createdBy: actorName },
+      { sittingId, sdpId: person.sdpId ?? person.id, sdpName: person.name, category, createdBy: person.name, createdById: person.id },
       {
         onSuccess: () => {
           onOpenChange(false);
@@ -85,26 +81,16 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
           </div>
 
           <div className="space-y-2">
-            <Label>SDP *</Label>
-            <Select value={sdpName} onValueChange={setSdpName}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select the SDP registering these learners" />
-              </SelectTrigger>
-              <SelectContent>
-                {sdps.map((s) => (
-                  <SelectItem key={s.name} value={s.name}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>SDP</Label>
+            <p className="text-sm font-medium py-2">{person.name}</p>
+            <p className="text-xs text-gray-400">Registering as the acting SDP — switch person in the header to register as someone else.</p>
           </div>
 
           {blocked && (
             <Alert className="border-red-400 bg-red-50">
               <AlertCircle className="h-4 w-4 text-red-600" />
               <AlertDescription className="text-red-800">
-                "{sdpName}" is not compliant (simulated QA status) and is blocked from submitting an EISA registration.
+                "{person.name}" is not compliant (simulated QA status) and is blocked from submitting an EISA registration.
               </AlertDescription>
             </Alert>
           )}

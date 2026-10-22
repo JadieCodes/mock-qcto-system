@@ -46,7 +46,9 @@ export interface EisaRegistrationRecord {
   // Carried over from the EISA Calendar sitting (EisaSitting.qpName) at startRegistration() —
   // needed so the CR-042/CR-044 automatic monitoring item can carry a real QP name instead of
   // a placeholder (Phase 6 fix).
+  qpId: string;
   qpName: string;
+  sdpId: string;
   sdpName: string;
   category: RegistrationCategory;
 
@@ -67,7 +69,9 @@ export interface EisaRegistrationRecord {
 
 export interface NewRegistrationInput {
   sittingId: string;
+  sdpId: string;
   sdpName: string;
   category: RegistrationCategory;
   createdBy: string;
+  createdById: string;
 }

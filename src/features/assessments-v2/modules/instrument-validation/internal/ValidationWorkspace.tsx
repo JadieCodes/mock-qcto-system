@@ -7,7 +7,6 @@ import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
@@ -28,7 +27,7 @@ function AuditTrail({ recordId }: { recordId: string }) {
       {entries.map((entry) => (
         <div key={entry.id} className="rounded-xl border bg-gray-50 px-3 py-2 text-xs">
           <p className="font-medium text-gray-700">
-            {entry.action} — <span className="text-gray-500">{entry.actorRole}</span>
+            {entry.action} — <span className="text-gray-500">{entry.actorName} ({entry.actorRole})</span>
           </p>
           {entry.note && <p className="text-gray-500 mt-0.5 whitespace-pre-wrap">{entry.note}</p>}
           <p className="text-gray-400 mt-0.5">{new Date(entry.timestamp).toLocaleString('en-ZA')}</p>
@@ -39,8 +38,9 @@ function AuditTrail({ recordId }: { recordId: string }) {
 }
 
 function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRecord }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const saveChecklist = useSaveValidationChecklist();
   const validationAction = useValidationAction();
   const [notApprovedOpen, setNotApprovedOpen] = useState(false);
@@ -51,7 +51,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
   const outcomeReady = checklistComplete && fieldsComplete;
 
   const runOutcome = (actionId: string, note?: string) => {
-    validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorName, note });
+    validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorId, actorName, note });
   };
 
   return (

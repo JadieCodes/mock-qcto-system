@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { navForPortal } from '../../config/nav';
+import { resetDemoData } from '../../mock/api/storage';
 import type { Portal } from '../../types';
 import { DemoBanner } from './DemoBanner';
 import { RoleSwitcher } from './RoleSwitcher';
@@ -22,7 +24,19 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
           <p className="text-sm font-bold text-gray-900">QCTO Assessments (v2)</p>
           <p className="text-xs text-gray-500">{portal === 'internal' ? 'Internal portal' : 'External portal'}</p>
         </div>
-        <RoleSwitcher />
+        <div className="flex items-center gap-3">
+          <RoleSwitcher />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              resetDemoData();
+              window.location.reload();
+            }}
+          >
+            Reset demo data
+          </Button>
+        </div>
       </header>
       <div className="flex flex-1">
         <aside className="w-64 border-r bg-white px-3 py-4 space-y-1">

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
@@ -14,8 +13,9 @@ import { useFlagLearnerSor, useRegistrationAction, useRegistrationRecord } from 
 import type { EisaRegistrationRecord } from '../types';
 
 function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationRecord }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const flagSor = useFlagLearnerSor();
   const registrationAction = useRegistrationAction();
   const [flaggingLearnerId, setFlaggingLearnerId] = useState<string | null>(null);
@@ -131,7 +131,7 @@ function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationReco
         <div className="flex justify-end">
           <Button
             disabled={registrationAction.isPending}
-            onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'reg-create-number', actorRole: role, actorName })}
+            onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'reg-create-number', actorRole: role, actorId, actorName })}
           >
             Create Registration Number
           </Button>
@@ -147,7 +147,7 @@ function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationReco
         destructive
         onConfirm={(reason) => {
           if (!flaggingLearnerId) return;
-          flagSor.mutate({ registrationId: record.id, learnerId: flaggingLearnerId, reason, actorName });
+          flagSor.mutate({ registrationId: record.id, learnerId: flaggingLearnerId, reason, actorId, actorName });
           setFlaggingLearnerId(null);
         }}
       />

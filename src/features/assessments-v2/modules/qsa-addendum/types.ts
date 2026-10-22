@@ -25,6 +25,8 @@ export interface QsaAddendumApplication {
   id: string;
 
   // Submission fields (CR-003: no "Proposed EISA Date" on this form).
+  // qpId is the stable identity the record belongs to; qpName stays for display.
+  qpId: string;
   qpName: string;
   qualificationTitle: string;
   saqaId: string;
@@ -53,6 +55,7 @@ export interface QsaAddendumApplication {
 }
 
 export interface NewApplicationInput {
+  qpId: string;
   qpName: string;
   qualificationTitle: string;
   saqaId: string;

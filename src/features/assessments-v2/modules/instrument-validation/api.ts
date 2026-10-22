@@ -92,6 +92,7 @@ export async function startValidation(input: NewValidationInput): Promise<Instru
   const record: InstrumentValidationRecord = {
     id: crypto.randomUUID(),
     qsaAddendumId: addendum.id,
+    qpId: addendum.qpId,
     qpName: addendum.qpName,
     qualificationTitle: addendum.qualificationTitle,
     createdAt: new Date().toISOString(),
@@ -120,6 +121,7 @@ interface SchedulingActionParams {
   recordId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   slot?: { date: string; time: string; venue: string };
 }
@@ -138,6 +140,7 @@ export async function performSchedulingAction(params: SchedulingActionParams): P
     record: record.scheduling.workflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     recordType: 'instrument-validation-scheduling',
     recordId: record.id,
@@ -216,6 +219,7 @@ interface ValidationActionParams {
   recordId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
 }
@@ -249,6 +253,7 @@ export async function performValidationAction(params: ValidationActionParams): P
     record: record.validationWorkflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'instrument-validation-validation',

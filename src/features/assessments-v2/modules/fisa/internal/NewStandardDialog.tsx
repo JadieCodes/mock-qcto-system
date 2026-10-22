@@ -5,15 +5,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useCreateFisaStandard } from '../hooks';
 import type { SourceDocument } from '../types';
 
 // PM-10: Qualifications Development supplies the source documents — never a SAQA gate check.
 export function NewStandardDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
+  const actorName = person.name;
   const createStandard = useCreateFisaStandard();
   const fileInputRef = useRef<HTMLInputElement>(null);
 

@@ -58,6 +58,7 @@ interface ActionParams {
   applicationId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
 }
@@ -70,6 +71,7 @@ export async function performAckAction(params: ActionParams): Promise<QsaAddendu
     record: app.ackState,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'qsa-addendum-acknowledgement',
@@ -117,6 +119,7 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
     record: app.evalState,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'qsa-addendum-evaluation',
@@ -154,6 +157,7 @@ export async function performOutcomeAction(params: ActionParams): Promise<QsaAdd
     record: app.outcomeState,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'qsa-addendum-outcome-letter',
@@ -188,6 +192,7 @@ export async function performApprovalLetterAction(params: ActionParams): Promise
     record: app.approvalState,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'qsa-addendum-approval-letter',

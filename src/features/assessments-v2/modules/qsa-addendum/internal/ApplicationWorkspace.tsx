@@ -14,7 +14,6 @@ import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { canActInStage, availableActions } from '../../../shared/workflow/engine';
 import type { WorkflowAction, WorkflowDefinition } from '../../../shared/workflow/types';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
@@ -134,7 +133,7 @@ function AuditTrail({ applicationId }: { applicationId: string }) {
       {entries.map((entry) => (
         <div key={entry.id} className="rounded-xl border bg-gray-50 px-3 py-2 text-xs">
           <p className="font-medium text-gray-700">
-            {entry.action} — <span className="text-gray-500">{entry.actorRole}</span>
+            {entry.action} — <span className="text-gray-500">{entry.actorName} ({entry.actorRole})</span>
           </p>
           {entry.note && <p className="text-gray-500 mt-0.5 whitespace-pre-wrap">{entry.note}</p>}
           <p className="text-gray-400 mt-0.5">{new Date(entry.timestamp).toLocaleString('en-ZA')}</p>
@@ -145,8 +144,9 @@ function AuditTrail({ applicationId }: { applicationId: string }) {
 }
 
 function ApplicationWorkspaceContent({ application }: { application: QsaAddendumApplication }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorName = person.name;
+  const actorId = person.id;
 
   const ackAction = useAckAction();
   const evaluationAction = useEvaluationAction();
@@ -223,7 +223,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
             stageId={application.ackState.stageId}
             role={role}
             onRun={(actionId, note) =>
-              ackAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName, note })
+              ackAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
             }
           />
         )}
@@ -311,7 +311,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           role={role}
           disabledActionIds={!(checklistComplete && reportComplete) ? ['eval-send-to-dd'] : []}
           onRun={(actionId, note) =>
-            evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName, note })
+            evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
           }
         />
 
@@ -328,7 +328,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
             role={role}
             disabledActionIds={!ddChecklistComplete ? ['eval-dd-send-to-iac'] : []}
             onRun={(actionId, note) =>
-              evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName, note })
+              evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
             }
           />
         </div>
@@ -358,7 +358,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
               role={role}
               disabledActionIds={!application.iacPresentationFileName ? ['eval-iac-approve', 'eval-iac-decline', 'eval-iac-remediation'] : []}
               onRun={(actionId, note) =>
-                evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName, note })
+                evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
               }
             />
           )}
@@ -394,7 +394,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
                 definition={OUTCOME_WORKFLOW}
                 stageId={application.outcomeState.stageId}
                 role={role}
-                onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName })}
+                onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })}
               />
             )}
           </>
@@ -427,7 +427,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
                 definition={APPROVAL_LETTER_WORKFLOW}
                 stageId={application.approvalState.stageId}
                 role={role}
-                onRun={(actionId) => approvalAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorName })}
+                onRun={(actionId) => approvalAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })}
               />
             )}
           </>

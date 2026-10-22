@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { SittingListView } from '../components/SittingListView';
 import { SittingMonthView } from '../components/SittingMonthView';
@@ -18,8 +17,9 @@ import { BatchReviewPanel } from './BatchReviewPanel';
 
 export function InternalCalendarView() {
   const { data: sittings = [] } = useEisaSittings();
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
 
   const addSitting = useAddSitting();
   const editSitting = useEditSitting();
@@ -86,7 +86,7 @@ export function InternalCalendarView() {
                   }
                 : undefined
             }
-            onDelete={canManage ? (s) => deleteSitting.mutate({ id: s.id, actorName }) : undefined}
+            onDelete={canManage ? (s) => deleteSitting.mutate({ id: s.id, actorId, actorName }) : undefined}
           />
         </TabsContent>
 
@@ -101,9 +101,9 @@ export function InternalCalendarView() {
         sitting={editTarget}
         onSubmit={(values) => {
           if (editTarget) {
-            editSitting.mutate({ id: editTarget.id, patch: values, actorName });
+            editSitting.mutate({ id: editTarget.id, patch: values, actorId, actorName });
           } else {
-            addSitting.mutate({ ...values, createdBy: actorName });
+            addSitting.mutate({ ...values, createdBy: actorName, createdById: actorId });
           }
         }}
       />
@@ -123,6 +123,7 @@ export function InternalCalendarView() {
             sittingId: reasonTarget.sitting.id,
             actionId: reasonTarget.actionId,
             actorRole: role,
+            actorId,
             actorName,
             reason,
           });

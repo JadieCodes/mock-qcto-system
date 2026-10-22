@@ -9,6 +9,7 @@ export interface EisaSitting {
   // proposed batch (CR-028/CR-029).
   batchId: string | null;
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   year: number;
   date: string; // ISO yyyy-mm-dd
@@ -25,6 +26,7 @@ export interface EisaSitting {
 export interface EisaSittingBatch {
   id: string;
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   year: number;
   requiredCount: number;
@@ -37,6 +39,7 @@ export interface EisaSittingBatch {
 
 export interface EligibleQualification {
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   // CR-030: the approved EISA frequency, carried over from the QSA Addendum's evaluation
   // report. Null if, somehow, an approved addendum never had this recorded.
@@ -45,22 +48,27 @@ export interface EligibleQualification {
 
 export interface ProposeSittingBatchInput {
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   year: number;
   dates: string[];
   submittedBy: string;
+  submittedById: string;
 }
 
 export interface AddSittingInput {
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   year: number;
   date: string;
   createdBy: string;
+  createdById: string;
 }
 
 export interface EditSittingInput {
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   year: number;
   date: string;

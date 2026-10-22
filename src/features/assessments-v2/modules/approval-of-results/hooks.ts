@@ -90,7 +90,7 @@ export function useResultsAction() {
 export function useCreatePemVisitForBatch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { batchId: string; actorName: string }) => createPemVisitForBatch(args.batchId, args.actorName),
+    mutationFn: (args: { batchId: string; actorId: string; actorName: string }) => createPemVisitForBatch(args.batchId, args.actorId, args.actorName),
     onSuccess: (updated) => {
       queryClient.setQueryData(detailKey(updated.id), updated);
       queryClient.invalidateQueries({ queryKey: LIST_KEY });

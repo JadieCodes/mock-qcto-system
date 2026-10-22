@@ -1,6 +1,7 @@
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { addNotification } from '../../shared/notifications/store';
+import { getPerson } from '../../shared/people/directory';
 import { canActInStage, performAction, WorkflowError } from '../../shared/workflow/engine';
 import { listMonitoringItems, type RplArplMonitoringItem } from '../../mock/api/siteVisitsStore';
 import { readStore, writeStore } from '../../mock/api/storage';
@@ -59,8 +60,10 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
     id: crypto.randomUUID(),
     visitType: 'rpl-arpl-monitoring',
     // Phase 6 fix: carried over from the registration's EISA sitting instead of a placeholder.
+    qpId: item.qpId,
     qpName: item.qpName,
     qualificationTitle: item.qualificationTitle,
+    sdpId: item.sdpId,
     sdpName: item.sdpName,
     sittingId: null,
     visitDate: item.sittingDate,
@@ -72,6 +75,8 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
     // real requirement, not a plan someone still needs to propose and get approved.
     planningWorkflow: { stageId: 'booked' },
     reportWorkflow: { stageId: 'awaiting-execution' },
+    reroutedToId: null,
+    reroutedToName: null,
     checklist: buildRplArplMonitoringVisitSections(),
     freeTextNotes: {},
     facilitatorAnswers: {},
@@ -119,8 +124,10 @@ export async function createVisit(input: NewVisitInput): Promise<SiteVisit> {
   const visit: SiteVisit = {
     id: crypto.randomUUID(),
     visitType: input.visitType,
+    qpId: input.qpId,
     qpName: input.qpName,
     qualificationTitle: input.qualificationTitle,
+    sdpId: input.sdpId,
     sdpName: input.sdpName,
     sittingId: input.sittingId,
     visitDate: input.visitDate,
@@ -130,6 +137,8 @@ export async function createVisit(input: NewVisitInput): Promise<SiteVisit> {
     planNote: '',
     planningWorkflow: { stageId: 'ad-planning' },
     reportWorkflow: { stageId: 'awaiting-execution' },
+    reroutedToId: null,
+    reroutedToName: null,
     checklist: buildChecklistForType(input.visitType),
     freeTextNotes: {},
     facilitatorAnswers: {},
@@ -161,6 +170,7 @@ interface PlanningActionParams {
   visitId: string;
   actionId: 'plan-submit' | 'plan-recommend' | 'plan-approve' | 'plan-book';
   actorRole: Role;
+  actorId: string;
   actorName: string;
   planNote?: string;
 }
@@ -174,6 +184,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
     record: visit.planningWorkflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     recordType: 'site-visit-planning',
     recordId: visit.id,
@@ -203,8 +214,11 @@ interface ReportActionParams {
   visitId: string;
   actionId: 'report-submit' | 'report-approve' | 'report-send-back' | 'report-reject' | 'report-reroute' | 'share-visit-outcome' | 'qp-acknowledge-outcome';
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
+  // CR-055: the named colleague (same role) a report is being re-routed to.
+  targetPersonId?: string;
 }
 
 export async function performReportAction(params: ReportActionParams): Promise<SiteVisit> {
@@ -239,15 +253,25 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     if (!params.note?.trim()) {
       throw new Error('Re-routing requires a note explaining why.');
     }
+    if (!params.targetPersonId) {
+      throw new Error('Pick a named colleague to re-route this report to.');
+    }
+    const target = getPerson(params.targetPersonId);
+    if (!target || target.role !== params.actorRole) {
+      throw new Error('The re-route target must hold the same role.');
+    }
+    const updated: SiteVisit = { ...visit, reroutedToId: target.id, reroutedToName: target.name };
+    saveAll(replace(all, updated));
     appendAuditEntry({
       recordType: 'site-visit-report',
       recordId: visit.id,
       actorRole: params.actorRole,
+      actorId: params.actorId,
       actorName: params.actorName,
-      action: 'Re-routed to another Deputy Director',
+      action: `Re-routed to ${target.name} (${target.role})`,
       note: params.note,
     });
-    return visit;
+    return updated;
   }
 
   const nextWorkflow = performAction({
@@ -255,6 +279,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     record: visit.reportWorkflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'site-visit-report',
@@ -287,6 +312,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
       recordType: 'site-visit-report',
       recordId: visit.id,
       actorRole: params.actorRole,
+      actorId: params.actorId,
       actorName: params.actorName,
       action: 'Shared the PEM report with Quality Assurance and Accreditation (simulated — no screen in either domain yet)',
     });

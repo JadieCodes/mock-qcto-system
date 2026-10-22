@@ -68,6 +68,7 @@ export interface InstrumentValidationRecord {
   id: string;
   // Links back to the approved QSA Addendum this instrument is checked against.
   qsaAddendumId: string;
+  qpId: string;
   qpName: string;
   qualificationTitle: string;
   createdAt: string;
@@ -94,6 +95,7 @@ export interface InstrumentValidationRecord {
 
 export interface NewValidationInput {
   qsaAddendumId: string;
+  qpId: string;
   qpName: string;
   qualificationTitle: string;
   createdBy: string;

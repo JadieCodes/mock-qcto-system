@@ -75,8 +75,9 @@ export function useSetLearnerRplArpl() {
 }
 
 export function useUploadLearnerSor() {
-  return useRegistrationMutation((args: { registrationId: string; learnerId: string; file: { fileName: string; fileSize: number } }) =>
-    uploadLearnerSor(args.registrationId, args.learnerId, args.file),
+  return useRegistrationMutation(
+    (args: { registrationId: string; learnerId: string; file: { fileName: string; fileSize: number }; actorId: string; actorName: string }) =>
+      uploadLearnerSor(args.registrationId, args.learnerId, args.file, args.actorId, args.actorName),
   );
 }
 
@@ -87,8 +88,9 @@ export function useUploadSupportingDocument() {
 }
 
 export function useFlagLearnerSor() {
-  return useRegistrationMutation((args: { registrationId: string; learnerId: string; reason: string; actorName: string }) =>
-    flagLearnerSor(args.registrationId, args.learnerId, args.reason, args.actorName),
+  return useRegistrationMutation(
+    (args: { registrationId: string; learnerId: string; reason: string; actorId: string; actorName: string }) =>
+      flagLearnerSor(args.registrationId, args.learnerId, args.reason, args.actorId, args.actorName),
   );
 }
 

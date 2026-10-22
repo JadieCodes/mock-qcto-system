@@ -20,6 +20,7 @@ export interface EisaConfirmationRecord {
   sittingId: string;
   sittingDate: string;
   qualificationTitle: string;
+  qpId: string;
   qpName: string;
   registrationIds: string[];
   learners: ConsolidatedLearnerRow[];
@@ -48,5 +49,6 @@ export interface ConfirmDetailsInput {
   markingDate: string;
   moderationDate: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
 }

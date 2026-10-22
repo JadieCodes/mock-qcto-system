@@ -1,6 +1,7 @@
 import { buildInstrumentValidationChecklist } from '../../mock/data/instrumentValidationChecklistItems';
 import { buildFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
 import { getSdpComplianceStatus, listEnrolledLearners } from '../../mock/api/qaDomain';
+import { getPerson } from '../../shared/people/directory';
 import { verifyLearnerIdentity } from '../../mock/integrations/homeAffairs';
 import { validateSorAgainstModules } from '../../mock/integrations/qualificationsModules';
 import { readStore, writeStore } from '../../mock/api/storage';
@@ -94,6 +95,7 @@ interface StandardActionParams {
   standardId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
 }
@@ -116,6 +118,7 @@ export async function performStandardAction(params: StandardActionParams): Promi
     record: record.workflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'fisa-standard',
@@ -204,12 +207,14 @@ export async function startFisaValidation(input: NewFisaValidationInput): Promis
     id: crypto.randomUUID(),
     fisaStandardId: standard.id,
     skillsProgrammeTitle: standard.skillsProgrammeTitle,
+    sdpId: input.sdpId,
     sdpName: input.sdpName,
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy,
     instrument: null,
     cycleCount: 1,
     checklist: buildInstrumentValidationChecklist(),
+    allocatedAsdId: null,
     allocatedAsdName: null,
     workflow: { stageId: 'sdp-instrument' },
     outcomeHistory: [],
@@ -242,9 +247,10 @@ interface FisaValidationActionParams {
   recordId: string;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   note?: string;
-  allocatedAsdName?: string;
+  allocatedAsdId?: string;
 }
 
 const FISA_VALIDATION_OUTCOME_ACTION_IDS = ['fval-approve', 'fval-approve-with-conditions', 'fval-not-approved'];
@@ -257,8 +263,8 @@ export async function performFisaValidationAction(params: FisaValidationActionPa
   if (params.actionId === 'fval-submit' && !record.instrument) {
     throw new Error('Upload the instrument before notifying QCTO.');
   }
-  if (params.actionId === 'fval-allocate' && !params.allocatedAsdName?.trim()) {
-    throw new Error('Name the ASD this validation is allocated to.');
+  if (params.actionId === 'fval-allocate' && !params.allocatedAsdId) {
+    throw new Error('Pick the ASD this validation is allocated to.');
   }
   if (FISA_VALIDATION_OUTCOME_ACTION_IDS.includes(params.actionId) && !isChecklistComplete(record.checklist, true)) {
     throw new Error('Every checklist line needs an answer and a comment before recording an outcome.');
@@ -269,6 +275,7 @@ export async function performFisaValidationAction(params: FisaValidationActionPa
     record: record.workflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     note: params.note,
     recordType: 'fisa-instrument-validation',
@@ -277,12 +284,14 @@ export async function performFisaValidationAction(params: FisaValidationActionPa
 
   let updated: FisaValidationRecord = { ...record, workflow: nextWorkflow };
 
-  if (params.actionId === 'fval-allocate' && params.allocatedAsdName) {
-    updated = { ...updated, allocatedAsdName: params.allocatedAsdName.trim() };
+  if (params.actionId === 'fval-allocate' && params.allocatedAsdId) {
+    const asd = getPerson(params.allocatedAsdId);
+    if (!asd || asd.role !== 'ASD') throw new Error('The allocation target must be a named ASD.');
+    updated = { ...updated, allocatedAsdId: asd.id, allocatedAsdName: asd.name };
     addNotification({
       recipientRole: 'ASD',
       title: 'FISA Instrument Validation allocated',
-      body: `"${record.skillsProgrammeTitle}" (${record.sdpName}) has been allocated to you for validation.`,
+      body: `"${record.skillsProgrammeTitle}" (${record.sdpName}) has been allocated to ${asd.name} for validation.`,
     });
   }
 
@@ -382,6 +391,7 @@ export async function startFisaRegistration(input: NewFisaRegistrationInput): Pr
     id: crypto.randomUUID(),
     fisaValidationId: validation.id,
     skillsProgrammeTitle: validation.skillsProgrammeTitle,
+    sdpId: input.sdpId,
     sdpName: input.sdpName,
     sittingDate: input.sittingDate,
     workflow: { stageId: 'sdp-submission', submittedBy: input.createdBy },
@@ -456,6 +466,7 @@ interface FisaRegistrationActionParams {
   registrationId: string;
   actionId: 'freg-submit' | 'freg-create-number';
   actorRole: Role;
+  actorId: string;
   actorName: string;
 }
 
@@ -473,6 +484,7 @@ export async function performFisaRegistrationAction(params: FisaRegistrationActi
     record: record.workflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     recordType: 'fisa-registration',
     recordId: record.id,

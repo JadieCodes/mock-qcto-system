@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import {
@@ -19,7 +18,19 @@ import {
 } from '../hooks';
 import type { EisaRegistrationRecord } from '../types';
 
-function LearnerSorCell({ record, learnerId, canAct }: { record: EisaRegistrationRecord; learnerId: string; canAct: boolean }) {
+function LearnerSorCell({
+  record,
+  learnerId,
+  canAct,
+  actorId,
+  actorName,
+}: {
+  record: EisaRegistrationRecord;
+  learnerId: string;
+  canAct: boolean;
+  actorId: string;
+  actorName: string;
+}) {
   const learner = record.learners.find((l) => l.learnerId === learnerId);
   const uploadSor = useUploadLearnerSor();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +57,7 @@ function LearnerSorCell({ record, learnerId, canAct }: { record: EisaRegistratio
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) uploadSor.mutate({ registrationId: record.id, learnerId, file: { fileName: file.name, fileSize: file.size } });
+              if (file) uploadSor.mutate({ registrationId: record.id, learnerId, file: { fileName: file.name, fileSize: file.size }, actorId, actorName });
             }}
           />
           <Button type="button" size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => fileInputRef.current?.click()}>
@@ -113,8 +124,9 @@ function AddLearnerPanel({ record }: { record: EisaRegistrationRecord }) {
 
 export function RegistrationDetail({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   const { data: record } = useRegistrationRecord(recordId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const setRplArpl = useSetLearnerRplArpl();
   const uploadSupportingDocument = useUploadSupportingDocument();
   const registrationAction = useRegistrationAction();
@@ -197,7 +209,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                             <p className="text-xs text-gray-400">{l.idNumber}</p>
                           </TableCell>
                           <TableCell>
-                            <LearnerSorCell record={record} learnerId={l.learnerId} canAct={canAct} />
+                            <LearnerSorCell record={record} learnerId={l.learnerId} canAct={canAct} actorId={actorId} actorName={actorName} />
                           </TableCell>
                           <TableCell>
                             <Switch
@@ -275,7 +287,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
           {canAct && isBuilding && (
             <Button
               disabled={!canSubmit || registrationAction.isPending}
-              onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'reg-submit', actorRole: role, actorName })}
+              onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'reg-submit', actorRole: role, actorId, actorName })}
             >
               Submit to Assistant Director
             </Button>

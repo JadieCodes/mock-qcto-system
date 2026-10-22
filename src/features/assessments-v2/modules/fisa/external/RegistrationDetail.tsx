@@ -4,7 +4,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FisaRegistrationStatusBadge } from '../components/StatusBadge';
 import { useAddFisaRegistrationLearner, useFisaEnrollableLearners, useFisaRegistration, useFisaRegistrationAction, useUploadFisaLearnerSor } from '../hooks';
@@ -95,8 +94,9 @@ function AddLearnerPanel({ record }: { record: FisaRegistrationRecord }) {
 
 export function RegistrationDetail({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   const { data: record } = useFisaRegistration(recordId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const registrationAction = useFisaRegistrationAction();
 
   if (!record) {
@@ -191,7 +191,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
           {isBuilding && (
             <Button
               disabled={!canSubmit || registrationAction.isPending}
-              onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'freg-submit', actorRole: role, actorName })}
+              onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'freg-submit', actorRole: role, actorId, actorName })}
             >
               Submit to Assistant Director
             </Button>

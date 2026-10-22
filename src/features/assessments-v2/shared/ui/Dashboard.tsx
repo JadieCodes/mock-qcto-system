@@ -4,7 +4,7 @@ import type { Portal } from '../../types';
 import { useV2Role } from './useV2Role';
 
 export function Dashboard({ portal }: { portal: Portal }) {
-  const { role } = useV2Role();
+  const { role, person } = useV2Role();
   const descriptor = roleDescriptor(role);
   // CR-018: SDPs must not see EISA Instrument Validation at all — not even listed here.
   const modules = navForPortal(portal).filter((item) => item.path !== 'dashboard' && !item.hiddenForRoles?.includes(role));
@@ -13,7 +13,9 @@ export function Dashboard({ portal }: { portal: Portal }) {
     <div className="space-y-6">
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
         <p className="text-sm text-gray-500">Acting as</p>
-        <p className="text-lg font-bold text-gray-900">{descriptor?.label ?? role}</p>
+        <p className="text-lg font-bold text-gray-900">
+          {person.name} <span className="font-normal text-gray-500">— {descriptor?.label ?? role}</span>
+        </p>
         {descriptor && descriptor.teams.length > 0 && (
           <p className="text-xs text-gray-500 mt-1">Teams: {descriptor.teams.join(', ')}</p>
         )}

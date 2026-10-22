@@ -9,7 +9,6 @@ import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import { availableActions, canActInStage } from '../../../shared/workflow/engine';
 import type { WorkflowAction } from '../../../shared/workflow/types';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../../site-visits/config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
@@ -102,8 +101,9 @@ function ActionBar({
 function DetailsTab({ batch }: { batch: ResultsBatch }) {
   const { data: mmVisits = [] } = useMarkingModerationStatus(batch.sittingId);
   const createPemVisit = useCreatePemVisitForBatch();
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
 
   const rate = competencyRatePercent(batch);
   const belowThreshold = rate < POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT;
@@ -146,7 +146,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
               unconfirmed with QCTO).
             </p>
             {batch.workflow.stageId === 'approved' && !batch.pemVisitId && (
-              <Button size="sm" disabled={createPemVisit.isPending} onClick={() => createPemVisit.mutate({ batchId: batch.id, actorName })}>
+              <Button size="sm" disabled={createPemVisit.isPending} onClick={() => createPemVisit.mutate({ batchId: batch.id, actorId, actorName })}>
                 Create Post-EISA Monitoring Visit
               </Button>
             )}
@@ -192,8 +192,9 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
 }
 
 function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const saveChecklist = useSaveComplianceChecklist();
   const saveReviewNotes = useSaveComplianceReviewNotes();
   const saveEvidenceNotes = useSaveEvidenceEvaluationNotes();
@@ -246,7 +247,7 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
           stageId={batch.workflow.stageId}
           role={role}
           disabledActionIds={!(checklistComplete && notesComplete) ? ['ad-advance'] : []}
-          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorName, note })}
+          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
         />
       )}
     </div>
@@ -254,8 +255,9 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
 }
 
 function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const resultsAction = useResultsAction();
 
   const stageOrder = ['ad-review', 'dd-review', 'director-review', 'chief-director-review'];
@@ -281,7 +283,7 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
         <ActionBar
           stageId={batch.workflow.stageId}
           role={role}
-          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorName, note })}
+          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
         />
       )}
 

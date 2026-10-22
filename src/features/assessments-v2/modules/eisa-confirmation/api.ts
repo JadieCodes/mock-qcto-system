@@ -79,6 +79,7 @@ export async function generateConfirmation(input: GenerateConfirmationInput): Pr
     sittingId: sitting.id,
     sittingDate: sitting.date,
     qualificationTitle: sitting.qualificationTitle,
+    qpId: sitting.qpId,
     qpName: sitting.qpName,
     registrationIds: registrations.map((r) => r.id),
     learners,
@@ -101,7 +102,7 @@ export async function generateConfirmation(input: GenerateConfirmationInput): Pr
   return record;
 }
 
-export async function acknowledgeConfirmation(recordId: string, actorName: string): Promise<EisaConfirmationRecord> {
+export async function acknowledgeConfirmation(recordId: string, actorId: string, actorName: string): Promise<EisaConfirmationRecord> {
   const all = loadAll();
   const record = getOrThrow(all, recordId);
   const nextWorkflow = performAction({
@@ -109,6 +110,7 @@ export async function acknowledgeConfirmation(recordId: string, actorName: strin
     record: record.workflow,
     actionId: 'conf-acknowledge',
     actorRole: 'QP',
+    actorId,
     actorName,
     recordType: 'eisa-confirmation',
     recordId: record.id,
@@ -147,6 +149,7 @@ export async function confirmDetails(input: ConfirmDetailsInput): Promise<EisaCo
     record: record.workflow,
     actionId: 'conf-confirm',
     actorRole: input.actorRole,
+    actorId: input.actorId,
     actorName: input.actorName,
     recordType: 'eisa-confirmation',
     recordId: record.id,

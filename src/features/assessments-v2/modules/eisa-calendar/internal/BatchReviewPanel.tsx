@@ -3,7 +3,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { EisaSittingStatusBadge } from '../components/StatusBadge';
 import { useBatchAction, useEisaSittingBatches } from '../hooks';
@@ -14,8 +13,9 @@ import type { EisaSittingBatch } from '../types';
 // publishes an approved batch to the calendar.
 export function BatchReviewPanel() {
   const { data: batches = [] } = useEisaSittingBatches();
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const batchAction = useBatchAction();
   const [rejectTarget, setRejectTarget] = useState<EisaSittingBatch | null>(null);
 
@@ -64,7 +64,7 @@ export function BatchReviewPanel() {
                           <Button
                             size="sm"
                             onClick={() =>
-                              batchAction.mutate({ batchId: batch.id, actionId: 'batch-approve', actorRole: role, actorName })
+                              batchAction.mutate({ batchId: batch.id, actionId: 'batch-approve', actorRole: role, actorId, actorName })
                             }
                           >
                             Approve
@@ -78,7 +78,7 @@ export function BatchReviewPanel() {
                         <Button
                           size="sm"
                           onClick={() =>
-                            batchAction.mutate({ batchId: batch.id, actionId: 'batch-publish', actorRole: role, actorName })
+                            batchAction.mutate({ batchId: batch.id, actionId: 'batch-publish', actorRole: role, actorId, actorName })
                           }
                         >
                           Publish to calendar
@@ -102,7 +102,7 @@ export function BatchReviewPanel() {
         onOpenChange={(open) => !open && setRejectTarget(null)}
         onConfirm={(reason) => {
           if (!rejectTarget) return;
-          batchAction.mutate({ batchId: rejectTarget.id, actionId: 'batch-reject', actorRole: role, actorName, note: reason });
+          batchAction.mutate({ batchId: rejectTarget.id, actionId: 'batch-reject', actorRole: role, actorId, actorName, note: reason });
         }}
       />
     </>

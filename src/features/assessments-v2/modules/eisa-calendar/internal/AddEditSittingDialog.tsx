@@ -28,7 +28,7 @@ export function AddEditSittingDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sitting: EisaSitting | null;
-  onSubmit: (values: { qualificationTitle: string; qpName: string; year: number; date: string }) => void;
+  onSubmit: (values: { qualificationTitle: string; qpId: string; qpName: string; year: number; date: string }) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,10 +59,11 @@ function AddEditSittingForm({
 }: {
   sitting: EisaSitting | null;
   onCancel: () => void;
-  onSubmit: (values: { qualificationTitle: string; qpName: string; year: number; date: string }) => void;
+  onSubmit: (values: { qualificationTitle: string; qpId: string; qpName: string; year: number; date: string }) => void;
 }) {
   const { data: eligible = [] } = useEligibleQualifications();
   const [qualificationTitle, setQualificationTitle] = useState(sitting?.qualificationTitle ?? '');
+  const [qpId, setQpId] = useState(sitting?.qpId ?? '');
   const [qpName, setQpName] = useState(sitting?.qpName ?? '');
   const [year, setYear] = useState<number>(sitting?.year ?? YEAR_OPTIONS[0]);
   const [date, setDate] = useState(sitting?.date ?? '');
@@ -80,7 +81,10 @@ function AddEditSittingForm({
             onValueChange={(value) => {
               setQualificationTitle(value);
               const match = eligible.find((q) => q.qualificationTitle === value);
-              if (match) setQpName(match.qpName);
+              if (match) {
+                setQpName(match.qpName);
+                setQpId(match.qpId);
+              }
             }}
           >
             <SelectTrigger>
@@ -143,7 +147,7 @@ function AddEditSittingForm({
         <Button
           type="button"
           disabled={!ready}
-          onClick={() => onSubmit({ qualificationTitle: qualificationTitle.trim(), qpName: qpName.trim(), year, date })}
+          onClick={() => onSubmit({ qualificationTitle: qualificationTitle.trim(), qpId, qpName: qpName.trim(), year, date })}
         >
           {sitting ? 'Save Changes' : 'Add Sitting'}
         </Button>

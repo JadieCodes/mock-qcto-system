@@ -5,15 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ConfirmationStatusBadge } from '../components/StatusBadge';
 import { useAcknowledgeConfirmation, useConfirmDetails, useConfirmationRecord } from '../hooks';
 import type { EisaConfirmationRecord } from '../types';
 
 function ConfirmForm({ record, canAct }: { record: EisaConfirmationRecord; canAct: boolean }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const confirmDetails = useConfirmDetails();
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +32,7 @@ function ConfirmForm({ record, canAct }: { record: EisaConfirmationRecord; canAc
         markingDate,
         moderationDate,
         actorRole: role,
+        actorId,
         actorName,
       },
       { onError: (e: Error) => setError(e.message) },
@@ -94,8 +95,9 @@ function ConfirmForm({ record, canAct }: { record: EisaConfirmationRecord; canAc
 
 export function ConfirmationDetail({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   const { data: record } = useConfirmationRecord(recordId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const acknowledge = useAcknowledgeConfirmation();
 
   if (!record) {
@@ -158,7 +160,7 @@ export function ConfirmationDetail({ recordId, onClose }: { recordId: string | n
               {canAct && (
                 <Button
                   disabled={acknowledge.isPending}
-                  onClick={() => acknowledge.mutate({ recordId: record.id, actorName })}
+                  onClick={() => acknowledge.mutate({ recordId: record.id, actorId, actorName })}
                 >
                   Acknowledge Learner List
                 </Button>

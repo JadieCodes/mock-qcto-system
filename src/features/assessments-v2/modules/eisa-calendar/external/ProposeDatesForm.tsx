@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { checkSittingDate } from '../dateChecks';
 import { useEligibleQualifications, useProposeSittingBatch } from '../hooks';
@@ -18,8 +17,7 @@ const YEAR_OPTIONS = [0, 1, 2].map((offset) => new Date().getFullYear() + offset
 // row count is not pre-locked to the required frequency.
 export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { data: eligible = [] } = useEligibleQualifications();
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
   const proposeBatch = useProposeSittingBatch();
 
   const [qualificationTitle, setQualificationTitle] = useState('');
@@ -48,7 +46,15 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
   const onSubmit = () => {
     if (!selected || !canSubmit) return;
     proposeBatch.mutate(
-      { qualificationTitle: selected.qualificationTitle, qpName: selected.qpName, year, dates: filledDates, submittedBy: actorName },
+      {
+        qualificationTitle: selected.qualificationTitle,
+        qpId: selected.qpId,
+        qpName: selected.qpName,
+        year,
+        dates: filledDates,
+        submittedBy: person.name,
+        submittedById: person.id,
+      },
       {
         onSuccess: () => {
           onOpenChange(false);

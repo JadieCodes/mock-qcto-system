@@ -6,28 +6,24 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useStartFisaRegistration, useValidatedFisaInstruments } from '../hooks';
 
 // A simplified version of EISA Registration (CR-026): no EISA Calendar sitting to publish
 // against, so the SDP records the sitting date directly against a validated instrument.
 export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
   const { data: instruments = [] } = useValidatedFisaInstruments();
   const startRegistration = useStartFisaRegistration();
 
   const [fisaValidationId, setFisaValidationId] = useState('');
-  const [sdpName, setSdpName] = useState('');
   const [sittingDate, setSittingDate] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = !!fisaValidationId && !!sdpName.trim() && !!sittingDate;
+  const canSubmit = !!fisaValidationId && !!sittingDate;
 
   const reset = () => {
     setFisaValidationId('');
-    setSdpName('');
     setSittingDate('');
     setError(null);
   };
@@ -36,7 +32,7 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
     if (!canSubmit) return;
     setError(null);
     startRegistration.mutate(
-      { fisaValidationId, sdpName: sdpName.trim(), sittingDate, createdBy: actorName },
+      { fisaValidationId, sdpId: person.sdpId ?? person.id, sdpName: person.name, sittingDate, createdBy: person.name },
       { onSuccess: () => { onOpenChange(false); reset(); }, onError: (e: Error) => setError(e.message) },
     );
   };
@@ -70,8 +66,9 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="fisa-reg-sdp">SDP *</Label>
-            <Input id="fisa-reg-sdp" value={sdpName} onChange={(e) => setSdpName(e.target.value)} placeholder="Enter SDP name" />
+            <Label>SDP</Label>
+            <p className="text-sm font-medium py-2">{person.name}</p>
+            <p className="text-xs text-gray-400">Registering as the acting SDP — switch person in the header to register as someone else.</p>
           </div>
 
           <div className="space-y-2">

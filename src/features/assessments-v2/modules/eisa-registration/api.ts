@@ -81,10 +81,12 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
     sittingId: sitting.id,
     sittingDate: sitting.date,
     qualificationTitle: sitting.qualificationTitle,
+    qpId: sitting.qpId,
     qpName: sitting.qpName,
+    sdpId: input.sdpId,
     sdpName: input.sdpName,
     category: input.category,
-    workflow: { stageId: 'sdp-submission', submittedBy: input.createdBy },
+    workflow: { stageId: 'sdp-submission', submittedBy: input.createdBy, submittedById: input.createdById },
     learners: [],
     supportingDocuments: [],
     registrationNumber: null,
@@ -159,7 +161,13 @@ export async function setLearnerRplArpl(registrationId: string, learnerId: strin
 
 // CR-036 (SOR upload, UI-only) and CR-038 (re-upload clears a flag without the registration
 // leaving AD review) and CR-037 (backend-dependent, no screen — called and ignored).
-export async function uploadLearnerSor(registrationId: string, learnerId: string, file: { fileName: string; fileSize: number }): Promise<EisaRegistrationRecord> {
+export async function uploadLearnerSor(
+  registrationId: string,
+  learnerId: string,
+  file: { fileName: string; fileSize: number },
+  actorId: string,
+  actorName: string,
+): Promise<EisaRegistrationRecord> {
   const all = loadAll();
   const record = getOrThrow(all, registrationId);
   const learner = record.learners.find((l) => l.learnerId === learnerId);
@@ -185,7 +193,8 @@ export async function uploadLearnerSor(registrationId: string, learnerId: string
       recordType: 'eisa-registration',
       recordId: record.id,
       actorRole: 'SDP',
-      actorName: record.sdpName,
+      actorId,
+      actorName,
       action: `Corrected and resubmitted the SOR for ${learner.fullName}`,
     });
     addNotification({
@@ -209,7 +218,13 @@ export async function uploadSupportingDocument(registrationId: string, file: { f
 
 // CR-038: the Assistant Director flags one learner's SOR with a mandatory reason. This does
 // NOT move the registration's stage — only that learner's SOR status changes.
-export async function flagLearnerSor(registrationId: string, learnerId: string, reason: string, actorName: string): Promise<EisaRegistrationRecord> {
+export async function flagLearnerSor(
+  registrationId: string,
+  learnerId: string,
+  reason: string,
+  actorId: string,
+  actorName: string,
+): Promise<EisaRegistrationRecord> {
   if (!reason.trim()) throw new Error('A reason is required to flag an SOR.');
   const all = loadAll();
   const record = getOrThrow(all, registrationId);
@@ -229,6 +244,7 @@ export async function flagLearnerSor(registrationId: string, learnerId: string, 
     recordType: 'eisa-registration',
     recordId: record.id,
     actorRole: 'Assistant Director',
+    actorId,
     actorName,
     action: `Flagged ${learner.fullName}'s SOR as non-compliant`,
     note: reason,
@@ -246,6 +262,7 @@ interface RegistrationActionParams {
   registrationId: string;
   actionId: 'reg-submit' | 'reg-create-number';
   actorRole: Role;
+  actorId: string;
   actorName: string;
 }
 
@@ -268,6 +285,7 @@ export async function performRegistrationAction(params: RegistrationActionParams
     record: record.workflow,
     actionId: params.actionId,
     actorRole: params.actorRole,
+    actorId: params.actorId,
     actorName: params.actorName,
     recordType: 'eisa-registration',
     recordId: record.id,
@@ -298,6 +316,7 @@ export async function performRegistrationAction(params: RegistrationActionParams
         recordType: 'eisa-registration',
         recordId: record.id,
         actorRole: params.actorRole,
+        actorId: params.actorId,
         actorName: params.actorName,
         action: 'Prepared files for the QP and shared the SDP list with Quality Assurance (Non-Trades path)',
       });
@@ -315,7 +334,9 @@ export async function performRegistrationAction(params: RegistrationActionParams
       const item = await createMonitoringItem({
         sourceRegistrationId: updated.id,
         qualificationTitle: updated.qualificationTitle,
+        qpId: updated.qpId,
         qpName: updated.qpName,
+        sdpId: updated.sdpId,
         sdpName: updated.sdpName,
         sittingDate: updated.sittingDate,
         learnerNames: rplLearners.map((l) => l.fullName),

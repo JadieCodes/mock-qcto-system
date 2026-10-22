@@ -2,7 +2,6 @@ import { useRef } from 'react';
 import { Award, BookOpen, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
@@ -11,8 +10,9 @@ import { useInstrumentValidationRecord, useUploadInstrument, useValidationAction
 
 export function ValidationDetail({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   const { data: record } = useInstrumentValidationRecord(recordId);
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const uploadInstrument = useUploadInstrument();
   const validationAction = useValidationAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +106,7 @@ export function ValidationDetail({ recordId, onClose }: { recordId: string | nul
                         <Button
                           size="sm"
                           disabled={!canSubmit || validationAction.isPending}
-                          onClick={() => validationAction.mutate({ recordId: record.id, actionId: 'val-submit', actorRole: role, actorName })}
+                          onClick={() => validationAction.mutate({ recordId: record.id, actionId: 'val-submit', actorRole: role, actorId, actorName })}
                         >
                           {record.cycleCount > 1 ? 'Resubmit to ASD' : 'Submit for validation'}
                         </Button>

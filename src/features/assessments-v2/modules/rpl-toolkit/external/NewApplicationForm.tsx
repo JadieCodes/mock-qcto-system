@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
+import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useCreateRplToolkitApplication } from '../hooks';
 import type { NewRplToolkitInput, RplToolkitType } from '../types';
 
 interface FormValues {
-  qpName: string;
   toolkitTitle: string;
   description: string;
   submissionDate: string;
@@ -19,6 +19,7 @@ interface FormValues {
 }
 
 export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { person } = useV2Role();
   const {
     register,
     handleSubmit,
@@ -26,7 +27,6 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
-      qpName: '',
       toolkitTitle: '',
       description: '',
       submissionDate: new Date().toISOString().split('T')[0],
@@ -42,7 +42,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
   };
 
   const onSubmit = (values: FormValues) => {
-    const input: NewRplToolkitInput = { ...values, toolkitType };
+    const input: NewRplToolkitInput = { ...values, qpId: person.qpId ?? person.id, qpName: person.name, toolkitType };
     createApplication.mutate(input, {
       onSuccess: () => {
         onOpenChange(false);
@@ -67,9 +67,9 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
 
         <form className="space-y-4 py-2" onSubmit={handleSubmit(onSubmit)}>
           <div className="space-y-2">
-            <Label htmlFor="rpl-qp-name">Name of QP *</Label>
-            <Input id="rpl-qp-name" {...register('qpName', { required: true })} placeholder="Enter name of QP" />
-            {errors.qpName && <p className="text-xs text-red-600">Required.</p>}
+            <Label>Name of QP</Label>
+            <p className="text-sm font-medium py-2">{person.name}</p>
+            <p className="text-xs text-gray-400">Submitting as the acting QP — switch person in the header to submit as someone else.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="rpl-toolkit-title">Toolkit Title *</Label>

@@ -3,7 +3,6 @@ import { Calendar, CheckCircle2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { useSchedulingAction } from '../hooks';
@@ -27,8 +26,9 @@ function acceptActionId(stageId: string): string | null {
 // history. Same shape as a joint availability negotiation, re-implemented here rather than
 // imported (the QA module's scheduling code is read-only reference, not a shared import).
 export function SchedulingPanel({ record }: { record: InstrumentValidationRecord }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const schedulingAction = useSchedulingAction();
   const stageId = record.scheduling.workflow.stageId;
   const canAct = canActInStage(SCHEDULING_WORKFLOW, stageId, role);
@@ -42,7 +42,7 @@ export function SchedulingPanel({ record }: { record: InstrumentValidationRecord
   const runPropose = () => {
     if (!date || !time || !venue) return;
     schedulingAction.mutate(
-      { recordId: record.id, actionId: proposeActionId(stageId), actorRole: role, actorName, slot: { date, time, venue } },
+      { recordId: record.id, actionId: proposeActionId(stageId), actorRole: role, actorId, actorName, slot: { date, time, venue } },
       {
         onSuccess: () => {
           setDate('');
@@ -55,7 +55,7 @@ export function SchedulingPanel({ record }: { record: InstrumentValidationRecord
 
   const runAccept = () => {
     if (!acceptId) return;
-    schedulingAction.mutate({ recordId: record.id, actionId: acceptId, actorRole: role, actorName });
+    schedulingAction.mutate({ recordId: record.id, actionId: acceptId, actorRole: role, actorId, actorName });
   };
 
   return (

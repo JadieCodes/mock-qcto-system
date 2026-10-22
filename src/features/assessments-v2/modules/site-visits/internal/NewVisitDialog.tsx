@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listSdps } from '../../../mock/api/qaDomain';
-import { roleDescriptor } from '../../../config/roles';
+import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS } from '../config';
 import { useCreateVisit, useSchedulableSittings } from '../hooks';
@@ -20,17 +20,16 @@ const NO_SITTING = '__none__';
 // here by an official — visit type, QP/qualification, optional sitting link, venue, and the
 // notified/unannounced flag with its lead time are all captured up front.
 export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
   const { data: sittings = [] } = useSchedulableSittings();
   const { data: sdps = [] } = useQuery({ queryKey: ['site-visits', 'sdps'], queryFn: listSdps });
   const createVisit = useCreateVisit();
 
   const [visitType, setVisitType] = useState<VisitType>('eisa-readiness');
   const [sittingId, setSittingId] = useState<string>(NO_SITTING);
-  const [qpName, setQpName] = useState('');
+  const [qpId, setQpId] = useState('');
   const [qualificationTitle, setQualificationTitle] = useState('');
-  const [sdpName, setSdpName] = useState<string>(NO_SITTING);
+  const [sdpId, setSdpId] = useState<string>(NO_SITTING);
   const [visitDate, setVisitDate] = useState('');
   const [venue, setVenue] = useState('');
   const [notificationFlag, setNotificationFlag] = useState<NotificationFlag>('notified');
@@ -39,9 +38,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const reset = () => {
     setVisitType('eisa-readiness');
     setSittingId(NO_SITTING);
-    setQpName('');
+    setQpId('');
     setQualificationTitle('');
-    setSdpName(NO_SITTING);
+    setSdpId(NO_SITTING);
     setVisitDate('');
     setVenue('');
     setNotificationFlag('notified');
@@ -53,28 +52,33 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     if (value === NO_SITTING) return;
     const sitting = sittings.find((s) => s.id === value);
     if (sitting) {
-      setQpName(sitting.qpName);
+      setQpId(sitting.qpId);
       setQualificationTitle(sitting.qualificationTitle);
       setVisitDate(sitting.date);
     }
   };
 
-  const canSubmit = qpName.trim() && qualificationTitle.trim() && visitDate && venue.trim();
+  const selectedQp = QP_DIRECTORY.find((q) => q.qpId === qpId);
+  const selectedSdp = sdps.find((s) => s.sdpId === sdpId);
+  const canSubmit = qpId && qualificationTitle.trim() && visitDate && venue.trim();
 
   const onSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !selectedQp) return;
     createVisit.mutate(
       {
         visitType,
-        qpName: qpName.trim(),
+        qpId: selectedQp.qpId,
+        qpName: selectedQp.name,
         qualificationTitle: qualificationTitle.trim(),
-        sdpName: sdpName === NO_SITTING ? null : sdpName,
+        sdpId: sdpId === NO_SITTING ? null : sdpId,
+        sdpName: sdpId === NO_SITTING ? null : selectedSdp?.name ?? null,
         sittingId: sittingId === NO_SITTING ? null : sittingId,
         visitDate,
         venue: venue.trim(),
         notificationFlag,
         noticeLeadTimeDays: notificationFlag === 'notified' ? leadTimeDays : null,
-        createdBy: actorName,
+        createdBy: person.name,
+        createdById: person.id,
       },
       { onSuccess: () => { onOpenChange(false); reset(); } },
     );
@@ -125,7 +129,18 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>QP *</Label>
-              <Input value={qpName} onChange={(e) => setQpName(e.target.value)} disabled={sittingId !== NO_SITTING} />
+              <Select value={qpId} onValueChange={setQpId} disabled={sittingId !== NO_SITTING}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a QP" />
+                </SelectTrigger>
+                <SelectContent>
+                  {QP_DIRECTORY.map((q) => (
+                    <SelectItem key={q.qpId} value={q.qpId}>
+                      {q.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Qualification *</Label>
@@ -135,14 +150,14 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
           <div className="space-y-2">
             <Label>SDP (optional)</Label>
-            <Select value={sdpName} onValueChange={setSdpName}>
+            <Select value={sdpId} onValueChange={setSdpId}>
               <SelectTrigger>
                 <SelectValue placeholder="Not applicable" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_SITTING}>Not applicable</SelectItem>
                 {sdps.map((s) => (
-                  <SelectItem key={s.name} value={s.name}>
+                  <SelectItem key={s.sdpId} value={s.sdpId}>
                     {s.name}
                   </SelectItem>
                 ))}

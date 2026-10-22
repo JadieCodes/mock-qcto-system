@@ -80,7 +80,8 @@ export function useAddSitting() {
 export function useEditSitting() {
   const invalidate = useInvalidateCalendar();
   return useMutation({
-    mutationFn: (args: { id: string; patch: EditSittingInput; actorName: string }) => editSitting(args.id, args.patch, args.actorName),
+    mutationFn: (args: { id: string; patch: EditSittingInput; actorId: string; actorName: string }) =>
+      editSitting(args.id, args.patch, args.actorId, args.actorName),
     onSuccess: () => {
       invalidate();
       toast.success('Sitting updated.');
@@ -92,7 +93,7 @@ export function useEditSitting() {
 export function useDeleteSitting() {
   const invalidate = useInvalidateCalendar();
   return useMutation({
-    mutationFn: (args: { id: string; actorName: string }) => deleteSitting(args.id, args.actorName),
+    mutationFn: (args: { id: string; actorId: string; actorName: string }) => deleteSitting(args.id, args.actorId, args.actorName),
     onSuccess: () => {
       invalidate();
       toast.success('Sitting deleted.');

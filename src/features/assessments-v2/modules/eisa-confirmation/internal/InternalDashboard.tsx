@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ConfirmationStatusBadge } from '../components/StatusBadge';
 import { useConfirmationRecords, useGenerateConfirmation, useSittingsReadyToConfirm } from '../hooks';
@@ -9,8 +8,8 @@ import { useConfirmationRecords, useGenerateConfirmation, useSittingsReadyToConf
 // CR-043: triggered once registration for a sitting is complete. Not auto-started — a QCTO
 // official (here, the Assistant Director — see config.ts) generates it explicitly.
 export function InternalDashboard() {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
+  const actorName = person.name;
   const { data: ready = [] } = useSittingsReadyToConfirm();
   const { data: records = [] } = useConfirmationRecords();
   const generate = useGenerateConfirmation();

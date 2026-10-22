@@ -10,7 +10,9 @@ export interface RplArplMonitoringItem {
   sourceRegistrationId: string;
   qualificationTitle: string;
   // Carried over from the registration (Phase 6 fix) instead of a placeholder.
+  qpId: string;
   qpName: string;
+  sdpId: string;
   sdpName: string;
   sittingDate: string;
   learnerNames: string[];

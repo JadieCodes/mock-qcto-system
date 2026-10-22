@@ -18,6 +18,7 @@ export interface PerformActionParams {
   record: WorkflowRecordState;
   actionId: string;
   actorRole: Role;
+  actorId: string;
   actorName: string;
   recordType: string;
   recordId: string;
@@ -29,6 +30,7 @@ export function performAction({
   record,
   actionId,
   actorRole,
+  actorId,
   actorName,
   recordType,
   recordId,
@@ -43,9 +45,14 @@ export function performAction({
     throw new WorkflowError(`Role "${actorRole}" may not act in stage "${record.stageId}".`);
   }
 
-  // CR-053: nobody approves their own submission.
-  if (action.requiresDifferentActor && record.submittedBy && record.submittedBy === actorName) {
-    throw new WorkflowError('The approver must be a different person from the submitter.');
+  // CR-053: nobody approves their own submission. Compared by person id, not role label or
+  // name — two different people can share both. Falls back to a name comparison only for
+  // state that predates per-person identity (no submittedById recorded yet).
+  if (action.requiresDifferentActor && record.submittedBy) {
+    const sameActor = record.submittedById ? record.submittedById === actorId : record.submittedBy === actorName;
+    if (sameActor) {
+      throw new WorkflowError('The approver must be a different person from the submitter.');
+    }
   }
 
   // CR-055: a manual re-route (or reject) needs a mandatory audit note.
@@ -57,10 +64,11 @@ export function performAction({
     recordType,
     recordId,
     actorRole,
+    actorId,
     actorName,
     action: action.label,
     note,
   });
 
-  return { ...record, stageId: action.toStage, submittedBy: actorName };
+  return { ...record, stageId: action.toStage, submittedBy: actorName, submittedById: actorId };
 }

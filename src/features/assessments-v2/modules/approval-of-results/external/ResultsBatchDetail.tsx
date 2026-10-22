@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
@@ -10,8 +9,9 @@ import { competencyRatePercent } from '../workflow';
 // CR-059: QP-facing read-only summary — status, competency rate, the latest decline reason
 // (if any) and a resubmit action once declined.
 export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | null; onClose: () => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const { data: batch } = useResultsBatch(batchId);
   const resultsAction = useResultsAction();
 
@@ -53,7 +53,7 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
                 <Button
                   size="sm"
                   disabled={resultsAction.isPending}
-                  onClick={() => resultsAction.mutate({ batchId: batch.id, actionId: 'batch-resubmit', actorRole: role, actorName })}
+                  onClick={() => resultsAction.mutate({ batchId: batch.id, actionId: 'batch-resubmit', actorRole: role, actorId, actorName })}
                 >
                   Resubmit
                 </Button>

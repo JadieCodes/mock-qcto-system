@@ -2,33 +2,35 @@ import { useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
+import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
 import { useFisaValidation, useFisaValidationAction, useSaveFisaValidationChecklist } from '../hooks';
 import type { FisaValidationRecord } from '../types';
 
 function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { role, person } = useV2Role();
+  const actorId = person.id;
+  const actorName = person.name;
   const saveChecklist = useSaveFisaValidationChecklist();
   const validationAction = useFisaValidationAction();
   const [notApprovedOpen, setNotApprovedOpen] = useState(false);
-  const [allocatedAsdName, setAllocatedAsdName] = useState('');
+  const [allocatedAsdId, setAllocatedAsdId] = useState('');
+  const asdOptions = personsForRole('ASD');
 
   const canAllocate = role === 'Assistant Director' && record.workflow.stageId === 'awaiting-allocation';
   const canValidate = role === 'ASD' && record.workflow.stageId === 'asd-validation';
   const checklistComplete = isChecklistComplete(record.checklist, true);
 
   const runOutcome = (actionId: string, note?: string) => {
-    validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorName, note });
+    validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorId, actorName, note });
   };
 
   return (
@@ -94,13 +96,24 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
 
             {canAllocate && (
               <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-                <Label htmlFor="allocate-asd-name">Allocate to ASD *</Label>
+                <Label>Allocate to ASD *</Label>
                 <div className="flex gap-2">
-                  <Input id="allocate-asd-name" value={allocatedAsdName} onChange={(e) => setAllocatedAsdName(e.target.value)} placeholder="ASD name" />
+                  <Select value={allocatedAsdId} onValueChange={setAllocatedAsdId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an ASD" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {asdOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
-                    disabled={!allocatedAsdName.trim() || validationAction.isPending}
+                    disabled={!allocatedAsdId || validationAction.isPending}
                     onClick={() =>
-                      validationAction.mutate({ recordId: record.id, actionId: 'fval-allocate', actorRole: role, actorName, allocatedAsdName })
+                      validationAction.mutate({ recordId: record.id, actionId: 'fval-allocate', actorRole: role, actorId, actorName, allocatedAsdId })
                     }
                   >
                     Allocate

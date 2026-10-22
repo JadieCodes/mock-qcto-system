@@ -17,6 +17,7 @@ export interface RplEvaluationReport {
 
 export interface RplToolkitApplication {
   id: string;
+  qpId: string;
   qpName: string;
   toolkitTitle: string;
   toolkitType: RplToolkitType;
@@ -31,6 +32,8 @@ export interface RplToolkitApplication {
   // the QSA Addendum's CR-008 rule).
   outcomeState: WorkflowRecordState;
 
+  // PM-09 allocation: a named ASD person, not a free-text name.
+  allocatedAsdId: string | null;
   allocatedAsdName: string | null;
   checklist: ChecklistSection[];
   evaluationReport: RplEvaluationReport;
@@ -40,6 +43,7 @@ export interface RplToolkitApplication {
 }
 
 export interface NewRplToolkitInput {
+  qpId: string;
   qpName: string;
   toolkitTitle: string;
   toolkitType: RplToolkitType;

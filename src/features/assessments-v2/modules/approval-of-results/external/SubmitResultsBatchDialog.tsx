@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { roleDescriptor } from '../../../config/roles';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
@@ -15,14 +14,24 @@ import type { EvidenceDocument } from '../types';
 // sittings) unmounts it and discards whatever was typed, so the next open always starts fresh
 // from that sitting's current values with no reset effect needed (same pattern as the EISA
 // Calendar's AddEditSittingDialog).
-function SubmitResultsBatchForm({ sitting, actorName, onDone }: { sitting: EisaConfirmationRecord; actorName: string; onDone: () => void }) {
+function SubmitResultsBatchForm({
+  sitting,
+  actorId,
+  actorName,
+  onDone,
+}: {
+  sitting: EisaConfirmationRecord;
+  actorId: string;
+  actorName: string;
+  onDone: () => void;
+}) {
   const submitBatch = useSubmitResultsBatch();
   const [competentCount, setCompetentCount] = useState(sitting.learners.length);
   const [evidenceDocuments, setEvidenceDocuments] = useState<EvidenceDocument[]>([]);
 
   const onSubmit = () => {
     submitBatch.mutate(
-      { sittingId: sitting.sittingId, competentCount, evidenceDocuments, submittedBy: actorName },
+      { sittingId: sitting.sittingId, competentCount, evidenceDocuments, submittedBy: actorName, submittedById: actorId },
       { onSuccess: onDone },
     );
   };
@@ -89,8 +98,7 @@ function SubmitResultsBatchForm({ sitting, actorName, onDone }: { sitting: EisaC
 // from the EISA Confirmation record, the QP only enters how many were found competent and can
 // attach evidence (UI-only file names, same pattern as every other upload in this domain).
 export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingId: string | null; onOpenChange: (open: boolean) => void }) {
-  const { role } = useV2Role();
-  const actorName = roleDescriptor(role)?.label ?? role;
+  const { person } = useV2Role();
   const { data: awaiting = [] } = useSittingsAwaitingSubmission();
   const sitting = awaiting.find((s) => s.sittingId === sittingId);
 
@@ -100,7 +108,9 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
         <DialogHeader>
           <DialogTitle>Submit Results Batch</DialogTitle>
         </DialogHeader>
-        {sitting && <SubmitResultsBatchForm key={sitting.id} sitting={sitting} actorName={actorName} onDone={() => onOpenChange(false)} />}
+        {sitting && (
+          <SubmitResultsBatchForm key={sitting.id} sitting={sitting} actorId={person.id} actorName={person.name} onDone={() => onOpenChange(false)} />
+        )}
       </DialogContent>
     </Dialog>
   );

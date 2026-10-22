@@ -15,6 +15,7 @@ Updated by Claude at the end of every phase. Read this first in every session.
 | 6 | Approval of Results | Done — `modules/approval-of-results/` (external QP side + internal QCTO side) |
 | 7 | FISA (+ RPL Toolkit if confirmed) | Done — `modules/fisa/` (fully independent process) and `modules/rpl-toolkit/` (built behind a feature flag, developer confirmed go-ahead) |
 | 8 | Hardening, register check-off, new user manual, swap prep | Not started |
+| 1B-i | Named-person identity (Fix 1B step 1 of the visibility-matrix build) | Done — see "Fix 1B-i — Named-person identity" below. Identity only; visibility filtering is 1B-ii. |
 
 ## Items done
 
@@ -187,6 +188,28 @@ Built as two standalone modules, neither nested inside the EISA flow nor a fallb
 - **FISA Registration has no calendar equivalent to publish sittings against** — the register's own wording for stage 4 is "the SDP registers learners for a FISA sitting (a simplified version of EISA registration; reuse shared pieces)", without asking for a FISA Calendar. The SDP enters the sitting date as a plain field on the registration instead.
 - **RPL Toolkit go-ahead**: PM-09 was flagged per the developer's own build-prompt instruction as "not in the change request register yet — STOP and ask before building." Asked and confirmed before this phase began; the developer chose to build it now, behind the feature flag described above, rather than defer it.
 
+### Fix 1B-i — Named-person identity
+
+Built per `09-visibility-matrix.md`'s approved Section 3 (plus the "Approved corrections" appended to that doc). Identity only — no visibility filtering (that is 1B-ii).
+
+- **Named users** → `mock/data/users.ts` (`USERS`, two per internal role, `managerId` models Grace Mokoena → Sipho Ndlovu and Peter Botha → Thandeka Zulu), `mock/data/qpDirectory.ts` (`QP_DIRECTORY`, stable `qpId`), `mock/data/sdpDirectory.ts` (gained `sdpId`, kept `name`/`compliant`).
+- **Unified identity lookup** → `shared/people/types.ts` (`Person`), `shared/people/directory.ts` (`ALL_PEOPLE`, `personsForPortal`, `personsForRole`, `getPerson`, `defaultPersonForRole`, `defaultPersonForPortal`) — combines `USERS`, `QP_DIRECTORY`, `SDP_DIRECTORY` into one lookup keyed by a single `id`.
+- **Role switcher → role-then-person switcher** → `shared/ui/RoleContext.tsx` now tracks `personId` as the actual state; `role` is derived from the active person. Storage is versioned (`assessmentsV2:activePersonId:v2:{portal}`); on first load it migrates the old `assessmentsV2:currentRole:{portal}` value to that role's first seeded person, and falls back to the portal's default person if both are missing/invalid — old localStorage never crashes the app. `shared/ui/RoleSwitcher.tsx` is now two `Select`s (role, then person); `shared/ui/useV2Role.ts` exposes `{ portal, role, setRole, person, personId, setPersonId }`.
+- **"Reset demo data" wired up** → it existed only as an unused function before this fix. `shared/ui/AssessmentsV2Layout.tsx` now has a visible "Reset demo data" button next to the switcher that calls `resetDemoData()` and reloads the page (the identity key shares the `assessmentsV2:` prefix, so it's cleared too and falls back to the default person).
+- **CR-053 "different person," not "different role"** → `shared/workflow/types.ts` (`WorkflowRecordState.submittedById`), `shared/workflow/engine.ts` (`performAction` now takes `actorId`, compares `submittedById` when present, falls back to the old name comparison only for state that predates this fix), `shared/audit/types.ts` (`AuditEntry.actorId`). Every module's `api.ts` threads `actorId` through every `performAction`/`appendAuditEntry` call; every internal/external screen's `const actorName = roleDescriptor(role)?.label ?? role` became `const { person } = useV2Role()` (`person.id` / `person.name`). `shared/audit/AuditTrailView.tsx` and the per-module audit lists now show the person's name, not just their role.
+- **"Allocated to" is a named person, not free text** → FISA Instrument Validation (`modules/fisa/types.ts`/`api.ts`, `allocatedAsdId`) and RPL Toolkit (`modules/rpl-toolkit/types.ts`/`api.ts`, `allocatedAsdId`) both now allocate via a `Select` of `personsForRole('ASD')` instead of a typed name; the api validates the target is actually a seeded ASD.
+- **CR-055 re-route targets a named colleague with the same role** → `modules/site-visits/types.ts` (`SiteVisit.reroutedToId`/`reroutedToName`), `api.ts`'s `performReportAction` (`report-reroute` now requires `targetPersonId`, validates the target holds `REPORT_APPROVER_ROLE`, and names them in the audit entry instead of "another Deputy Director"), `internal/VisitWorkspace.tsx`'s new `RerouteDialog` (person picker + mandatory reason).
+- **"My items" helper** → `shared/people/myItems.ts` (`isMyItem(personId, ...candidateIds)`) — the predicate the 1B-ii "My items / All in my team" switch will call. Not wired into any list yet (that is visibility filtering, out of scope here).
+- **Records link by id, display by name** → every record type across all 9 modules gained `qpId`/`sdpId` alongside the existing `qpName`/`sdpName` (QSA Addendum, Instrument Validation, EISA Calendar sittings/batches, EISA Registration, EISA Confirmation, Site Visits, Results Batches, FISA Validation/Registration, RPL Toolkit). Populated at creation time from the active person or from the upstream record it was derived from (e.g. a registration's `qpId` comes from the EISA Calendar sitting it was started against).
+- **External "who am I" forms replaced with the active identity** → QSA Addendum's "Name of QP", RPL Toolkit's "Name of QP", EISA Registration's SDP picker, and both FISA external forms' SDP field no longer take free text / let you pick a different QP or SDP than yourself — they display the active person's name (read-only) and submit their id. Same change applied to the two remaining "viewing as QP" manual pickers (Site Visits' and Approval of Results' external dashboards), which now filter by `person.qpId` directly. Internal pickers that choose *someone else's* QP/SDP (Site Visits' `NewVisitDialog`, EISA Calendar's `AddEditSittingDialog`) stay as pickers, now sourced from `QP_DIRECTORY`/`SDP_DIRECTORY` by id instead of free text.
+- `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) both pass clean; `git status --short` confirms every change stayed inside `src/features/assessments-v2/` and `docs/assessments-v2/`.
+
+#### Fix 1B-i assumptions made
+
+- **CEO, Domain Director, Chief Director, Sub Domain Admin, Director & Team and Qualifications Development each got a second named person** beyond the one `09-visibility-matrix.md` Section 3 listed, so every internal role has at least two people (needed for "a different person, not just a different role" everywhere, not only on the roles the matrix already doubled up). Added: Nokuthula Dube (Domain Director), Francois Le Roux (Chief Director), Palesa Nkosi (IAC), David Molewa (CEO), Katlego Mahlangu (Sub Domain Admin), Johannes Pretorius (Director & Team), Ayesha Patel (Qualifications Development).
+- **`requiresDifferentActor` falls back to a name comparison when `submittedById` is absent**, rather than treating missing state as "always different" or "always same." This only matters for workflow state created before this fix (there is none seeded — every record starts empty and is created through the UI — so in practice this fallback is dead code today, kept only so old localStorage from a pre-1B-i session degrades instead of behaving unpredictably).
+- **A results batch, EISA sitting/batch, and EISA registration's "created by" identity doesn't get its own `*ById` field** on the few creation paths where no workflow `requiresDifferentActor` check ever reads it (FISA Standard's `qd-submission`, FISA Registration/Validation's first stage) — the workflow engine stamps `submittedById` itself from the first real transition onward, so this only skips an id that nothing would have checked anyway.
+
 ## Swap-time dependents (carry forward before 06-swap-plan.md work begins)
 
 Found during Phase 0 discovery — files outside `src/pages/assessment` that import from it and will need re-pointing or removal when v2 replaces the old domain:
@@ -256,10 +279,15 @@ Found during Phase 0 discovery — files outside `src/pages/assessment` that imp
 - QCTO's real FISA Standards evaluation checklist and RPL Toolkit evaluation checklist (both freshly built in Phase 7, no precedent — see the Phase 7 assumptions above).
 - Whether "allocating to an ASD" (FISA Instrument Validation's PM-11 and RPL Toolkit's Assistant Director step) should become a real assignment once individual ASD logins exist, instead of a free-text name.
 - A CR number for RPL Toolkit Evaluation (PM-09) — needed before `RPL_TOOLKIT_ENABLED` can be relied on past the demo.
+- **CR-025 — should other officials get a read-only status dashboard?** The approved correction to `09-visibility-matrix.md` confirmed the EISA Instrument Validation status dashboard stays ASD-only for now (the ASD is the only internal role on that team), but flagged this as a question for QCTO to answer before Fix 1B-ii builds the real visibility filter.
 
 ## Backend-dependent items (stub only)
 
 CR-001, CR-002, CR-009, CR-010, CR-020, CR-022, CR-037, CR-039 — typed stubs in `mock/integrations/`, no screens.
+
+## Fix 1B — role-visibility matrix implementation
+
+- **2026-10-22** — Fix 1B-i (named-person identity, built from `09-visibility-matrix.md`'s approved Section 3 and the "Approved corrections" appended to that doc). See "Fix 1B-i — Named-person identity" above for the full breakdown. In short: `mock/data/users.ts`/`qpDirectory.ts` (new) and `sdpDirectory.ts` (gained `sdpId`) seed named people; `shared/people/` (new) is the identity lookup; `shared/ui/RoleContext.tsx` tracks a person, not just a role, with versioned/migrated storage; `shared/workflow`/`shared/audit` compare and record actor ids, not just names; every module's `api.ts` and internal/external screens thread `actorId` through every workflow action; FISA/RPL Toolkit allocation and Site Visits re-route target named people; every record type gained `qpId`/`sdpId`; "Reset demo data" got a real button. Identity only — no visibility filtering yet (that is Fix 1B-ii). `npx eslint` and a scoped `tsc -p` check both pass clean; `git status --short` confirmed nothing changed outside `src/features/assessments-v2/` and `docs/assessments-v2/`.
 
 ## Change log
 

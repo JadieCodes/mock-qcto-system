@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DeadlineBadge } from '../components/DeadlineBadge';
@@ -10,23 +9,17 @@ import { competencyRatePercent, submissionDeadlineFor } from '../workflow';
 import { ResultsBatchDetail } from './ResultsBatchDetail';
 import { SubmitResultsBatchDialog } from './SubmitResultsBatchDialog';
 
-// CR-059: the QP submits a results batch within 21 working days of the sitting. No QP login
-// exists in this build, only the role switcher, so "my own" is simulated with a local
-// "viewing as" picker — the same pattern used everywhere else in this domain.
+// CR-059: the QP submits a results batch within 21 working days of the sitting — matched
+// against the acting QP's identity.
 function QpResultsView() {
+  const { person } = useV2Role();
   const { data: awaiting = [] } = useSittingsAwaitingSubmission();
   const { data: batches = [] } = useResultsBatches();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitSittingId, setSubmitSittingId] = useState<string | null>(null);
 
-  const qpNames = useMemo(
-    () => [...new Set([...awaiting.map((a) => a.qpName), ...batches.map((b) => b.qpName)])].filter(Boolean).sort(),
-    [awaiting, batches],
-  );
-  const [viewingAsQp, setViewingAsQp] = useState('');
-
-  const myAwaiting = viewingAsQp ? awaiting.filter((a) => a.qpName === viewingAsQp) : [];
-  const myBatches = viewingAsQp ? batches.filter((b) => b.qpName === viewingAsQp) : [];
+  const myAwaiting = awaiting.filter((a) => a.qpId === person.qpId);
+  const myBatches = batches.filter((b) => b.qpId === person.qpId);
 
   return (
     <div className="space-y-6">
@@ -35,25 +28,7 @@ function QpResultsView() {
         <p className="text-sm text-gray-500 mt-1">Submit your exam results batch within 21 working days of the sitting (CR-059).</p>
       </div>
 
-      <div className="space-y-2 max-w-sm">
-        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Viewing as QP</label>
-        <Select value={viewingAsQp} onValueChange={setViewingAsQp}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select your QP name" />
-          </SelectTrigger>
-          <SelectContent>
-            {qpNames.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {viewingAsQp && (
-        <>
-          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b bg-gray-50/80">
               <h3 className="text-base font-semibold text-gray-900">Awaiting Submission</h3>
             </div>
@@ -134,8 +109,6 @@ function QpResultsView() {
               </div>
             )}
           </div>
-        </>
-      )}
 
       <SubmitResultsBatchDialog sittingId={submitSittingId} onOpenChange={(open) => !open && setSubmitSittingId(null)} />
       <ResultsBatchDetail batchId={selectedId} onClose={() => setSelectedId(null)} />
