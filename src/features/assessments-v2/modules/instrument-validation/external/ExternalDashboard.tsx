@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
@@ -27,39 +29,26 @@ export function ExternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">My EISA Instrument Validations</h2>
-          <p className="text-sm text-gray-500 mt-1">Schedule, upload and track your EISA instrument validations.</p>
-        </div>
-        <Button onClick={() => setIsFormOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Start Validation
-        </Button>
-      </div>
+      <PageHeader
+        title="My EISA Instrument Validations"
+        description="Schedule, upload and track your EISA instrument validations."
+        actions={
+          <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Start Validation
+          </Button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {[
-          { label: 'Scheduling in progress', value: schedulingCount },
-          { label: 'Under ASD validation', value: underValidationCount },
-          { label: 'Validated', value: validatedCount },
-        ].map((card) => (
-          <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatTileGrid className="md:grid-cols-3">
+        <StatTile label="Scheduling in progress" value={schedulingCount} />
+        <StatTile label="Under ASD validation" value={underValidationCount} />
+        <StatTile label="Validated" value={validatedCount} />
+      </StatTileGrid>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">Validations</h3>
-        </div>
+      <SectionCard title="Validations">
         {records.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="font-medium text-gray-500">No validations yet</p>
-            <p className="text-sm text-gray-400 mt-1">Click "Start Validation" above once a QSA Addendum is Approved.</p>
-          </div>
+          <EmptyState title="No validations yet" description='Click "Start Validation" above once a QSA Addendum is Approved.' />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -98,7 +87,7 @@ export function ExternalDashboard() {
             </Table>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       <NewValidationDialog open={isFormOpen} onOpenChange={setIsFormOpen} />
       <ValidationDetail recordId={selectedId} onClose={() => setSelectedId(null)} />

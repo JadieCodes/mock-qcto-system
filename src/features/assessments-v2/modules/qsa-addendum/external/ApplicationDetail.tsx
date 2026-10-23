@@ -1,10 +1,10 @@
 import { type ComponentType, type ReactNode } from 'react';
 import { Award, BookOpen, Calendar, Hash, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
+import { Modal } from '../../../shared/ui/Modal';
 import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
@@ -32,14 +32,14 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
   const { data: application } = useQsaAddendumApplication(applicationId);
 
   return (
-    <Dialog open={!!applicationId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Modal
+      open={!!applicationId}
+      onOpenChange={(open) => !open && onClose()}
+      size="md"
+      title={application?.qualificationTitle ?? ''}
+      footer={<Button variant="outline" onClick={onClose}>Close</Button>}
+    >
         {application && (
-          <>
-            <DialogHeader>
-              <DialogTitle>{application.qualificationTitle}</DialogTitle>
-            </DialogHeader>
-
             <Tabs defaultValue="details">
               <TabsList>
                 <TabsTrigger value="details">Details</TabsTrigger>
@@ -134,13 +134,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                 <QsaAuditTrail applicationId={application.id} />
               </TabsContent>
             </Tabs>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose}>Close</Button>
-            </DialogFooter>
-          </>
         )}
-      </DialogContent>
-    </Dialog>
+    </Modal>
   );
 }

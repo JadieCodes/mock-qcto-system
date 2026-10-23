@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Award, BookOpen, Calendar, Hash, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,6 +14,7 @@ import { LetterView } from '../../../shared/letters/LetterView';
 import { autoEvaluateQsaChecklist } from '../../../mock/integrations/aiValidation';
 import { canActInStage, availableActions } from '../../../shared/workflow/engine';
 import type { WorkflowAction, WorkflowDefinition } from '../../../shared/workflow/types';
+import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FieldError, ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
@@ -578,23 +578,19 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
 
 export function ApplicationWorkspace({ applicationId, onClose }: { applicationId: string | null; onClose: () => void }) {
   return (
-    <Dialog open={!!applicationId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
-        {applicationId && <ApplicationWorkspaceInner key={applicationId} applicationId={applicationId} />}
-      </DialogContent>
-    </Dialog>
+    <Modal open={!!applicationId} onOpenChange={(open) => !open && onClose()} size="lg" title={<WorkspaceTitle applicationId={applicationId} />}>
+      {applicationId && <ApplicationWorkspaceInner key={applicationId} applicationId={applicationId} />}
+    </Modal>
   );
+}
+
+function WorkspaceTitle({ applicationId }: { applicationId: string | null }) {
+  const { data: application } = useQsaAddendumApplication(applicationId);
+  return application?.qualificationTitle ?? '';
 }
 
 function ApplicationWorkspaceInner({ applicationId }: { applicationId: string }) {
   const { data: application } = useQsaAddendumApplication(applicationId);
   if (!application) return null;
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{application.qualificationTitle}</DialogTitle>
-      </DialogHeader>
-      <ApplicationWorkspaceContent application={application} />
-    </>
-  );
+  return <ApplicationWorkspaceContent application={application} />;
 }

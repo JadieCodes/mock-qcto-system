@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import type { Role } from '../../../types';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
@@ -48,41 +50,26 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">QSA Addendum — QSA Evaluation Team</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {isCeo
-              ? 'Applications awaiting your outcome-letter signature only.'
-              : 'Open one to act on it — only the actions your current role may perform are shown.'}
-          </p>
-        </div>
-        {!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
-      </div>
+      <PageHeader
+        title="QSA Addendum — QSA Evaluation Team"
+        description={
+          isCeo
+            ? 'Applications awaiting your outcome-letter signature only.'
+            : 'Open one to act on it — only the actions your current role may perform are shown.'
+        }
+        actions={!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
+      />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: 'With ASD', value: asdCount },
-          { label: 'With Deputy Director', value: ddCount },
-          { label: 'With IAC', value: iacCount },
-          { label: 'Approved', value: approvedCount },
-        ].map((card) => (
-          <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatTileGrid>
+        <StatTile label="With ASD" value={asdCount} />
+        <StatTile label="With Deputy Director" value={ddCount} />
+        <StatTile label="With IAC" value={iacCount} />
+        <StatTile label="Approved" value={approvedCount} />
+      </StatTileGrid>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">{isCeo ? 'Awaiting Your Signature' : 'Applications'}</h3>
-        </div>
+      <SectionCard title={isCeo ? 'Awaiting Your Signature' : 'Applications'}>
         {applications.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="font-medium text-gray-500">No applications yet</p>
-            <p className="text-sm text-gray-400 mt-1">Applications submitted by a QP in the external portal will appear here.</p>
-          </div>
+          <EmptyState title="No applications yet" description="Applications submitted by a QP in the external portal will appear here." />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -112,7 +99,7 @@ export function InternalDashboard() {
             </Table>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       <ApplicationWorkspace applicationId={selectedId} onClose={() => setSelectedId(null)} />
     </div>

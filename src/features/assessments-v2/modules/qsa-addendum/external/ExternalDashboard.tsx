@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { QsaStatusBadge } from '../components/StatusBadge';
@@ -27,39 +29,26 @@ export function ExternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">My QSA Addendum Applications</h2>
-          <p className="text-sm text-gray-500 mt-1">Submit and track your QSA Addendum applications.</p>
-        </div>
-        <Button onClick={() => setIsFormOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />New QSA Addendum Application
-        </Button>
-      </div>
+      <PageHeader
+        title="My QSA Addendum Applications"
+        description="Submit and track your QSA Addendum applications."
+        actions={
+          <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />New QSA Addendum Application
+          </Button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: 'Total Submitted', value: applications.length },
-          { label: 'Under Review', value: underReviewCount },
-          { label: 'Corrections Requested', value: correctionsCount },
-          { label: 'Approved', value: approvedCount },
-        ].map((card) => (
-          <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatTileGrid>
+        <StatTile label="Total Submitted" value={applications.length} />
+        <StatTile label="Under Review" value={underReviewCount} />
+        <StatTile label="Corrections Requested" value={correctionsCount} />
+        <StatTile label="Approved" value={approvedCount} />
+      </StatTileGrid>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">Applications</h3>
-        </div>
+      <SectionCard title="Applications">
         {applications.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="font-medium text-gray-500">No applications yet</p>
-            <p className="text-sm text-gray-400 mt-1 mb-6">Click "New QSA Addendum Application" above to submit your first one.</p>
-          </div>
+          <EmptyState title="No applications yet" description='Click "New QSA Addendum Application" above to submit your first one.' />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -90,7 +79,7 @@ export function ExternalDashboard() {
             </Table>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       <NewApplicationForm open={isFormOpen} onOpenChange={setIsFormOpen} />
       <ApplicationDetail applicationId={selectedId} onClose={() => setSelectedId(null)} />

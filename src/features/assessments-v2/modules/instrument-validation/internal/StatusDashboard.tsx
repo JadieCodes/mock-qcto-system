@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { EmptyState, SectionCard } from '../../../shared/ui/PageSections';
 import { teamLabel } from '../../../config/teams';
 import { listApplications } from '../../qsa-addendum/api';
 import { qsaOverallStatusLabel } from '../../qsa-addendum/workflow';
@@ -93,11 +94,9 @@ export function StatusDashboard() {
         <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
       </div>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+      <SectionCard>
         {filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="font-medium text-gray-500">No records match these filters</p>
-          </div>
+          <EmptyState title="No records match these filters" />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -125,7 +124,7 @@ export function StatusDashboard() {
             </Table>
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }

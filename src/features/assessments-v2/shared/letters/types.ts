@@ -17,5 +17,7 @@ export interface GeneratedLetter {
   recordId: string;
   generatedAt: string;
   data: LetterData;
+  /** Heading shown at the top of the letter, e.g. "Outcome Letter". */
+  title: string;
   body: string;
 }

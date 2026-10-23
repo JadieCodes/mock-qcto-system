@@ -15,6 +15,7 @@ import { listPublishedSittings } from '../eisa-calendar/api';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api';
 import {
+  BOOKING_ROLE,
   DEFAULT_NOTICE_LEAD_TIME_DAYS,
   PLAN_APPROVER_ROLE,
   PLAN_RECOMMENDER_ROLE,
@@ -253,8 +254,17 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
   }
   saveAll(replace(all, updated));
 
+  // Every forward step notifies whoever owns the stage it just moved into — plan-recommend and
+  // plan-approve were already two of these; plan-submit was the missing one, so the Deputy
+  // Director only ever found out a plan was waiting by opening the dashboard themselves.
+  if (params.actionId === 'plan-submit') {
+    addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, title: 'Visit plan awaiting recommendation', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Deputy Director recommendation.` });
+  }
   if (params.actionId === 'plan-recommend') {
     addNotification({ recipientRole: PLAN_APPROVER_ROLE, title: 'Visit plan awaiting approval', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Domain Director approval.` });
+  }
+  if (params.actionId === 'plan-approve') {
+    addNotification({ recipientRole: BOOKING_ROLE, title: 'Visit plan awaiting booking', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Sub Domain Admin booking.` });
   }
   if (nextWorkflow.stageId === 'booked') {
     addNotification({

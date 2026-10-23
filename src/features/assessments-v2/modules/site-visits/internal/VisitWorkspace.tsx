@@ -19,7 +19,7 @@ import { ExecutionForm } from '../components/ExecutionForm';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
-import { REPORT_WORKFLOW } from '../workflow';
+import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
 import type { SiteVisit } from '../types';
 import type { Role } from '../../../types';
@@ -168,6 +168,19 @@ type PlanningDialogAction = { actionId: 'plan-dd-send-back' | 'plan-dd-reject' |
 
 const PLANNING_STAGE_ORDER = ['ad-planning', 'dd-recommend', 'domain-director-approval', 'sda-booking', 'booked'] as const;
 
+// A stage has been "reached" once an audit entry exists for an action that enters it
+// (toStage === stageId, e.g. the Assistant Director's "Submit Plan") OR leaves it
+// (fromStage === stageId, e.g. the Deputy Director's "Recommend to Domain Director"). Checking
+// only the "leaves it" half (as a previous version of this function did) means a stage's own
+// action bar never appears the first time it's entered, because the only audit entry that
+// exists at that point is the one that got it there — the bug this comment is guarding against.
+function stageReached(stageId: string, auditTrail: { action: string }[]): boolean {
+  const labels = new Set(
+    PLANNING_WORKFLOW.actions.filter((a) => a.fromStage === stageId || a.toStage === stageId).map((a) => a.label),
+  );
+  return auditTrail.some((e) => labels.has(e.action));
+}
+
 // Row 32: once a stage has been reached, its box stays visible (read-only once passed) instead
 // of disappearing the moment the record moves on — every later approver can still see the plan
 // and every earlier reviewer's decision. Row 33: every review stage (every stage downstream of
@@ -215,9 +228,9 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
   const currentIdx = PLANNING_STAGE_ORDER.indexOf(stage as (typeof PLANNING_STAGE_ORDER)[number]);
   // "Reached" uses the audit trail, not the current stage index, so a stage that has already
   // been acted on stays visible even after a later stage sends it back behind that point.
-  const ddReached = auditTrail.some((e) => e.action === 'Recommend to Domain Director' || e.action === 'Send back to Assistant Director');
-  const domainDirectorReached = auditTrail.some((e) => e.action === 'Approve plan' || e.action === 'Send back to Deputy Director');
-  const sdaReached = auditTrail.some((e) => e.action === 'Book visit' || e.action === 'Send back to Domain Director');
+  const ddReached = stageReached('dd-recommend', auditTrail);
+  const domainDirectorReached = stageReached('domain-director-approval', auditTrail);
+  const sdaReached = stageReached('sda-booking', auditTrail);
 
   const dialogCopy: Record<Exclude<PlanningDialogAction, null>['actionId'], { title: string; confirmLabel: string; destructive?: boolean }> = {
     'plan-dd-send-back': { title: 'Send back to Assistant Director', confirmLabel: 'Send back' },

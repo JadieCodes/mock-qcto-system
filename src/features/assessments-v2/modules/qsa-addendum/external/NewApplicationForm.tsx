@@ -3,12 +3,12 @@ import { useForm } from 'react-hook-form';
 import { AlertCircle, CheckCircle, Upload, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { checkSaqaRegistration, type SaqaRegistryDocument } from '../../../mock/api/saqaRegistry';
+import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
@@ -130,14 +130,23 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) resetAll(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>New QSA Addendum Application</DialogTitle>
-          <DialogDescription>Fill in the details below, run the SAQA gate check, then submit.</DialogDescription>
-        </DialogHeader>
-
-        <form className="space-y-4 py-2" onSubmit={handleSubmit(onSubmit)}>
+    <Modal
+      open={open}
+      onOpenChange={(next) => { onOpenChange(next); if (!next) resetAll(); }}
+      size="md"
+      title="New QSA Addendum Application"
+      description="Fill in the details below, run the SAQA gate check, then submit."
+      onSubmit={handleSubmit(onSubmit)}
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" disabled={!nqfLevel || !gateReady || createApplication.isPending} className="gap-2">
+            <Upload className="h-4 w-4" />Submit Application
+          </Button>
+        </>
+      }
+    >
+        <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Name of QP</Label>
@@ -262,15 +271,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
           </div>
 
           <ValidationSummary issues={submitIssues} title="Before you can submit:" />
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!nqfLevel || !gateReady || createApplication.isPending} className="gap-2">
-              <Upload className="h-4 w-4" />Submit Application
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </Modal>
   );
 }

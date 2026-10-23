@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Award, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
+import { Modal } from '../../../shared/ui/Modal';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
@@ -203,23 +203,19 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
 
 export function ValidationWorkspace({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   return (
-    <Dialog open={!!recordId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
-        {recordId && <ValidationWorkspaceInner key={recordId} recordId={recordId} />}
-      </DialogContent>
-    </Dialog>
+    <Modal open={!!recordId} onOpenChange={(open) => !open && onClose()} size="lg" title={<ValidationWorkspaceTitle recordId={recordId} />}>
+      {recordId && <ValidationWorkspaceInner key={recordId} recordId={recordId} />}
+    </Modal>
   );
+}
+
+function ValidationWorkspaceTitle({ recordId }: { recordId: string | null }) {
+  const { data: record } = useInstrumentValidationRecord(recordId);
+  return record?.qualificationTitle ?? '';
 }
 
 function ValidationWorkspaceInner({ recordId }: { recordId: string }) {
   const { data: record } = useInstrumentValidationRecord(recordId);
   if (!record) return null;
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{record.qualificationTitle}</DialogTitle>
-      </DialogHeader>
-      <ValidationWorkspaceContent record={record} />
-    </>
-  );
+  return <ValidationWorkspaceContent record={record} />;
 }

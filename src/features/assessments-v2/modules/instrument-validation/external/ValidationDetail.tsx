@@ -1,13 +1,13 @@
 import { useRef } from 'react';
 import { Award, BookOpen, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { InstrumentValidationAuditTrail } from '../components/AuditTrail';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
 import { useInstrumentValidationRecord, useUploadInstrument, useValidationAction } from '../hooks';
+import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import type { InstrumentValidationRecord } from '../types';
 
@@ -157,23 +157,19 @@ function ValidationDetailContent({ record }: { record: InstrumentValidationRecor
 
 export function ValidationDetail({ recordId, onClose }: { recordId: string | null; onClose: () => void }) {
   return (
-    <Dialog open={!!recordId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
-        {recordId && <ValidationDetailInner key={recordId} recordId={recordId} />}
-      </DialogContent>
-    </Dialog>
+    <Modal open={!!recordId} onOpenChange={(open) => !open && onClose()} size="md" title={<ValidationDetailTitle recordId={recordId} />}>
+      {recordId && <ValidationDetailInner key={recordId} recordId={recordId} />}
+    </Modal>
   );
+}
+
+function ValidationDetailTitle({ recordId }: { recordId: string | null }) {
+  const { data: record } = useInstrumentValidationRecord(recordId);
+  return record?.qualificationTitle ?? '';
 }
 
 function ValidationDetailInner({ recordId }: { recordId: string }) {
   const { data: record } = useInstrumentValidationRecord(recordId);
   if (!record) return null;
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{record.qualificationTitle}</DialogTitle>
-      </DialogHeader>
-      <ValidationDetailContent record={record} />
-    </>
-  );
+  return <ValidationDetailContent record={record} />;
 }

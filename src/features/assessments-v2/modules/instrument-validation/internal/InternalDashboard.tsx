@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Role } from '../../../types';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
@@ -45,16 +47,11 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">EISA Instrument Validation — Instrument Validation Team</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            An ASD checks the QP's assessment instrument against the checklist before an EISA sitting — a separate section from EISA
-            Registration; SDPs cannot see this section.
-          </p>
-        </div>
-        <ScopeToggle scope={scope} onChange={setScope} />
-      </div>
+      <PageHeader
+        title="EISA Instrument Validation — Instrument Validation Team"
+        description="An ASD checks the QP's assessment instrument against the checklist before an EISA sitting — a separate section from EISA Registration; SDPs cannot see this section."
+        actions={<ScopeToggle scope={scope} onChange={setScope} />}
+      />
 
       <Tabs defaultValue="queue">
         <TabsList>
@@ -63,28 +60,15 @@ export function InternalDashboard() {
         </TabsList>
 
         <TabsContent value="queue" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            {[
-              { label: 'Scheduling in progress', value: schedulingCount },
-              { label: 'With ASD', value: withAsdCount },
-              { label: 'Validated', value: validatedCount },
-            ].map((card) => (
-              <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-              </div>
-            ))}
-          </div>
+          <StatTileGrid className="md:grid-cols-3">
+            <StatTile label="Scheduling in progress" value={schedulingCount} />
+            <StatTile label="With ASD" value={withAsdCount} />
+            <StatTile label="Validated" value={validatedCount} />
+          </StatTileGrid>
 
-          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b bg-gray-50/80">
-              <h3 className="text-base font-semibold text-gray-900">Validations</h3>
-            </div>
+          <SectionCard title="Validations">
             {records.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="font-medium text-gray-500">No validations yet</p>
-                <p className="text-sm text-gray-400 mt-1">Validations started by a QP in the external portal will appear here.</p>
-              </div>
+              <EmptyState title="No validations yet" description="Validations started by a QP in the external portal will appear here." />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -123,7 +107,7 @@ export function InternalDashboard() {
                 </Table>
               </div>
             )}
-          </div>
+          </SectionCard>
         </TabsContent>
 
         <TabsContent value="status-dashboard">
