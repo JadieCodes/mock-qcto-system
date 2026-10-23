@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,6 +8,7 @@ import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { availableActions, canActInStage } from '../../../shared/workflow/engine';
 import type { WorkflowAction } from '../../../shared/workflow/types';
+import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
@@ -391,22 +391,14 @@ function ResultsBatchWorkspaceContent({ batch }: { batch: ResultsBatch }) {
 export function ResultsBatchWorkspace({ batchId, onClose }: { batchId: string | null; onClose: () => void }) {
   const { data: batch } = useResultsBatch(batchId);
   return (
-    <Dialog open={!!batchId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
-        {batch && (
-          <>
-            <DialogHeader>
-              <DialogTitle>{batch.qualificationTitle}</DialogTitle>
-            </DialogHeader>
-            <ResultsBatchWorkspaceContent batch={batch} />
-          </>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={!!batchId}
+      onOpenChange={(open) => !open && onClose()}
+      size="lg"
+      title={batch?.qualificationTitle ?? ''}
+      footer={<Button variant="outline" onClick={onClose}>Close</Button>}
+    >
+      {batch && <ResultsBatchWorkspaceContent batch={batch} />}
+    </Modal>
   );
 }

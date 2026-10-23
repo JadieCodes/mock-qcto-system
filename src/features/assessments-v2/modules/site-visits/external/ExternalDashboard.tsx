@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterByVisibilityScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
@@ -20,22 +22,14 @@ function QpVisitsView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Site Visits &amp; Monitoring</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          View your own visits and their status — scheduling and execution are managed by QCTO. An RPL/ARPL monitoring item here comes
-          automatically from your registration, not from EISA Confirmation.
-        </p>
-      </div>
+      <PageHeader
+        title="Site Visits & Monitoring"
+        description="View your own visits and their status — scheduling and execution are managed by QCTO. An RPL/ARPL monitoring item here comes automatically from your registration, not from EISA Confirmation."
+      />
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">My Visits — {person.name}</h3>
-        </div>
+      <SectionCard title={`My Visits — ${person.name}`}>
         {myVisits.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-sm text-gray-400">No visits for "{person.name}" yet.</p>
-          </div>
+          <EmptyState title={`No visits for "${person.name}" yet.`} />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -63,7 +57,7 @@ function QpVisitsView() {
             </Table>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       <VisitDetail visitId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
@@ -75,13 +69,13 @@ function QpVisitsView() {
 function NotApplicableView() {
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Site Visits &amp; Monitoring</h2>
-      </div>
-      <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-        <p className="font-semibold text-gray-900">Not applicable for this role</p>
-        <p className="text-sm text-gray-500 mt-1">Site Visits &amp; Monitoring is scheduled and run by QCTO officials. Only QPs can view their own visits here.</p>
-      </div>
+      <PageHeader title="Site Visits & Monitoring" />
+      <SectionCard>
+        <EmptyState
+          title="Not applicable for this role"
+          description="Site Visits & Monitoring is scheduled and run by QCTO officials. Only QPs can view their own visits here."
+        />
+      </SectionCard>
     </div>
   );
 }

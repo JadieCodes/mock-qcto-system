@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
+import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS } from '../config';
 import { useCreateVisit, useSchedulableSittings, useSdpsForSitting } from '../hooks';
@@ -86,12 +86,22 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) reset(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Plan a New Site Visit</DialogTitle>
-        </DialogHeader>
-
+    <Modal
+      open={open}
+      onOpenChange={(next) => { onOpenChange(next); if (!next) reset(); }}
+      size="md"
+      title="Plan a New Site Visit"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={!canSubmit || createVisit.isPending} onClick={onSubmit}>
+            Create Visit Plan
+          </Button>
+        </>
+      }
+    >
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Visit Type *</Label>
@@ -206,16 +216,6 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             )}
           </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button disabled={!canSubmit || createVisit.isPending} onClick={onSubmit}>
-            Create Visit Plan
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </Modal>
   );
 }

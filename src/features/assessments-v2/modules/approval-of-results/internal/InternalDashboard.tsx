@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import type { Role } from '../../../types';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
@@ -23,11 +25,7 @@ const PENDING_STAGES = new Set(['ad-review', 'dd-review', 'director-review', 'ch
 
 function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect: (id: string) => void }) {
   if (batches.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <p className="font-medium text-gray-500">No results batches</p>
-      </div>
-    );
+    return <EmptyState title="No results batches" />;
   }
   return (
     <div className="overflow-x-auto">
@@ -78,45 +76,28 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Approval of Results</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            QP results-batch submissions, checked through Assistant Director → Deputy Director → Director → Chief Director (CR-059).
-          </p>
-        </div>
-        <ScopeToggle scope={scope} onChange={setScope} />
-      </div>
+      <PageHeader
+        title="Approval of Results"
+        description="QP results-batch submissions, checked through Assistant Director → Deputy Director → Director → Chief Director (CR-059)."
+        actions={<ScopeToggle scope={scope} onChange={setScope} />}
+      />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: 'Total Batches', value: batches.length },
-          { label: 'Pending Review', value: pending.length },
-          { label: 'Approved', value: approved.length },
-          { label: 'Declined', value: declined.length },
-        ].map((card) => (
-          <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatTileGrid>
+        <StatTile label="Total Batches" value={batches.length} />
+        <StatTile label="Pending Review" value={pending.length} />
+        <StatTile label="Approved" value={approved.length} />
+        <StatTile label="Declined" value={declined.length} />
+      </StatTileGrid>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">All Results Batches</h3>
-        </div>
+      <SectionCard title="All Results Batches">
         <BatchesTable batches={batches} onSelect={setSelectedId} />
-      </div>
+      </SectionCard>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">Recent Activity</h3>
-        </div>
+      <SectionCard title="Recent Activity">
         <div className="p-4 max-h-80 overflow-y-auto">
           <AuditTrailView recordTypes={['results-batch']} />
         </div>
-      </div>
+      </SectionCard>
 
       <ResultsBatchWorkspace batchId={selectedId} onClose={() => setSelectedId(null)} />
     </div>

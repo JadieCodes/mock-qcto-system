@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2, Repeat2, Send, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,6 +10,7 @@ import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { personsForRole } from '../../../shared/people/directory';
+import { Modal } from '../../../shared/ui/Modal';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
@@ -53,34 +53,13 @@ function RerouteDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Re-route to a named colleague</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Re-route to *</Label>
-            <Select value={targetPersonId} onValueChange={setTargetPersonId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a colleague" />
-              </SelectTrigger>
-              <SelectContent>
-                {candidates.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {candidates.length === 0 && <p className="text-xs text-gray-400">No other named colleague with this role exists yet.</p>}
-          </div>
-          <div className="space-y-2">
-            <Label>Reason *</Label>
-            <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain why..." />
-          </div>
-        </div>
-        <DialogFooter>
+    <Modal
+      open={open}
+      onOpenChange={(next) => (next ? onOpenChange(true) : close())}
+      size="sm"
+      title="Re-route to a named colleague"
+      footer={
+        <>
           <Button variant="outline" onClick={close}>
             Cancel
           </Button>
@@ -95,9 +74,32 @@ function RerouteDialog({
           >
             Re-route
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Re-route to *</Label>
+          <Select value={targetPersonId} onValueChange={setTargetPersonId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a colleague" />
+            </SelectTrigger>
+            <SelectContent>
+              {candidates.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {candidates.length === 0 && <p className="text-xs text-gray-400">No other named colleague with this role exists yet.</p>}
+        </div>
+        <div className="space-y-2">
+          <Label>Reason *</Label>
+          <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain why..." />
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -519,24 +521,14 @@ function VisitWorkspaceContent({ visit }: { visit: SiteVisit }) {
 export function VisitWorkspace({ visitId, onClose }: { visitId: string | null; onClose: () => void }) {
   const { data: visit } = useSiteVisit(visitId);
   return (
-    <Dialog open={!!visitId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
-        {visit && (
-          <>
-            <DialogHeader>
-              <DialogTitle>
-                {VISIT_TYPE_LABELS[visit.visitType]} — {visit.qualificationTitle}
-              </DialogTitle>
-            </DialogHeader>
-            <VisitWorkspaceContent visit={visit} />
-          </>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={!!visitId}
+      onOpenChange={(open) => !open && onClose()}
+      size="lg"
+      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visit.qualificationTitle}` : ''}
+      footer={<Button variant="outline" onClick={onClose}>Close</Button>}
+    >
+      {visit && <VisitWorkspaceContent visit={visit} />}
+    </Modal>
   );
 }

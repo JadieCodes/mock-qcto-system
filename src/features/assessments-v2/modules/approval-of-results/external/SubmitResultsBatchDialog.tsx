@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
@@ -58,10 +58,6 @@ function SubmitResultsBatchForm({
 
   return (
     <>
-      <DialogDescription>
-        {sitting.qualificationTitle} — sitting {sitting.sittingDate}
-      </DialogDescription>
-
       <div className="space-y-4">
         <DeadlineBadge deadline={submissionDeadlineFor(sitting.sittingDate)} />
 
@@ -114,14 +110,14 @@ function SubmitResultsBatchForm({
         </div>
       </div>
 
-      <DialogFooter>
+      <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
         <Button variant="outline" onClick={onDone}>
           Cancel
         </Button>
         <Button disabled={submitBatch.isPending || !allAnswered} onClick={onSubmit}>
           Submit
         </Button>
-      </DialogFooter>
+      </div>
     </>
   );
 }
@@ -135,15 +131,16 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
   const sitting = awaiting.find((s) => s.sittingId === sittingId);
 
   return (
-    <Dialog open={!!sittingId} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Submit Results Batch</DialogTitle>
-        </DialogHeader>
-        {sitting && (
-          <SubmitResultsBatchForm key={sitting.id} sitting={sitting} actorId={person.id} actorName={person.name} onDone={() => onOpenChange(false)} />
-        )}
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={!!sittingId}
+      onOpenChange={onOpenChange}
+      size="md"
+      title="Submit Results Batch"
+      description={sitting ? `${sitting.qualificationTitle} — sitting ${sitting.sittingDate}` : undefined}
+    >
+      {sitting && (
+        <SubmitResultsBatchForm key={sitting.id} sitting={sitting} actorId={person.id} actorName={person.name} onDone={() => onOpenChange(false)} />
+      )}
+    </Modal>
   );
 }

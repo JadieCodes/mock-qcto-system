@@ -6,6 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { LABELS } from '../../../config/labels';
 import type { Role } from '../../../types';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
@@ -39,11 +41,7 @@ const PLANNING_PENDING_STAGES = new Set(['ad-planning', 'dd-recommend', 'domain-
 
 function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id: string) => void }) {
   if (visits.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <p className="font-medium text-gray-500">No visits</p>
-      </div>
-    );
+    return <EmptyState title="No visits" />;
   }
   return (
     <div className="overflow-x-auto">
@@ -95,22 +93,19 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Site Visits &amp; Monitoring</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            A standalone hub (CR-044) for EISA Readiness, Marking &amp; Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits — an
-            RPL/ARPL monitoring item is created automatically from a registration, never from EISA Confirmation.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <ScopeToggle scope={scope} onChange={setScope} />
-          <Button onClick={() => setIsFormOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Plan a New Visit
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Site Visits & Monitoring"
+        description="A standalone hub (CR-044) for EISA Readiness, Marking & Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits — an RPL/ARPL monitoring item is created automatically from a registration, never from EISA Confirmation."
+        actions={
+          <>
+            <ScopeToggle scope={scope} onChange={setScope} />
+            <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Plan a New Visit
+            </Button>
+          </>
+        }
+      />
 
       <Tabs defaultValue="dashboard">
         <TabsList>
@@ -120,36 +115,23 @@ export function InternalDashboard() {
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-6 pt-4">
-          <div className="grid gap-4 md:grid-cols-4">
-            {[
-              { label: 'Total Visits', value: visits.length },
-              { label: 'Pending Planning', value: pendingPlanning.length },
-              { label: 'Awaiting Report', value: awaitingReport.length },
-              { label: LABELS.reportsReceived, value: reportsReceived.length },
-            ].map((card) => (
-              <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b bg-gray-50/80">
-              <h3 className="text-base font-semibold text-gray-900">Recent Activity</h3>
-            </div>
+          <StatTileGrid>
+            <StatTile label="Total Visits" value={visits.length} />
+            <StatTile label="Pending Planning" value={pendingPlanning.length} />
+            <StatTile label="Awaiting Report" value={awaitingReport.length} />
+            <StatTile label={LABELS.reportsReceived} value={reportsReceived.length} />
+          </StatTileGrid>
+          <SectionCard title="Recent Activity">
             <div className="p-4 max-h-80 overflow-y-auto">
               <AuditTrailView recordTypes={['site-visit-planning', 'site-visit-report']} />
             </div>
-          </div>
+          </SectionCard>
         </TabsContent>
 
         <TabsContent value="scheduling" className="pt-4">
-          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b bg-gray-50/80">
-              <h3 className="text-base font-semibold text-gray-900">Scheduling — visits still in the planning chain</h3>
-            </div>
+          <SectionCard title="Scheduling — visits still in the planning chain">
             <VisitsTable visits={pendingPlanning} onSelect={setSelectedId} />
-          </div>
+          </SectionCard>
         </TabsContent>
 
         <TabsContent value="visits" className="pt-4">
