@@ -11,9 +11,9 @@ export function StatTileGrid({ children, className }: { children: ReactNode; cla
 
 export function StatTile({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+    <div className="rounded-2xl border bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+      <p className="text-3xl font-bold tracking-tight text-gray-900">{value}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mt-1">{label}</p>
     </div>
   );
 }
@@ -23,7 +23,7 @@ export function SectionCard({ title, children, className }: { title?: ReactNode;
     <div className={cn('rounded-2xl border bg-white shadow-sm overflow-hidden', className)}>
       {title && (
         <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-base font-semibold tracking-tight text-gray-900">{title}</h3>
         </div>
       )}
       {children}
@@ -33,8 +33,8 @@ export function SectionCard({ title, children, className }: { title?: ReactNode;
 
 export function EmptyState({ title, description }: { title: ReactNode; description?: ReactNode }) {
   return (
-    <div className="text-center py-16">
-      <p className="font-medium text-gray-500">{title}</p>
+    <div className="text-center py-14">
+      <p className="font-medium text-gray-600">{title}</p>
       {description && <p className="text-sm text-gray-400 mt-1">{description}</p>}
     </div>
   );

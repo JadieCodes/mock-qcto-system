@@ -5,7 +5,7 @@ export function RoleBlocked() {
   return (
     <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
       <p className="font-semibold text-gray-900">You do not have access</p>
-      <p className="text-sm text-gray-500 mt-1">
+      <p className="text-sm text-gray-400 mt-1">
         This section isn't part of your current role's access. Switch roles using the switcher above if you reached this by a
         direct link.
       </p>

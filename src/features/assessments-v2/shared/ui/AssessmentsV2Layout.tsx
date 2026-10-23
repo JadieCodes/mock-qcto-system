@@ -40,13 +40,33 @@ const NAV_ICONS: Record<string, LucideIcon> = {
 };
 
 const NAV_LINK_CLASSES =
-  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors justify-center md:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  'flex items-center gap-3 rounded-lg border-l-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors justify-center md:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+
+// Cosmetic only — gives each portal its own accent so the two feel distinct at a glance.
+// Internal keeps the app's existing blue; External gets teal, a colour not already used by
+// any status-badge tone in this domain (amber/blue/emerald/red/indigo/purple), so it never
+// reads as a status.
+const PORTAL_ACCENT = {
+  internal: {
+    badge: 'bg-blue-50 text-blue-700',
+    headerRule: 'border-b-2 border-blue-500',
+    navHeaderRule: 'border-b border-blue-100',
+    active: 'border-l-blue-600 bg-blue-50 text-blue-700',
+  },
+  external: {
+    badge: 'bg-teal-50 text-teal-700',
+    headerRule: 'border-b-2 border-teal-500',
+    navHeaderRule: 'border-b border-teal-100',
+    active: 'border-l-teal-600 bg-teal-50 text-teal-700',
+  },
+} as const;
 
 export function AssessmentsV2Layout({ portal, children }: { portal: Portal; children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useV2Role();
   const basePath = `/assessments-v2/${portal}`;
+  const accent = PORTAL_ACCENT[portal];
   // 09-visibility-matrix.md Tables A/B, enforced in one place: shared/visibility/moduleAccess.ts.
   const navItems = navForPortal(portal).filter((item) => isModuleVisible(portal, item.path, role));
 
@@ -66,7 +86,7 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <DemoBanner />
-      <header className="border-b bg-white px-4 py-3 sm:px-6">
+      <header className={cn('bg-white px-4 py-3 sm:px-6', accent.headerRule)}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-gray-900">QCTO Assessments (v2)</p>
@@ -82,8 +102,8 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
       </header>
       <div className="flex flex-1">
         <aside className="flex w-16 shrink-0 flex-col border-r bg-white md:w-64">
-          <div className="flex items-center gap-3 border-b px-3 py-4 md:px-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xs font-bold text-blue-700">
+          <div className={cn('flex items-center gap-3 px-3 py-4 md:px-4', accent.navHeaderRule)}>
+            <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold', accent.badge)}>
               {portal === 'internal' ? 'IN' : 'EX'}
             </div>
             <div className="hidden md:block">
@@ -93,7 +113,7 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
               <p className="text-xs text-gray-500">QCTO Assessments</p>
             </div>
           </div>
-          <nav aria-label="Primary" className="flex-1 space-y-1 overflow-y-auto px-2 py-3 md:px-3">
+          <nav aria-label="Primary" className="flex-1 space-y-1.5 overflow-y-auto px-2 py-4 md:px-3">
             {navItems.map((item) => {
               const to = `${basePath}/${item.path}`;
               const active = location.pathname === to;
@@ -104,7 +124,7 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
                   to={to}
                   title={item.label}
                   aria-current={active ? 'page' : undefined}
-                  className={cn(NAV_LINK_CLASSES, active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100')}
+                  className={cn(NAV_LINK_CLASSES, active ? accent.active : 'text-gray-600 hover:bg-gray-100')}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="hidden truncate md:inline">{item.label}</span>

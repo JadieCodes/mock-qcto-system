@@ -31,12 +31,17 @@ interface ModalProps {
 // of the dialog touching the screen edges.
 export function Modal({ open, onOpenChange, size = 'md', title, description, footer, children, onSubmit, bodyClassName }: ModalProps) {
   const body = <div className={cn('flex-1 overflow-y-auto px-6 py-4', bodyClassName)}>{children}</div>;
-  const footerNode = footer && <DialogFooter className="shrink-0 border-t px-6 py-4">{footer}</DialogFooter>;
+  const footerNode = footer && <DialogFooter className="shrink-0 border-t bg-gray-50/60 px-6 py-4">{footer}</DialogFooter>;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn('flex max-h-[85vh] w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:w-full', MAX_WIDTH[size])}>
-        <DialogHeader className="shrink-0 border-b px-6 py-5">
+      <DialogContent
+        className={cn(
+          'flex max-h-[85vh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 shadow-xl sm:w-full',
+          MAX_WIDTH[size],
+        )}
+      >
+        <DialogHeader className="shrink-0 border-b bg-gray-50/60 px-6 py-5">
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
