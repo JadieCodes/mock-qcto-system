@@ -442,12 +442,14 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
         </div>
       )}
 
-      {/* Row 37: single, role-gated action bar — gated through shared/workflow's
-          canActInStage (REPORT_WORKFLOW now actually allows the Deputy Director to act from
-          'approved') rather than a bare role comparison, and scoped to Post-EISA Monitoring
-          only, since every other visit type's report workflow ends at "Approved" with no
-          outcome-sharing step (CR-058). */}
-      {stage === 'approved' && visit.visitType === 'post-eisa-monitoring' && canActInStage(REPORT_WORKFLOW, stage, role) && (
+      {/* Row 37 (Fix 4 Part 2 correction): single, role-gated action bar for every visit type —
+          gated through shared/workflow's canActInStage (REPORT_WORKFLOW allows the Deputy
+          Director to act from 'approved') rather than a bare role comparison. This used to be
+          scoped to visit.visitType === 'post-eisa-monitoring' only, which hid the button for
+          Marking & Moderation, EISA Readiness and RPL/ARPL Monitoring visits (CR-058 only ever
+          meant "Post-EISA Monitoring gets extra recipients", not "only Post-EISA Monitoring
+          gets a Share Visit Outcome button" — see progress.md). */}
+      {stage === 'approved' && canActInStage(REPORT_WORKFLOW, stage, role) && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'share-visit-outcome', actorRole: role, actorId, actorName })}>
             {SHARE_VISIT_OUTCOME_LABEL}

@@ -18,10 +18,18 @@ function myItemIds(app: RplToolkitApplication): (string | null | undefined)[] {
 
 // A brand-new submission nobody has personally touched yet still belongs under "My items" for
 // whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
-// Once allocated to a specific ASD, it belongs to that person only.
+// Once allocated to a specific ASD, it belongs to that person only — but ONLY while the record
+// is actually at the ASD's own stage. The allocatedAsdId exclusivity must not leak into later
+// stages (dd-review, director-team-review, iac-review): those roles were never the allocated
+// ASD, so checking `allocatedAsdId !== personId` for them unconditionally returned false for
+// every Deputy Director/Director & Team/IAC person, hiding the record from their "My items"
+// list entirely once an ASD had been allocated (the root cause of the DD-can't-see-it bug —
+// same scoping mistake site-visits' isUnassignedActionable already avoids for reroutedToId).
 function isUnassignedActionable(app: RplToolkitApplication, role: Role, personId: string): boolean {
   if (!canActInStage(RPL_EVAL_WORKFLOW, app.evalState.stageId, role)) return false;
-  if (app.allocatedAsdId && app.allocatedAsdId !== personId) return false;
+  if (app.evalState.stageId === 'asd-evaluation') {
+    return !app.allocatedAsdId || app.allocatedAsdId === personId;
+  }
   return true;
 }
 

@@ -185,13 +185,27 @@ export async function performRplEvaluationAction(params: EvalActionParams): Prom
       title: 'Corrections requested',
       body: `Corrections were requested on "${app.toolkitTitle}": ${params.note ?? ''}`,
     });
-  }
-  if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
+  } else if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
     addNotification({
       recipientRole: 'QP',
       title: 'RPL Toolkit decision reached',
       body: `The IAC has reached a decision on "${app.toolkitTitle}". The outcome letter is being prepared.`,
     });
+  } else if (params.actionId !== 'rpl-allocate') {
+    // Every other handoff (ASD -> DD, DD -> Director & Team, Director & Team -> IAC, and every
+    // send-back to the ASD) notifies whoever can act next, derived from the workflow definition
+    // itself — same generic pattern as FISA Standards' performStandardAction. This was missing
+    // entirely before: the chain only ever notified the allocated ASD and the QP, so nobody
+    // downstream (DD, Director & Team, IAC) was told a record had reached them.
+    const nextStage = RPL_EVAL_WORKFLOW.stages.find((s) => s.id === nextState.stageId);
+    const action = RPL_EVAL_WORKFLOW.actions.find((a) => a.id === params.actionId);
+    const title = action?.kind === 'send-back' ? 'RPL Toolkit sent back for clarification' : `RPL Toolkit ready: ${nextStage?.label ?? nextState.stageId}`;
+    const body = params.note
+      ? `"${app.toolkitTitle}": ${params.note}`
+      : `"${app.toolkitTitle}" is now at ${nextStage?.label ?? nextState.stageId}.`;
+    if (nextStage?.allowedRoles[0]) {
+      addNotification({ recipientRole: nextStage.allowedRoles[0], title, body });
+    }
   }
 
   saveAll(replace(all, updated));

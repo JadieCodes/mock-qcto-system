@@ -57,8 +57,16 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
   const moderationEditable = role === 'Director & Team' && application.evalState.stageId === 'director-team-review';
   const moderationComplete = isChecklistComplete(application.moderationChecklist, true);
   const iacNoteEditable = role === 'IAC' && application.evalState.stageId === 'iac-review';
-  const showModerationBox = application.evalState.stageId === 'director-team-review';
-  const showIacBox = application.evalState.stageId === 'iac-review';
+  // Once a box's stage is reached, it stays visible read-only to every later-stage viewer (the
+  // IAC needs to see the moderation checklist it's endorsing; anyone reviewing a decided record
+  // still needs to see the IAC's note) — same rule Fix 2A applied to the QSA Addendum's DD/IAC
+  // boxes. Gating on the exact current stage only (as this was before) hid the moderation
+  // checklist from the IAC the moment it reached iac-review, and hid the IAC's endorsement note
+  // entirely once the record was approved/declined.
+  const moderationTouched = application.moderationChecklist.some((section) => section.items.some((item) => item.answer !== null));
+  const iacTouched = !!application.iacEndorsementNote.trim();
+  const showModerationBox = application.evalState.stageId === 'director-team-review' || moderationTouched;
+  const showIacBox = application.evalState.stageId === 'iac-review' || decided || iacTouched;
   const { data: linkedToolkit } = useRplToolkitApplication(application.updatesToolkitId);
 
   return (

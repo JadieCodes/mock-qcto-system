@@ -310,12 +310,6 @@ export async function performReportAction(params: ReportActionParams): Promise<S
       throw new Error('Complete "Completed By" and "Completion Date" before submitting.');
     }
   }
-  // CR-058: the outcome-sharing step is specific to Post-EISA Monitoring — every other visit
-  // type's workflow ends at "Approved".
-  if (params.actionId === 'share-visit-outcome' && visit.visitType !== 'post-eisa-monitoring') {
-    throw new Error('Only a Post-EISA Monitoring visit has a "Share Visit Outcome" step.');
-  }
-
   // CR-055: re-routing is logged as an audit note only — it deliberately does NOT go through
   // the generic workflow engine. That engine always stamps the acting role's name onto
   // `submittedBy` on every transition; since every Deputy Director shares the same role label
@@ -388,20 +382,26 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report rejected', body: params.note ?? '' });
   }
   if (params.actionId === 'share-visit-outcome') {
-    // PM-07: QA and Accreditation have no role in this build's Role union to notify directly —
-    // simulated as an audit entry alongside the real in-app notifications to QP and SDP.
-    addNotification({ recipientRole: 'QP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visit.qualificationTitle}" is ready to review.` });
-    if (visit.sdpName) {
-      addNotification({ recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visit.qualificationTitle}" (${visit.sdpName}) has been shared.` });
+    // Fix 4 Part 2 correction (G-23/G-26): every visit type shares the outcome with the QP
+    // named on the visit, not only Post-EISA Monitoring. PM-07's extra QA/Accreditation/SDP
+    // hand-off stays specific to Post-EISA Monitoring — the register only names those extra
+    // recipients for that visit type.
+    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `The outcome for "${visit.qualificationTitle}" (${visit.qpName}) is ready to review.` });
+    if (visit.visitType === 'post-eisa-monitoring') {
+      // PM-07: QA and Accreditation have no role in this build's Role union to notify directly —
+      // simulated as an audit entry alongside the real in-app notifications to QP and SDP.
+      if (visit.sdpName) {
+        addNotification({ recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visit.qualificationTitle}" (${visit.sdpName}) has been shared.` });
+      }
+      appendAuditEntry({
+        recordType: 'site-visit-report',
+        recordId: visit.id,
+        actorRole: params.actorRole,
+        actorId: params.actorId,
+        actorName: params.actorName,
+        action: 'Shared the PEM report with Quality Assurance and Accreditation (simulated — no screen in either domain yet)',
+      });
     }
-    appendAuditEntry({
-      recordType: 'site-visit-report',
-      recordId: visit.id,
-      actorRole: params.actorRole,
-      actorId: params.actorId,
-      actorName: params.actorName,
-      action: 'Shared the PEM report with Quality Assurance and Accreditation (simulated — no screen in either domain yet)',
-    });
   }
   if (params.actionId === 'qp-acknowledge-outcome') {
     addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'QP acknowledged the visit outcome', body: `"${visit.qualificationTitle}" — the QP has acknowledged the shared outcome.` });

@@ -3,10 +3,35 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useReportAction, useSiteVisit } from '../hooks';
+import type { SiteVisit } from '../types';
 import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
+import { checklistCompletionSummary } from '../workflow';
 
-// CR-047: QP (view only) — their own visits. CR-058: once a Post-EISA Monitoring outcome is
-// shared, the QP's only action here is to acknowledge it.
+// Row 37/G-26 (Fix 4 Part 2 correction): once the outcome is shared, the QP sees a read-only
+// summary of the actual report — checklist completion, who completed it and when, and any
+// free-text notes — not just a "shared" message with nothing behind it.
+function ReportSummary({ visit }: { visit: SiteVisit }) {
+  const summary = checklistCompletionSummary(visit);
+  const notes = Object.values(visit.freeTextNotes).filter((n) => n.trim().length > 0);
+  return (
+    <div className="rounded-2xl border bg-gray-50 p-4 space-y-1.5 text-sm text-gray-700">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Report Summary</p>
+      <p>
+        Checklist: {summary.answered} of {summary.total} lines completed.
+      </p>
+      {visit.completedBy && (
+        <p>
+          Completed by {visit.completedBy}
+          {visit.completedDate && ` on ${visit.completedDate}`}.
+        </p>
+      )}
+      {notes.length > 0 && <p className="whitespace-pre-wrap">{notes.join(' — ')}</p>}
+    </div>
+  );
+}
+
+// CR-047: QP (view only) — their own visits. CR-058: once the outcome is shared (any visit
+// type, Fix 4 Part 2 correction), the QP sees a read-only report summary and can acknowledge it.
 export function VisitDetail({ visitId, onClose }: { visitId: string | null; onClose: () => void }) {
   const { data: visit } = useSiteVisit(visitId);
   const { role, person } = useV2Role();
@@ -43,6 +68,10 @@ export function VisitDetail({ visitId, onClose }: { visitId: string | null; onCl
                   <p className="font-medium capitalize">{visit.notificationFlag}</p>
                 </div>
               </div>
+
+              {(visit.reportWorkflow.stageId === 'outcome-shared' || visit.reportWorkflow.stageId === 'closed') && (
+                <ReportSummary visit={visit} />
+              )}
 
               {visit.reportWorkflow.stageId === 'outcome-shared' && (
                 <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-2">

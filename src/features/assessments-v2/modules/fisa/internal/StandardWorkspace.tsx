@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
+import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import { useV2Role } from '../../../shared/ui/useV2Role';
@@ -29,6 +30,14 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
   if (record.evaluationReport.recommendation === '') reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
   const reportComplete = reportIssues.length === 0;
   const editable = role === 'ASD' && record.workflow.stageId === 'asd-evaluation';
+
+  // The only action from this stage belongs to Qualifications Development — shown on Details,
+  // next to the source documents they actually supplied, not buried in the Evaluation tab
+  // (that tab is the ASD/DD/IAC/QD review workspace; this is the initial submission step).
+  const atQdSubmission = record.workflow.stageId === 'qd-submission';
+  const lastSendBack = atQdSubmission
+    ? [...getAuditTrail('fisa-standard', record.id)].reverse().find((e) => e.action === 'Send back for clarification')
+    : undefined;
 
   return (
     <Tabs defaultValue="details">
@@ -62,6 +71,30 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           <div className="rounded-2xl border bg-amber-50 border-amber-200 p-4">
             <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Notes</p>
             <p className="text-sm text-amber-900">{record.notes}</p>
+          </div>
+        )}
+
+        {atQdSubmission && (lastSendBack || role === 'Qualifications Development') && (
+          <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+            {lastSendBack && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Sent back for clarification</p>
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{lastSendBack.note}</p>
+              </div>
+            )}
+            {role === 'Qualifications Development' && (
+              <>
+                <p className="text-sm text-gray-600">
+                  {lastSendBack ? 'Make the changes above, then send it to the ASD again.' : 'Send this Skills Programme to the ASD for evaluation.'}
+                </p>
+                <ActionBar
+                  definition={FISA_STANDARD_WORKFLOW}
+                  stageId={record.workflow.stageId}
+                  role={role}
+                  onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -111,13 +144,15 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           </div>
         </div>
 
-        <ActionBar
-          definition={FISA_STANDARD_WORKFLOW}
-          stageId={record.workflow.stageId}
-          role={role}
-          disabledActionIds={record.workflow.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['standard-asd-send-to-dd'] : []}
-          onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
-        />
+        {!atQdSubmission && (
+          <ActionBar
+            definition={FISA_STANDARD_WORKFLOW}
+            stageId={record.workflow.stageId}
+            role={role}
+            disabledActionIds={record.workflow.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['standard-asd-send-to-dd'] : []}
+            onRun={(actionId, note) => standardAction.mutate({ standardId: record.id, actionId, actorRole: role, actorId, actorName, note })}
+          />
+        )}
 
         {record.workflow.stageId === 'approved' && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">

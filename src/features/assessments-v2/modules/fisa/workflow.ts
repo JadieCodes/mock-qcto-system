@@ -82,6 +82,9 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
       kind: 'send-back',
       requiresNote: true,
     },
+    // CR-056: send-back AND reject must both be available on every approval stage — qd-signoff
+    // only had the send-back half until this fix.
+    { id: 'standard-qd-reject', label: 'Reject', fromStage: 'qd-signoff', toStage: 'declined', kind: 'reject', requiresNote: true },
   ],
 };
 

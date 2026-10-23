@@ -68,7 +68,7 @@ export function useCreateFisaStandard() {
     mutationFn: (input: NewFisaStandardInput) => createFisaStandard(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: STANDARDS_LIST_KEY });
-      toast.success('FISA Standard submitted.');
+      toast.success('FISA Standard created — open it and send it to the ASD when ready.');
     },
     onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });

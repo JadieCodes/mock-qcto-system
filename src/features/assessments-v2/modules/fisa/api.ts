@@ -1,5 +1,6 @@
 import { buildInstrumentValidationChecklist } from '../../mock/data/instrumentValidationChecklistItems';
 import { buildFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
+import { seedFisaStandards } from '../../mock/data/fisaStandardsSeed';
 import { getSdpComplianceStatus, listEnrolledLearners } from '../../mock/api/qaDomain';
 import { getPerson } from '../../shared/people/directory';
 import { verifyLearnerIdentity } from '../../mock/integrations/homeAffairs';
@@ -29,7 +30,7 @@ import type {
 const STANDARDS_KEY = 'fisa:standards';
 
 function loadStandards(): FisaStandardRecord[] {
-  return readStore<FisaStandardRecord[]>(STANDARDS_KEY, []);
+  return readStore<FisaStandardRecord[]>(STANDARDS_KEY, seedFisaStandards());
 }
 
 function saveStandards(records: FisaStandardRecord[]): void {
@@ -128,19 +129,26 @@ export async function performStandardAction(params: StandardActionParams): Promi
   const updated: FisaStandardRecord = { ...record, workflow: nextWorkflow };
   saveStandards(replaceStandard(all, updated));
 
-  if (nextWorkflow.stageId === 'qd-submission' && params.actionId === 'standard-asd-request-docs') {
-    addNotification({
-      recipientRole: 'Qualifications Development',
-      title: 'FISA Standard needs clarification',
-      body: `"${record.skillsProgrammeTitle}": ${params.note ?? ''}`,
-    });
-  }
+  // Every handoff notifies whoever needs to act next — a terminal stage (approved/declined)
+  // notifies Qualifications Development instead, since they started the whole chain.
+  const nextStage = FISA_STANDARD_WORKFLOW.stages.find((s) => s.id === nextWorkflow.stageId);
+  const action = FISA_STANDARD_WORKFLOW.actions.find((a) => a.id === params.actionId);
+  const title =
+    nextWorkflow.stageId === 'declined'
+      ? 'FISA Standard declined'
+      : nextWorkflow.stageId === 'approved'
+        ? 'FISA Standard approved'
+        : action?.kind === 'send-back'
+          ? 'FISA Standard sent back for clarification'
+          : `FISA Standard ready: ${nextStage?.label ?? nextWorkflow.stageId}`;
+  const body = params.note
+    ? `"${record.skillsProgrammeTitle}": ${params.note}`
+    : `"${record.skillsProgrammeTitle}" is now at ${nextStage?.label ?? nextWorkflow.stageId}.`;
+
   if (nextWorkflow.stageId === 'approved' || nextWorkflow.stageId === 'declined') {
-    addNotification({
-      recipientRole: 'Qualifications Development',
-      title: 'FISA Standard decision reached',
-      body: `"${record.skillsProgrammeTitle}" is now ${nextWorkflow.stageId}.`,
-    });
+    addNotification({ recipientRole: 'Qualifications Development', title, body });
+  } else if (nextStage?.allowedRoles[0]) {
+    addNotification({ recipientRole: nextStage.allowedRoles[0], title, body });
   }
   return updated;
 }

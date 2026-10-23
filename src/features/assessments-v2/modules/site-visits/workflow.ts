@@ -128,7 +128,9 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
       kind: 'reroute',
       requiresNote: true,
     },
-    // CR-058: post-eisa-monitoring only — QCTO shares the outcome, the QP then responds.
+    // CR-058: every visit type — QCTO shares the outcome, the QP then responds. (Fix 4 Part 2
+    // correction: this used to be gated to post-eisa-monitoring only in api.ts/the UI; the
+    // workflow action itself was never visit-type-specific.)
     { id: 'share-visit-outcome', label: SHARE_VISIT_OUTCOME_LABEL, fromStage: 'approved', toStage: 'outcome-shared', kind: 'advance' },
     { id: 'qp-acknowledge-outcome', label: 'Acknowledge outcome', fromStage: 'outcome-shared', toStage: 'closed', kind: 'complete' },
   ],
@@ -155,16 +157,15 @@ export function planningStatusLabel(visit: SiteVisit): string {
   }
 }
 
-// Row 37: a QP must see nothing about a Post-EISA Monitoring report — not even that it was
-// approved — until the Deputy Director explicitly shares it (CR-058). `forQp` masks the two
-// stages that would otherwise leak the outcome early; every other visit type has no share step
-// at all, so a QP's status there already stops at "Report approved"/"Report rejected" with
-// nothing further to hide.
-const QP_MASKED_PEM_STAGES = new Set(['dd-report-review', 'approved']);
+// Row 37 (Fix 4 Part 2 correction): a QP must see nothing about a report — not even that it was
+// approved — until the Deputy Director explicitly shares it (CR-058). Every visit type now has
+// a "Share Visit Outcome" step (see REPORT_WORKFLOW above), so `forQp` masks these two stages
+// for every visit type, not only Post-EISA Monitoring.
+const QP_MASKED_PRE_SHARE_STAGES = new Set(['dd-report-review', 'approved']);
 
 export function overallStatusLabel(visit: SiteVisit, opts?: { forQp?: boolean }): string {
   if (visit.planningWorkflow.stageId !== 'booked') return planningStatusLabel(visit);
-  if (opts?.forQp && visit.visitType === 'post-eisa-monitoring' && QP_MASKED_PEM_STAGES.has(visit.reportWorkflow.stageId)) {
+  if (opts?.forQp && QP_MASKED_PRE_SHARE_STAGES.has(visit.reportWorkflow.stageId)) {
     return 'Visit completed — outcome pending';
   }
   switch (visit.reportWorkflow.stageId) {
@@ -208,7 +209,7 @@ export function overallStatusTone(visit: SiteVisit, opts?: { forQp?: boolean }):
   if (visit.planningWorkflow.stageId !== 'booked') {
     return visit.planningWorkflow.stageId === 'planning-rejected' ? 'red' : 'amber';
   }
-  if (opts?.forQp && visit.visitType === 'post-eisa-monitoring' && QP_MASKED_PEM_STAGES.has(visit.reportWorkflow.stageId)) {
+  if (opts?.forQp && QP_MASKED_PRE_SHARE_STAGES.has(visit.reportWorkflow.stageId)) {
     return 'amber';
   }
   switch (visit.reportWorkflow.stageId) {

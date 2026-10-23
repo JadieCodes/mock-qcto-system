@@ -24,9 +24,15 @@ function isStandardActionable(s: FisaStandardRecord, role: Role): boolean {
   return canActInStage(FISA_STANDARD_WORKFLOW, s.workflow.stageId, role);
 }
 
+// Same scoping fix as RPL Toolkit's isUnassignedActionable: the allocatedAsdId exclusivity only
+// means something while the record is at the ASD's own stage. Harmless today (no other internal
+// role acts after asd-validation in this workflow — the outcome goes straight back to the SDP),
+// but kept consistent so it can't silently hide the record if a later stage is ever added here.
 function isValidationActionable(v: FisaValidationRecord, role: Role, personId: string): boolean {
   if (!canActInStage(FISA_VALIDATION_WORKFLOW, v.workflow.stageId, role)) return false;
-  if (v.allocatedAsdId && v.allocatedAsdId !== personId) return false;
+  if (v.workflow.stageId === 'asd-validation') {
+    return !v.allocatedAsdId || v.allocatedAsdId === personId;
+  }
   return true;
 }
 
