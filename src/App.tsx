@@ -62,7 +62,7 @@ import SiteVisitManagement from './pages/accreditation/SiteVisitManagement';
 import QPDashboard from './pages/accreditation/QPDashboard';
 import VerifierDashboard from './pages/accreditation/VerifierDashboard';
 import UserRoleSwitcher from "./components/ui/UserRoleSwitcher";
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import OutcomeLettersPage from "./pages/accreditation/OutcomeLettersPage";
 import AccreditationMainDashboard from "./pages/accreditation/AccreditationMainDashboard";
 
@@ -91,6 +91,8 @@ import RejectedApplicationsHistory from "./pages/accreditation/RejectedApplicati
 import { QualificationReporting } from "./pages/qualifications/internal/QualificationReporting";
 
 import InternalEisaValidation from "./pages/assessment/Internal/InternalEisaValidation";
+
+const AssessmentsV2Routes = lazy(() => import("./features/assessments-v2"));
 
 const App = () => {
   const [userRole, setUserRole] = useState('applicant');
@@ -448,9 +450,19 @@ const App = () => {
   />
               {/* Catch all for unknown routes */}
             {/* Redirect old QA path */}
-  <Route 
-    path="/departments/qa/*" 
-    element={<Navigate to="/departments/quality-assurance/dashboard" replace />} 
+  <Route
+    path="/departments/qa/*"
+    element={<Navigate to="/departments/quality-assurance/dashboard" replace />}
+  />
+
+  {/* Assessments v2 — new rebuild, mounted independently of /departments/assessment/* */}
+  <Route
+    path="/assessments-v2/*"
+    element={
+      <Suspense fallback={<div>Loading...</div>}>
+        <AssessmentsV2Routes />
+      </Suspense>
+    }
   />
 
   {/* Catch all for unknown routes */}
