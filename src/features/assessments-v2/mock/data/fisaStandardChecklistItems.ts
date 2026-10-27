@@ -7,10 +7,10 @@ import { checklistItem, checklistSection, type ChecklistSection } from '../../sh
 // for QCTO's real FISA Standards checklist.
 export function buildFisaStandardChecklist(): ChecklistSection[] {
   return [
-    checklistSection('fs1', 'Source Documents', [
-      checklistItem('fs1.1', 'Has Qualifications Development supplied all required source documents for this Skills Programme?'),
-      checklistItem('fs1.2', 'Do the source documents match the Skills Programme title being assessed?'),
-      checklistItem('fs1.3', 'Are the source documents on the current template?'),
+    checklistSection('fs1', 'Skills Programme Documents', [
+      checklistItem('fs1.1', 'Has Qualifications Development supplied all required Skills Programme Documents for this Skills Programme?'),
+      checklistItem('fs1.2', 'Do the Skills Programme Documents match the Skills Programme title being assessed?'),
+      checklistItem('fs1.3', 'Are the Skills Programme Documents on the current template?'),
     ]),
     checklistSection('fs2', 'Final-Assessment Standard Content', [
       checklistItem('fs2.1', 'Does the standard clearly define the final-assessment requirements for this Skills Programme?'),

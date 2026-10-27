@@ -81,12 +81,12 @@ export async function startValidation(input: NewValidationInput): Promise<Instru
   const approved = await listApprovedQsaAddenda();
   const addendum = approved.find((a) => a.id === input.qsaAddendumId);
   if (!addendum) {
-    throw new Error('A validation can only be started for a qualification whose QSA Addendum is Approved.');
+    throw new Error('A validation can only be started for a qualification whose QASA is Approved.');
   }
 
   const all = loadAll();
   if (all.some((r) => r.qsaAddendumId === input.qsaAddendumId)) {
-    throw new Error('An instrument validation already exists for this QSA Addendum.');
+    throw new Error('An instrument validation already exists for this QASA.');
   }
 
   const record: InstrumentValidationRecord = {

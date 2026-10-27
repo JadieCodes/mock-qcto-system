@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { FACILITATOR_QUESTIONNAIRE_QUESTIONS, LEARNER_QUESTIONNAIRE_QUESTIONS } from '../../../mock/data/pemQuestionnaires';
 import { Checklist } from '../../../shared/checklist/Checklist';
-import { RESULTS_APPROVAL_IS_SIMULATED } from '../config';
 import { freeTextFieldsForType } from '../freeTextFields';
 import {
   useSaveChecklist,
@@ -141,8 +140,7 @@ export function ExecutionForm({ visit, readonly }: { visit: SiteVisit; readonly:
             <div>
               <p className="text-sm font-semibold text-gray-900">Facilitator &amp; Learner Questionnaires</p>
               <p className="text-xs text-gray-500">
-                CR-057: only shown on Post-EISA Monitoring, and only once the related results batch is approved.
-                {RESULTS_APPROVAL_IS_SIMULATED && ' Phase 6 (Approval of Results) does not exist yet — simulated here.'}
+                Only shown once the related results batch is approved.
               </p>
             </div>
             {!readonly && (

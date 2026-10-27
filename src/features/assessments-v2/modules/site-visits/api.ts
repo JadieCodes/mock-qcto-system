@@ -90,7 +90,7 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
     venue: '',
     notificationFlag: 'notified',
     noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
-    planNote: 'Automatically created from an RPL/ARPL-flagged EISA Registration (CR-042/CR-044) — the only automatic trigger into this hub.',
+    planNote: 'Automatically created from an RPL/ARPL-flagged EISA Registration.',
     // CR-044: the one automatic trigger skips the planning chain — it is already a known,
     // real requirement, not a plan someone still needs to propose and get approved.
     planningWorkflow: { stageId: 'booked' },

@@ -205,10 +205,8 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
 
         {showModerationBox && (
           <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Director & Team Moderation</p>
-            <p className="text-xs text-gray-400">
-              Team-level moderation before the IAC (Ask QCTO — confirm the order of moderation, IAC endorsement and CEO signature).
-            </p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Director Office Moderation</p>
+            <p className="text-xs text-gray-400">Director Office moderation before the IAC.</p>
             <Checklist
               sections={application.moderationChecklist}
               readonly={!moderationEditable}

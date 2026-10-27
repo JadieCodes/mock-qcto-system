@@ -1,3 +1,4 @@
+import { roleDescriptor } from '../../config/roles';
 import { getAuditTrail } from './auditLog';
 
 // recordId omitted shows every entry for the given record type(s) — used for a module-wide
@@ -14,7 +15,7 @@ export function AuditTrailView({ recordTypes, recordId }: { recordTypes: string[
       {entries.map((entry) => (
         <div key={entry.id} className="rounded-xl border bg-gray-50 px-3 py-2 text-xs">
           <p className="font-medium text-gray-700">
-            {entry.action} — <span className="text-gray-500">{entry.actorName} ({entry.actorRole})</span>
+            {entry.action} — <span className="text-gray-500">{entry.actorName} ({roleDescriptor(entry.actorRole)?.label ?? entry.actorRole})</span>
           </p>
           {entry.note && <p className="text-gray-500 mt-0.5 whitespace-pre-wrap">{entry.note}</p>}
           <p className="text-gray-400 mt-0.5">{new Date(entry.timestamp).toLocaleString('en-ZA')}</p>

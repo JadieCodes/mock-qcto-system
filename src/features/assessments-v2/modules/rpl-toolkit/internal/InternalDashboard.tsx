@@ -58,11 +58,15 @@ export function InternalDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">RPL Toolkit Evaluation — RPL Toolkit Team</h2>
+          <h2 className="text-xl font-bold text-gray-900">RPL Toolkit Evaluation</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Roles: Assistant Director allocates · ASD evaluates · DD reviews · Director Office moderates · IAC approves · CEO signs the
+            outcome letter.
+          </p>
           <p className="text-sm text-gray-500 mt-1">
             {isCeo
               ? 'Applications awaiting your outcome-letter signature only.'
-              : 'PM-09 — not in the change request register yet. Open one to act on it — only the actions your current role may perform are shown.'}
+              : 'Open one to act on it — only the actions your current role may perform are shown.'}
           </p>
         </div>
         {!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
@@ -73,7 +77,7 @@ export function InternalDashboard() {
           { label: 'With Assistant Director', value: adCount },
           { label: 'With ASD', value: asdCount },
           { label: 'With Deputy Director', value: ddCount },
-          { label: 'With Director & Team', value: directorTeamCount },
+          { label: 'With Director Office', value: directorTeamCount },
           { label: 'With IAC', value: iacCount },
           { label: 'Approved', value: approvedCount },
         ].map((card) => (

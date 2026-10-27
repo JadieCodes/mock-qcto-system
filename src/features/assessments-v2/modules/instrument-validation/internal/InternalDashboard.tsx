@@ -48,8 +48,13 @@ export function InternalDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="EISA Instrument Validation — Instrument Validation Team"
-        description="An ASD checks the QP's assessment instrument against the checklist before an EISA sitting — a separate section from EISA Registration; SDPs cannot see this section."
+        title="EISA Instrument Validation"
+        description={
+          <>
+            <span className="block">Roles: ASD schedules with the QP and validates the instrument.</span>
+            An ASD checks the QP's assessment instrument against the checklist before an EISA sitting.
+          </>
+        }
         actions={<ScopeToggle scope={scope} onChange={setScope} />}
       />
 

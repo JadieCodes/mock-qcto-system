@@ -134,7 +134,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 ))}
               </SelectContent>
             </Select>
-            {sittingId !== NO_SITTING && <p className="text-xs text-gray-400">CR-050: QP, qualification and date were auto-populated from the sitting.</p>}
+            {sittingId !== NO_SITTING && <p className="text-xs text-gray-400">QP, qualification and date were auto-populated from the sitting.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

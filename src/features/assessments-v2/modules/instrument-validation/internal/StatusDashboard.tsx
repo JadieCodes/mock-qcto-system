@@ -12,7 +12,7 @@ import { overallStatusLabel } from '../workflow';
 
 interface AgendaRow {
   id: string;
-  type: 'QSA Addendum' | 'EISA Instrument Validation';
+  type: 'QASA' | 'EISA Instrument Validation';
   qualificationTitle: string;
   qpName: string;
   stageLabel: string;
@@ -39,7 +39,7 @@ export function StatusDashboard() {
   const rows: AgendaRow[] = useMemo(() => {
     const qsaRows: AgendaRow[] = qsaApplications.map((a) => ({
       id: `qsa-${a.id}`,
-      type: 'QSA Addendum',
+      type: 'QASA',
       qualificationTitle: a.qualificationTitle,
       qpName: a.qpName,
       stageLabel: qsaOverallStatusLabel(a),
@@ -59,7 +59,7 @@ export function StatusDashboard() {
   }, [qsaApplications, validationRecords]);
 
   const filtered = rows.filter((row) => {
-    if (typeFilter === 'qsa' && row.type !== 'QSA Addendum') return false;
+    if (typeFilter === 'qsa' && row.type !== 'QASA') return false;
     if (typeFilter === 'validation' && row.type !== 'EISA Instrument Validation') return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -86,7 +86,7 @@ export function StatusDashboard() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="qsa">QSA Addendum</SelectItem>
+            <SelectItem value="qsa">QASA</SelectItem>
             <SelectItem value="validation">EISA Instrument Validation</SelectItem>
           </SelectContent>
         </Select>
@@ -102,7 +102,7 @@ export function StatusDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Type', 'Qualification Title', 'QP', 'Stage', 'Owner Team', 'Date'].map((h) => (
+                  {['Type', 'Qualification Title', 'QP', 'Stage', 'Acting Roles', 'Date'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>

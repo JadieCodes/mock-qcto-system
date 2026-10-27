@@ -40,7 +40,7 @@ export function NewValidationDialog({ open, onOpenChange }: { open: boolean; onO
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
       size="sm"
       title="Start EISA Instrument Validation"
-      description="Only qualifications with an Approved QSA Addendum can start a validation."
+      description="Only qualifications with an Approved QASA can start a validation."
       footer={
         <>
           <Button variant="outline" onClick={close}>
@@ -54,7 +54,7 @@ export function NewValidationDialog({ open, onOpenChange }: { open: boolean; onO
     >
       {eligible.length === 0 ? (
         <p className="text-sm text-gray-500 py-4">
-          No qualifications are eligible yet — their QSA Addendum must be Approved first, and each addendum can only have one
+          No qualifications are eligible yet — their QASA must be Approved first, and each addendum can only have one
           validation.
         </p>
       ) : (

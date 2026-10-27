@@ -22,7 +22,7 @@ function saveAll(apps: QsaAddendumApplication[]): void {
 
 function getOrThrow(apps: QsaAddendumApplication[], id: string): QsaAddendumApplication {
   const app = apps.find((a) => a.id === id);
-  if (!app) throw new Error(`QSA Addendum application "${id}" not found.`);
+  if (!app) throw new Error(`QASA submission "${id}" not found.`);
   return app;
 }
 
@@ -155,7 +155,7 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
   if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
     addNotification({
       recipientRole: 'QP',
-      title: 'QSA Addendum decision reached',
+      title: 'QASA decision reached',
       body: `The IAC has reached a decision on "${app.qualificationTitle}". The outcome letter is being prepared.`,
     });
   }

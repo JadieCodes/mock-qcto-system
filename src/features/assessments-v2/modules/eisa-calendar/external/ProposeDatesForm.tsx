@@ -75,7 +75,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Propose EISA Sitting Dates</DialogTitle>
-          <DialogDescription>Only qualifications with an Approved QSA Addendum can have dates proposed.</DialogDescription>
+          <DialogDescription>Only qualifications with an Approved QASA can have dates proposed.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -94,7 +94,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
               </SelectContent>
             </Select>
             {eligible.length === 0 && (
-              <p className="text-xs text-gray-400">No qualifications with an Approved QSA Addendum yet — approve one first.</p>
+              <p className="text-xs text-gray-400">No qualifications with an Approved QASA yet — approve one first.</p>
             )}
           </div>
 

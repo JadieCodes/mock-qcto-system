@@ -101,7 +101,7 @@ Do NOT recreate the old combined role "Deputy & Assistant Director" (it caused t
 | Use | Never use |
 |---|---|
 | QP | AQP |
-| QSA Addendum | QAS Addendum / QASA (unless the developer says the official label is QAS) |
+| QAS Addendum (QASA) for the module's main menu entry and page title; QASA everywhere else (QCTO feedback 3.1) | QSA, QSA Addendum (code identifiers and folder names such as `qsa-addendum` stay as they are) |
 | EISA Instrument Validation | EISA Validation, Validation of EISA |
 | FISA Instrument Validation / FISA Validation Report | Validation of FISA, "EISA Validation Report" on a FISA screen |
 | EISA Confirmation | EISA Notification (for the learner-list step) |

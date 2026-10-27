@@ -7,7 +7,7 @@ import { checklistItem, checklistSection, type ChecklistSection } from '../../sh
 export function buildRplToolkitModerationChecklist(): ChecklistSection[] {
   return [
     checklistSection('mod1', 'Moderation of the Evaluation', [
-      checklistItem('mod1.1', "Does the team agree with the ASD's findings and recommendation?"),
+      checklistItem('mod1.1', "Does the Director Office agree with the ASD's findings and recommendation?"),
       checklistItem('mod1.2', 'Is the evidence in the toolkit consistent with the checklist answers?'),
       checklistItem('mod1.3', 'Are there any moderation concerns that should go back to the ASD?'),
     ]),

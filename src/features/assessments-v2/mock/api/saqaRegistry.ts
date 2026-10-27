@@ -15,7 +15,7 @@ export interface SaqaRegistryResult {
 const AUTO_ATTACHED_DOCUMENTS: SaqaRegistryDocument[] = [
   { label: 'SAQA Qualification Document', fileName: 'SAQA_Qualification_Document_AUTO.pdf' },
   { label: 'Curriculum Document', fileName: 'Curriculum_Document_AUTO.pdf' },
-  { label: 'QSA Addendum', fileName: 'QSA_Addendum_AUTO.pdf' },
+  { label: 'QASA', fileName: 'QASA_AUTO.pdf' },
 ];
 
 // There is no real SAQA API to call yet, so the QP simulates the outcome they want to test —

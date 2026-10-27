@@ -274,7 +274,7 @@ export async function performResultsAction(params: ResultsActionParams): Promise
       actorRole: params.actorRole,
       actorId: params.actorId,
       actorName: params.actorName,
-      action: 'Recommended to the Certification domain for certificate printing (simulated — no screen in that domain yet, CR-059 hand-off)',
+      action: 'Recommended to the Certification domain for certificate printing (simulated)',
     });
     addNotification({
       recipientRole: 'QP',

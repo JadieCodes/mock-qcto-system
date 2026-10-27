@@ -36,7 +36,7 @@ export function QpCalendarView() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">EISA Calendar</h2>
-          <p className="text-sm text-gray-500 mt-1">Propose sitting dates for a qualification with an Approved QSA Addendum.</p>
+          <p className="text-sm text-gray-500 mt-1">Propose sitting dates for a qualification with an Approved QASA.</p>
         </div>
         <Button className="gap-2" onClick={() => setFormOpen(true)}>
           <Plus className="h-4 w-4" />

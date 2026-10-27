@@ -51,11 +51,14 @@ export function InternalDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="QSA Addendum — QSA Evaluation Team"
+        title="QAS Addendum (QASA)"
         description={
-          isCeo
-            ? 'Applications awaiting your outcome-letter signature only.'
-            : 'Open one to act on it — only the actions your current role may perform are shown.'
+          <>
+            <span className="block">Roles: ASD evaluates · DD reviews · IAC decides · CEO signs the outcome letter.</span>
+            {isCeo
+              ? 'QASA submissions awaiting your outcome-letter signature only.'
+              : 'Open one to act on it — only the actions your current role may perform are shown.'}
+          </>
         }
         actions={!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
       />
@@ -67,9 +70,9 @@ export function InternalDashboard() {
         <StatTile label="Approved" value={approvedCount} />
       </StatTileGrid>
 
-      <SectionCard title={isCeo ? 'Awaiting Your Signature' : 'Applications'}>
+      <SectionCard title={isCeo ? 'Awaiting Your Signature' : 'QASA Submissions'}>
         {applications.length === 0 ? (
-          <EmptyState title="No applications yet" description="Applications submitted by a QP in the external portal will appear here." />
+          <EmptyState title="No submissions yet" description="QASAs submitted by a QP in the external portal will appear here." />
         ) : (
           <div className="overflow-x-auto">
             <Table>

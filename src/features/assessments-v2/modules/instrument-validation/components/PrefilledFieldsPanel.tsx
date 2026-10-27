@@ -31,7 +31,7 @@ export function PrefilledFieldsPanel({ record, readonly }: { record: InstrumentV
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 border-b">
-        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Pre-filled from the QSA Addendum</p>
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Pre-filled from the QASA</p>
       </div>
       <div className="divide-y">
         {record.prefilledFields.map((field) => (

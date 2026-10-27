@@ -277,7 +277,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
 
       <TabsContent value="evaluation" className="space-y-6">
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QSA Addendum Preliminary Checklist (44 items)</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QASA Preliminary Checklist (44 items)</p>
           <Checklist
             sections={application.qsaChecklist}
             readonly={!asdEditable}
@@ -539,7 +539,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
 
             {application.approvalState.stageId === 'sent-to-qp' ? (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                Signed by {application.approvalLetterSignedBy}. This QSA Addendum is now <strong>Approved</strong> and sent to the
+                Signed by {application.approvalLetterSignedBy}. This QASA is now <strong>Approved</strong> and sent to the
                 QP, and available to EISA Instrument Validation and the EISA Calendar.
               </div>
             ) : application.approvalState.stageId === 'signed' ? (

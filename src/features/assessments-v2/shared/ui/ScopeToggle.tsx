@@ -24,7 +24,7 @@ export function ScopeToggle({ scope, onChange }: { scope: ListScope; onChange: (
         className={cn('h-7 px-3 text-xs', scope === 'team' && 'bg-white shadow-sm font-semibold')}
         onClick={() => onChange('team')}
       >
-        All in my team
+        All items for my role
       </Button>
     </div>
   );

@@ -95,7 +95,7 @@ export function InternalDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Site Visits & Monitoring"
-        description="A standalone hub (CR-044) for EISA Readiness, Marking & Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits — an RPL/ARPL monitoring item is created automatically from a registration, never from EISA Confirmation."
+        description="A standalone hub for EISA Readiness, Marking & Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits — an RPL/ARPL monitoring item is created automatically from a registration, never from EISA Confirmation."
         actions={
           <>
             <ScopeToggle scope={scope} onChange={setScope} />

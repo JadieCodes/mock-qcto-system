@@ -12,7 +12,7 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
     { id: 'asd-evaluation', label: 'ASD evaluation', allowedRoles: ['ASD'] },
     { id: 'dd-review', label: 'Deputy Director review', allowedRoles: ['Deputy Director'] },
     { id: 'iac-review', label: 'IAC review', allowedRoles: ['IAC'] },
-    { id: 'qd-signoff', label: 'Qualifications Development Director & Team sign-off', allowedRoles: [FISA_STANDARD_SIGNOFF_ROLE] },
+    { id: 'qd-signoff', label: 'Qualifications Development Director Office sign-off', allowedRoles: [FISA_STANDARD_SIGNOFF_ROLE] },
     { id: 'approved', label: 'Approved', allowedRoles: [] },
     { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],

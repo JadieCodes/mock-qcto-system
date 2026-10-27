@@ -35,7 +35,7 @@ export function AddEditSittingDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{sitting ? 'Edit Sitting' : 'Add Sitting'}</DialogTitle>
-          <DialogDescription>CR-027 — QCTO can add, edit or delete calendar sittings at any time.</DialogDescription>
+          <DialogDescription>QCTO can add, edit or delete calendar sittings at any time.</DialogDescription>
         </DialogHeader>
         {open && (
           <AddEditSittingForm
@@ -88,7 +88,7 @@ function AddEditSittingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select a qualification with an approved QSA Addendum" />
+              <SelectValue placeholder="Select a qualification with an approved QASA" />
             </SelectTrigger>
             <SelectContent>
               {eligible.map((q) => (

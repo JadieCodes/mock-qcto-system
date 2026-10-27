@@ -63,7 +63,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
   const eligible = await listEligibleQualifications();
   const match = eligible.find((q) => q.qualificationTitle === input.qualificationTitle && q.qpId === input.qpId);
   if (!match) {
-    throw new Error('This qualification does not have an approved QSA Addendum yet.');
+    throw new Error('This qualification does not have an approved QASA yet.');
   }
   if (match.approvedEisaSittingsPerYear == null) {
     throw new Error('The approved EISA sitting frequency for this qualification has not been recorded yet.');

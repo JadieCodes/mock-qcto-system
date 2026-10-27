@@ -48,7 +48,7 @@ export function ExternalDashboard() {
 
       <SectionCard title="Validations">
         {records.length === 0 ? (
-          <EmptyState title="No validations yet" description='Click "Start Validation" above once a QSA Addendum is Approved.' />
+          <EmptyState title="No validations yet" description='Click "Start Validation" above once a QASA is Approved.' />
         ) : (
           <div className="overflow-x-auto">
             <Table>

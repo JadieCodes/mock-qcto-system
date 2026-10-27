@@ -32,7 +32,7 @@ export function ExternalDashboard() {
       <div>
         <h2 className="text-xl font-bold text-gray-900">FISA — Skills Programme Track</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Independent of EISA/QSA Addendum. Develop and submit your instrument, then register learners for a FISA sitting.
+          Independent of EISA/QASA. Develop and submit your instrument, then register learners for a FISA sitting.
         </p>
       </div>
 
