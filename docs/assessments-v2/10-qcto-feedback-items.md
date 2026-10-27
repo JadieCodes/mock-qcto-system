@@ -8,6 +8,12 @@ Source: QCTO email on the Assessments v2 wireframe, compared with the Change Req
 - Batch = which prompt handles the item. Do only the batch you are told to do.
 - Where QCTO feedback and the original change request differ, QCTO's latest feedback wins (items 1.5, 2.2, 2.10, 2.12).
 
+## Build constraints from QCTO's wording (apply in every batch)
+
+- Keep the "Link to a Published EISA Sitting" on Post-EISA Monitoring: QCTO said it is correct. Remove the sitting link and qualification drop-down only from EISA Readiness (item 2.6), and the EISA-date link only from RPL/ARPL monitoring (item 2.7). Keep the sitting link on Marking & Moderation.
+- Approval of Results should eventually cover FISA results as well as EISA results (proposed item 3.14, 4 Nov, waiting for QCTO).
+- Item 3.14 is a proposed addition and is not yet in the document sent to QCTO.
+
 ## Role and naming rules from QCTO (apply everywhere)
 
 - "QSA" must read "QASA" everywhere.
@@ -30,10 +36,8 @@ Source: QCTO email on the Assessments v2 wireframe, compared with the Change Req
 | 3.12 | 3 New request | A1 | Oct 29, 2026 | Small | RPL Toolkits (Internal) | The statement "PM-09 — not in the change request register yet" is unclear. | Remove the statement from the screen. | — |
 | 1.6 | 1 Outstanding | A2 | Oct 29, 2026 | Outstanding | EISA Instrument Validation (Internal) | The status dashboard lists QASA as an option next to EISA Instrument Validation, which suggests QASA is an EISA instrument type. | Correct the dashboard so QASA and EISA Instrument Validation are shown as separate processes. | CR-025 |
 | 2.6 | 2 Linked, new detail | A2 | Oct 29, 2026 | Small | Site Visits, EISA Readiness (Internal) | The "link to the sitting" is confusing. Readiness is not done per qualification, yet there is a qualification drop-down. | Remove the sitting link and the qualification drop-down from EISA Readiness. | CR-049, CR-050 |
-| 2.7 | 2 Linked, new detail | A2 | Oct 29, 2026 | Small | Site Visits, RPL/ARPL Monitoring (Internal) | RPL/ARPL monitoring takes place at an SDP or AC, not with the QP, and is not linked to an EISA date. | Change the form to select the SDP or AC, and remove the EISA date link. | CR-042, CR-044, CR-049 |
 | 2.10 | 2 Linked, new detail | A2 | Oct 29, 2026 | Small | FISA (Internal) | The statement "Registrations submitted by an SDP will appear here" is incorrect. There are no FISA registrations. | Remove FISA registrations. See section 4. | CR-026 |
 | 2.11 | 2 Linked, new detail | A2 | Oct 29, 2026 | Small | My EISA Instrument Validations (External) | The statement "each QASA can only have one validation" is incorrect. | Remove the statement and the one-validation limit. | CR-021 |
-| 2.12 | 2 Linked, new detail | A2 | Oct 29, 2026 | Small | Site Visits (External) | Visits are scheduled by QCTO, so this section should not appear on the external side. | Remove the Site Visits section from the external view. See section 4. | CR-047 |
 | 3.6 | 3 New request | A2 | Oct 29, 2026 | Small | Site Visits, EISA Readiness (Internal) | EISA readiness is facilitated for QPs only, but the screen has an option for SDPs. QCTO would like to discuss the purpose of this section. | Remove the SDP option. Further changes will follow the discussion with QCTO. | — |
 | 1.8 | 1 Outstanding | B | Oct 29, 2026 | Outstanding | EISA Calendar (Internal and External) | EISA dates can only be added where there is an approved QASA. This is incorrect, as every qualification with accredited SDPs must have an EISA date. | Remove the approved QASA condition. Change the external text to "Propose sitting dates for a qualification with accredited SDPs." | CR-028, CR-029, CR-030 |
 | 1.9 | 1 Outstanding | B | Oct 29, 2026 | Outstanding | EISA Calendar, List View (Internal) | There is no option to update a listed sitting, for example to cancel or postpone it. | Add update, cancel and postpone options to listed sittings. | CR-034 |
@@ -44,9 +48,11 @@ Source: QCTO email on the Assessments v2 wireframe, compared with the Change Req
 | 1.3 | 1 Outstanding | C | Oct 29, 2026 | Outstanding | QASA (Internal) | There is no content in this section, so it could not be tested. | Add the QASA screens and content so these change requests can be tested. | CR-003, CR-004, CR-005, CR-007, CR-008, CR-011, CR-012, CR-013, CR-014, CR-016 |
 | 1.10 | 1 Outstanding | C | Oct 29, 2026 | Outstanding | EISA Confirmations (External) | There are no tabs or data, so it is not clear what this section does. | Build the confirmation screen with the consolidated learner list and confirmation details. | CR-043 |
 | 1.11 | 1 Outstanding | C | Oct 29, 2026 | Outstanding | FISA (Internal) | There is no content to test under FISA instruments. | Add the FISA instruments content. | CR-026 |
-| 2.2 | 2 Linked, new detail | C | Oct 29, 2026 | Small | QASA and EISA Instrument Validation (Internal) | QASA status and approved instruments must be available to all system users. | CR-025 limited this to internal officials. Make the status view available to all users. See section 4. | CR-025 |
 | 1.4 | 1 Outstanding | D | Oct 29, 2026 | Outstanding | QASA (Internal) | The CEO-signed feedback letter after IAC approval is not shown. | Add the step where the CEO signs the feedback letter once IAC has approved the QASA. | CR-008, CR-013, CR-014 |
 | 1.12 | 1 Outstanding | D | Oct 29, 2026 | Outstanding | Site Visits (Internal) | The section only allows a visit to be scheduled. Supporting evidence such as reports and attendance registers cannot be uploaded. | Add the visit execution and report steps, including upload of reports and attendance registers. | CR-048, CR-053, CR-056 |
+| 2.2 | 2 Linked, new detail | D | Oct 29, 2026 | Small | QASA and EISA Instrument Validation (Internal) | QASA status and approved instruments must be available to all system users. | CR-025 limited this to internal officials. Make the status view available to all users. See section 4. | CR-025 |
+| 2.7 | 2 Linked, new detail | A3 | Oct 29, 2026 | Small | Site Visits, RPL/ARPL Monitoring (Internal) | RPL/ARPL monitoring takes place at an SDP or AC, not with the QP, and is not linked to an EISA date. | Change the form to select the SDP or AC, and remove the EISA date link. | CR-042, CR-044, CR-049 |
+| 2.12 | 2 Linked, new detail | A3 | Oct 29, 2026 | Small | Site Visits (External) | Visits are scheduled by QCTO, so this section should not appear on the external side. | Remove the Site Visits section from the external view. See section 4. | CR-047 |
 | 2.1 | 2 Linked, new detail | E | Nov 4, 2026 | Large | QASA (Internal) | After evaluation, the DD submits the QASA to the Director's office, which then presents it at IAC. | Add the Director's office step between the DD evaluation and IAC. | CR-007, CR-014, CR-016 |
 | 2.9 | 2 Linked, new detail | E | Nov 4, 2026 | Large | FISA (Internal) | FISA Standards follow the same route as QASA: evaluated by the ASD, moderated by the DD, quality assured and approved for tabling by the Director, and approved by IAC. | Set up the FISA Standards approval route as described. | CR-026 |
 | 3.3 | 3 New request | E | Nov 4, 2026 | Large | QASA (Internal) | Once a QASA is approved, its details (components, weight per component, validity period) must feed into the Certification domain. | Add the hand-off of approved QASA details to the Certification domain (simulated until the backend is available). | — |
@@ -58,6 +64,7 @@ Source: QCTO email on the Assessments v2 wireframe, compared with the Change Req
 | 2.8 | 2 Linked, new detail | G | Nov 4, 2026 | Large | Site Visits, Post-EISA Monitoring (Internal) | This visit is linked to Approval of Results and is triggered by a low competence rate found when results are evaluated. | Add the low competence rate trigger from Approval of Results. | CR-052, CR-057 |
 | 3.7 | 3 New request | G | Nov 4, 2026 | Large | Site Visits, Marking and Moderation (Internal) | Marking and moderation monitoring should be combined with verification of marked and moderated scripts. This is for QPs only. | Add script verification to this visit type and remove the SDP option. | — |
 | 3.13 | 3 New request | H | Nov 4, 2026 | Large | RPL Toolkit (External) | QPs need to be able to upload toolkits for evaluation. | Add a toolkit upload for QPs. | — |
+| 3.14 | 3 New request (proposed) | I | Nov 4, 2026 | Large | Approval of Results (Internal and External) | Approval of results covers "the submitted EISA/FISA results". The build handles EISA results only. | Extend Approval of Results to FISA results: the SDP submits results, the same evaluation and approval chain applies, and the approved results are recommended to the Certification domain. Confirm with QCTO who submits and the chain (Question 21). | — |
 
 ## Changes of direction from the original change requests (section 4 of the v3 document)
 
