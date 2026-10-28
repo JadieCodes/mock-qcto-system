@@ -10,6 +10,7 @@ import { EisaRegistrationExternal, EisaRegistrationInternal } from './modules/ei
 import { FisaExternal, FisaInternal } from './modules/fisa';
 import { InstrumentValidationExternal, InstrumentValidationInternal } from './modules/instrument-validation';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
+import { QasaStatusView } from './modules/qasa-status';
 import { RplToolkitExternal, RplToolkitInternal } from './modules/rpl-toolkit';
 import { SiteVisitsExternal, SiteVisitsInternal } from './modules/site-visits';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
@@ -42,6 +43,8 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'instrument-validation') {
     return portal === 'internal' ? <InstrumentValidationInternal /> : <InstrumentValidationExternal />;
   }
+  // QCTO feedback 2.2: the same status-only view on both portals.
+  if (item.path === 'qasa-status') return <QasaStatusView />;
   if (item.path === 'eisa-calendar') return portal === 'internal' ? <EisaCalendarInternal /> : <EisaCalendarExternal />;
   if (item.path === 'eisa-registration') return portal === 'internal' ? <EisaRegistrationInternal /> : <EisaRegistrationExternal />;
   if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;

@@ -23,6 +23,7 @@ import {
   REPORT_APPROVER_ROLE,
   REPORT_SUBMITTER_ROLE,
 } from './config';
+import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory, type VisitEvidenceFile } from './evidence';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
 import type { NewVisitInput, SiteVisit, VisitType } from './types';
 import { visitSubject } from './visitTypeLabels';
@@ -310,6 +311,9 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     if (!visit.completedBy.trim() || !visit.completedDate) {
       throw new Error('Complete "Completed By" and "Completion Date" before submitting.');
     }
+    if (!hasVisitReportFile(visit)) {
+      throw new Error(MISSING_VISIT_REPORT_MESSAGE);
+    }
   }
   // CR-055: re-routing is logged as an audit note only — it deliberately does NOT go through
   // the generic workflow engine. That engine always stamps the acting role's name onto
@@ -428,6 +432,24 @@ export async function saveFreeTextNotes(id: string, freeTextNotes: Record<string
 export async function saveCompletionDetails(id: string, completedBy: string, completedDate: string): Promise<SiteVisit> {
   const all = loadAll();
   const updated = { ...getOrThrow(all, id), completedBy, completedDate };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// QCTO feedback 1.12: evidence can only be added while the report is editable — the same
+// stage in which the Execution & Report form is open to the ASD.
+export async function uploadEvidence(
+  id: string,
+  file: { fileName: string; fileSize: number; category: VisitEvidenceCategory },
+  uploadedBy: string,
+): Promise<SiteVisit> {
+  const all = loadAll();
+  const visit = getOrThrow(all, id);
+  if (visit.planningWorkflow.stageId !== 'booked' || visit.reportWorkflow.stageId !== 'awaiting-execution') {
+    throw new Error('Evidence can only be uploaded while the report is being completed.');
+  }
+  const uploaded: VisitEvidenceFile = { ...file, uploadedAt: new Date().toISOString(), uploadedBy };
+  const updated: SiteVisit = { ...visit, evidence: [...evidenceOf(visit), uploaded] };
   saveAll(replace(all, updated));
   return updated;
 }

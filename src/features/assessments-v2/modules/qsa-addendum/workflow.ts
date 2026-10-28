@@ -110,7 +110,7 @@ export const OUTCOME_WORKFLOW: WorkflowDefinition = {
     { id: 'ceo-signature', label: 'Awaiting CEO signature', allowedRoles: ['CEO'] },
     { id: 'signed', label: 'Signed', allowedRoles: [] },
   ],
-  actions: [{ id: 'outcome-sign', label: 'Sign outcome letter', fromStage: 'ceo-signature', toStage: 'signed', kind: 'complete' }],
+  actions: [{ id: 'outcome-sign', label: 'Sign feedback letter', fromStage: 'ceo-signature', toStage: 'signed', kind: 'complete' }],
 };
 
 // Row 13 (test findings): the approval letter only exists once the outcome is "approved".
@@ -167,9 +167,9 @@ export function qsaOverallStatusLabel(app: QsaAddendumApplication): string {
     case 'iac-review':
       return 'With IAC';
     case 'declined':
-      return app.outcomeState.stageId === 'signed' ? 'Declined' : 'Declined — outcome letter pending CEO signature';
+      return app.outcomeState.stageId === 'signed' ? 'Declined' : 'Declined — feedback letter pending CEO signature';
     case 'approved':
-      if (app.outcomeState.stageId !== 'signed') return 'Approved — outcome letter pending CEO signature';
+      if (app.outcomeState.stageId !== 'signed') return 'Approved — feedback letter pending CEO signature';
       if (!app.approvalState || app.approvalState.stageId === 'asd-draft') {
         return 'Approved — approval letter drafted by ASD';
       }

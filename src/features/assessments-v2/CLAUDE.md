@@ -85,7 +85,7 @@ Do NOT recreate the old combined role "Deputy & Assistant Director" (it caused t
 
 ## Business rules that must hold everywhere
 
-- The **CEO only signs the outcome letter**. The CEO never ticks evaluation checklists and nothing routes DD → CEO directly (CR-007, 008).
+- The **CEO only signs the outcome letter** (called the "feedback letter" on QASA screens, QCTO feedback 1.4; RPL Toolkit keeps "outcome letter"). The CEO never ticks evaluation checklists and nothing routes DD → CEO directly (CR-007, 008).
 - The **acknowledgement letter stops at DD level**.
 - Corrections route **DD → ASD → QP**. The DD never returns work straight to the QP (CR-012).
 - The SAQA **gate check only decides where documents come from** (auto-pulled vs uploaded). It never decides EISA vs FISA (CR-004). **FISA is a fully separate process** (CR-026).

@@ -6,6 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { FACILITATOR_QUESTIONNAIRE_QUESTIONS, LEARNER_QUESTIONNAIRE_QUESTIONS } from '../../../mock/data/pemQuestionnaires';
 import { Checklist } from '../../../shared/checklist/Checklist';
+import { useV2Role } from '../../../shared/ui/useV2Role';
+import { EVIDENCE_AREAS, evidenceOf, type VisitEvidenceCategory } from '../evidence';
 import { freeTextFieldsForType } from '../freeTextFields';
 import {
   useSaveChecklist,
@@ -15,6 +17,7 @@ import {
   useSaveLearnerAnswers,
   useSetResultsApprovedForSitting,
   useUpdateVisitDetails,
+  useUploadEvidence,
 } from '../hooks';
 import type { SiteVisit } from '../types';
 import { isPerQualificationVisit } from '../visitTypeLabels';
@@ -101,6 +104,63 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
         </div>
       </div>
       {perQualification && <p className="text-xs text-gray-400">Choosing a qualification restricts the QP list to QPs linked to it.</p>}
+    </div>
+  );
+}
+
+// QCTO feedback 1.12: supporting evidence. UI-only file pick (name and size), the same
+// pattern as the other uploads in v2. Files stay listed in every later stage; the pickers only
+// show while the form itself is editable.
+function EvidenceUploads({ visit, readonly }: { visit: SiteVisit; readonly: boolean }) {
+  const { person } = useV2Role();
+  const uploadEvidence = useUploadEvidence();
+  const files = evidenceOf(visit);
+
+  const onPick = async (category: VisitEvidenceCategory, input: HTMLInputElement) => {
+    const picked = [...(input.files ?? [])];
+    input.value = '';
+    for (const file of picked) {
+      await uploadEvidence.mutateAsync({ id: visit.id, file: { fileName: file.name, fileSize: file.size, category }, uploadedBy: person.name });
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-4">
+      <p className="text-xs font-semibold text-gray-500 uppercase">Supporting Evidence</p>
+      {EVIDENCE_AREAS.map((area) => {
+        const areaFiles = files.filter((f) => f.category === area.category);
+        const inputId = `evidence-${visit.id}-${area.category}`;
+        return (
+          <div key={area.category} className="space-y-1.5">
+            <Label htmlFor={readonly ? undefined : inputId}>
+              {area.label}
+              {area.required && ' *'}
+            </Label>
+            {areaFiles.length === 0 ? (
+              <p className="text-xs text-gray-400">No files uploaded.</p>
+            ) : (
+              <ul className="space-y-1">
+                {areaFiles.map((f, i) => (
+                  <li key={`${f.fileName}-${f.uploadedAt}-${i}`} className="text-sm text-gray-700">
+                    <span className="font-mono text-xs">{f.fileName}</span>
+                    <span className="text-xs text-gray-500"> — uploaded by {f.uploadedBy} on {f.uploadedAt.slice(0, 10)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!readonly && (
+              <input
+                id={inputId}
+                type="file"
+                multiple
+                className="text-sm"
+                disabled={uploadEvidence.isPending}
+                onChange={(e) => void onPick(area.category, e.currentTarget)}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -200,6 +260,8 @@ export function ExecutionForm({ visit, readonly }: { visit: SiteVisit; readonly:
           )}
         </div>
       )}
+
+      <EvidenceUploads visit={visit} readonly={readonly} />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">

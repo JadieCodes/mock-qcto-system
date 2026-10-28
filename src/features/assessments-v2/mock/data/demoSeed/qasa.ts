@@ -160,7 +160,7 @@ function qasaBuilder(log: SeedLog, spec: SubmissionSpec): QasaBuilder {
           notify(log, at, {
             recipientRole: 'QP',
             title: 'QASA decision reached',
-            body: `The IAC has reached a decision on "${title}". The outcome letter is being prepared.`,
+            body: `The IAC has reached a decision on "${title}". The feedback letter is being prepared.`,
           });
         }
       } else if (sub === 'outcome') {
@@ -169,7 +169,7 @@ function qasaBuilder(log: SeedLog, spec: SubmissionSpec): QasaBuilder {
           app = { ...app, approvalState: { stageId: 'asd-draft' }, approvalLetterDraft: { notes: '' } };
         }
         if (next.stageId === 'signed') {
-          notify(log, at, { recipientRole: 'QP', title: 'Outcome letter signed', body: `The outcome letter for "${title}" has been signed and is ready to view.` });
+          notify(log, at, { recipientRole: 'QP', title: 'Feedback letter signed', body: `The feedback letter for "${title}" has been signed and is ready to view.` });
         }
       } else {
         app = { ...app, approvalState: next };

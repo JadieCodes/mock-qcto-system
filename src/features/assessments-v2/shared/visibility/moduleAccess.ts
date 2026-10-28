@@ -1,6 +1,11 @@
 import { roleDescriptor } from '../../config/roles';
 import type { Portal, Role } from '../../types';
-import { EXTERNAL_MODULE_HIDDEN_FOR_ROLE, INTERNAL_MODULE_ROLE_OVERRIDE, INTERNAL_MODULE_TEAM } from './config';
+import {
+  EXTERNAL_MODULE_HIDDEN_FOR_ROLE,
+  INTERNAL_MODULE_ROLE_OVERRIDE,
+  INTERNAL_MODULE_TEAM,
+  MODULES_VISIBLE_TO_ALL_ROLES,
+} from './config';
 
 // ONE place that decides whether a role can see a module, for both portals. Used by the nav
 // (shared/ui/AssessmentsV2Layout.tsx), the dashboard tiles (shared/ui/Dashboard.tsx) and the
@@ -8,6 +13,7 @@ import { EXTERNAL_MODULE_HIDDEN_FOR_ROLE, INTERNAL_MODULE_ROLE_OVERRIDE, INTERNA
 // link would have given.
 export function isModuleVisible(portal: Portal, modulePath: string, role: Role): boolean {
   if (modulePath === 'dashboard') return true;
+  if (MODULES_VISIBLE_TO_ALL_ROLES.includes(modulePath)) return true;
 
   if (portal === 'external') {
     return !EXTERNAL_MODULE_HIDDEN_FOR_ROLE[modulePath]?.includes(role);

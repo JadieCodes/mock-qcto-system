@@ -16,6 +16,7 @@ import {
   saveLearnerAnswers,
   setResultsApprovedForSitting,
   updateVisitDetails,
+  uploadEvidence,
 } from './api';
 import type { NewVisitInput, SiteVisit } from './types';
 
@@ -100,6 +101,12 @@ export function useSaveFacilitatorAnswers() {
 
 export function useSaveLearnerAnswers() {
   return useSiteVisitMutation((args: { id: string; learnerAnswers: Record<string, string> }) => saveLearnerAnswers(args.id, args.learnerAnswers));
+}
+
+export function useUploadEvidence() {
+  return useSiteVisitMutation((args: { id: string; file: Parameters<typeof uploadEvidence>[1]; uploadedBy: string }) =>
+    uploadEvidence(args.id, args.file, args.uploadedBy),
+  );
 }
 
 export function useSetResultsApprovedForSitting() {

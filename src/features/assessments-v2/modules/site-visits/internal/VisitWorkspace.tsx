@@ -16,6 +16,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
+import { hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE } from '../evidence';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
@@ -390,7 +391,11 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
   // Item 2 (module audit): the Submit button had no completeness gate at all, letting the ASD
   // submit a report with a blank checklist (CR-011).
   const checklistComplete = isChecklistComplete(visit.checklist, true);
-  const submitIssues = canExecute ? getChecklistIssues(visit.checklist, true) : [];
+  // QCTO feedback 1.12: at least one "Visit report" file before the report can be submitted.
+  const reportFileUploaded = hasVisitReportFile(visit);
+  const submitIssues = canExecute
+    ? [...getChecklistIssues(visit.checklist, true), ...(reportFileUploaded ? [] : [{ field: 'evidence-report', message: MISSING_VISIT_REPORT_MESSAGE }])]
+    : [];
 
   const dialogCopy: Record<Exclude<ReportDialogAction, null>, { title: string; confirmLabel: string; destructive?: boolean; actionId: string }> = {
     'report-send-back': { title: 'Send back for clarification', confirmLabel: 'Send back', actionId: 'report-send-back' },
@@ -409,11 +414,11 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
 
       {canExecute && (
         <>
-          <ValidationSummary issues={submitIssues} title="Complete every checklist line before you can submit the report:" />
+          <ValidationSummary issues={submitIssues} title="Complete these before you can submit the report:" />
           <div className="flex justify-end">
             <Button
               className="gap-2"
-              disabled={!checklistComplete || reportAction.isPending}
+              disabled={!checklistComplete || !reportFileUploaded || reportAction.isPending}
               onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'report-submit', actorRole: role, actorId, actorName })}
             >
               <Send className="h-4 w-4" />

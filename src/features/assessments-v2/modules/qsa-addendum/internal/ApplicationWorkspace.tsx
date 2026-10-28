@@ -22,7 +22,7 @@ import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
 import { QsaStatusBadge } from '../components/StatusBadge';
-import { APPROVAL_LETTER_SIGNER_ROLE, QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from '../config';
+import { APPROVAL_LETTER_SIGNER_ROLE, FEEDBACK_LETTER_TITLE, QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from '../config';
 import {
   useAckAction,
   useApprovalLetterAction,
@@ -210,7 +210,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="acknowledgement">Acknowledgement</TabsTrigger>
         <TabsTrigger value="evaluation">Evaluation</TabsTrigger>
-        <TabsTrigger value="outcome">Outcome Letter</TabsTrigger>
+        <TabsTrigger value="outcome">Feedback Letter</TabsTrigger>
         <TabsTrigger value="approval">Approval Letter</TabsTrigger>
         <TabsTrigger value="audit">Audit Trail</TabsTrigger>
       </TabsList>
@@ -480,7 +480,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
                 notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
                 signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
                 signatoryTitle: 'CEO',
-              })}
+              }, FEEDBACK_LETTER_TITLE)}
             />
             {application.outcomeState.stageId === 'signed' ? (
               <p className="text-sm text-emerald-700 font-medium">Signed by {application.outcomeState.submittedBy}.</p>
@@ -501,7 +501,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           (not the DD) is the one who sends it on to the QP — no DD -> QP shortcut. */}
       <TabsContent value="approval" className="space-y-4">
         {!application.approvalState || !application.approvalLetterDraft ? (
-          <p className="text-sm text-gray-400">Not yet available — the approval letter is only ready once the outcome letter is signed and the decision was "Approved".</p>
+          <p className="text-sm text-gray-400">Not yet available — the approval letter is only ready once the feedback letter is signed and the decision was "Approved".</p>
         ) : (
           <>
             {latestApprovalDeclineNote && (

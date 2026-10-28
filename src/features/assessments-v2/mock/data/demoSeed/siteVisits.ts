@@ -14,7 +14,8 @@
 //                                                                                 offers "Create Post-EISA Monitoring Visit".
 //  SV4   RPL/ARPL Monitoring   Thabo Technical College, Electrical  today + 35    Booked — awaiting execution (auto-created from
 //                              Trades (registration G6)                           the RPL/ARPL-flagged registration)
-//  SV5   Marking & Moderation  Electrical Trades sitting today - 15 today - 15    Booked — report in draft (first section done)
+//  SV5   Marking & Moderation  Electrical Trades sitting today - 15 today - 15    Booked — report in draft (first section done,
+//                                                                                 one attendance register uploaded)
 //  SV6   EISA Readiness        Precious Mahlangu                    today - 10    Report submitted — waiting for the Deputy Director
 //  SV7   Marking & Moderation  Welding sitting today - 45           today - 45    Report approved — waiting to share the outcome
 //  SV8   RPL/ARPL Monitoring   Lerato Training Institute, Plumbing  today - 75    Outcome shared — waiting for the QP to acknowledge
@@ -28,6 +29,11 @@
 // "Create Post-EISA Monitoring Visit" button still shows. SV5, SV7 and SV11 are linked to sittings
 // that have a results batch or are awaiting one, so Approval of Results shows their Marking &
 // Moderation status.
+//
+// QCTO feedback 1.12 (Batch D): a report can only be submitted with at least one "Visit report"
+// file, so every visit whose report was ever submitted (SV6, SV7, SV8, SV9, SV11) carries one
+// sample visit report, uploaded by the ASD after executing the visit. SV5 (draft) has one
+// attendance register and no report yet.
 //
 // Planners (Assistant Director): Lindiwe Khumalo / Riaan Pretorius. Deputy Director: Grace
 // Mokoena / Peter Botha. Domain Director: Michael van Wyk / Nokuthula Dube. Sub Domain Admin:
@@ -54,6 +60,7 @@ import {
   REPORT_APPROVER_ROLE,
   REPORT_SUBMITTER_ROLE,
 } from '../../../modules/site-visits/config';
+import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory } from '../../../modules/site-visits/evidence';
 import { freeTextFieldsForType } from '../../../modules/site-visits/freeTextFields';
 import type { NotificationFlag, SiteVisit, VisitType } from '../../../modules/site-visits/types';
 import { isPerQualificationVisit, visitHasSdp, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
@@ -129,6 +136,8 @@ const NOTES_BY_TYPE: Record<VisitType, Record<string, string>> = {
 
 const CHECKLIST_COMMENT = 'Observed on site — in order.';
 
+const EVIDENCE_FILE_SIZE: Record<VisitEvidenceCategory, number> = { report: 1_048_576, attendance: 312_000, other: 204_800 };
+
 interface PlanInput {
   visitType: VisitType;
   qpId: string;
@@ -147,6 +156,7 @@ interface VisitSeedBuilder {
   submitPlan: (atDaysAgo: number, planNote: string) => VisitSeedBuilder;
   plan: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
   execute: (asdId: string, atDaysAgo: number, complete: boolean) => VisitSeedBuilder;
+  upload: (category: VisitEvidenceCategory, fileName: string, asdId: string, atDaysAgo: number) => VisitSeedBuilder;
   report: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
   done: () => void;
 }
@@ -237,11 +247,23 @@ export function seedSiteVisits(
         };
         return api;
       },
+      // uploadEvidence() on the Execution & Report tab — no audit entry, only while the report is editable.
+      upload(category, fileName, asdId, atDaysAgo) {
+        if (visit.planningWorkflow.stageId !== 'booked' || visit.reportWorkflow.stageId !== 'awaiting-execution') {
+          throw new Error(`Demo seed: evidence for "${subject()}" can only be uploaded while the report is being completed.`);
+        }
+        const asd = seedPerson(asdId);
+        if (asd.role !== REPORT_SUBMITTER_ROLE) throw new Error(`Demo seed: ${asd.name} is not the report submitter role.`);
+        const uploadedAt = clock.at(atDaysAgo, 16);
+        visit = { ...visit, evidence: [...evidenceOf(visit), { fileName, fileSize: EVIDENCE_FILE_SIZE[category], uploadedAt, uploadedBy: asd.name, category }] };
+        return api;
+      },
       // performReportAction() (no re-route is seeded).
       report(actionId, actorId, atDaysAgo, note) {
         if (actionId === 'report-submit') {
           if (!isChecklistComplete(visit.checklist, true)) throw new Error('Demo seed: every checklist line needs an answer and a comment before submitting the report.');
           if (!visit.completedBy.trim() || !visit.completedDate) throw new Error('Demo seed: complete "Completed By" and "Completion Date" before submitting.');
+          if (!hasVisitReportFile(visit)) throw new Error(`Demo seed: ${MISSING_VISIT_REPORT_MESSAGE}`);
         }
         const actor = seedPerson(actorId);
         const at = clock.at(atDaysAgo, 14);
@@ -461,6 +483,7 @@ export function seedSiteVisits(
     .plan('plan-approve', NOKUTHULA, 38)
     .plan('plan-book', KATLEGO, 35)
     .execute(SIPHO, 2, false)
+    .upload('attendance', 'Marking_Session_Attendance_Register.pdf', SIPHO, 2)
     .done();
 
   // SV6 — Readiness for Precious Mahlangu (today - 10): report submitted, with the Deputy Director.
@@ -470,6 +493,7 @@ export function seedSiteVisits(
     .plan('plan-approve', MICHAEL, 33)
     .plan('plan-book', KARABO, 30)
     .execute(THANDEKA, 6, true)
+    .upload('report', 'EISA_Readiness_Visit_Report.pdf', THANDEKA, 6)
     .report('report-submit', THANDEKA, 3)
     .done();
 
@@ -480,6 +504,7 @@ export function seedSiteVisits(
     .plan('plan-approve', MICHAEL, 72)
     .plan('plan-book', KARABO, 70)
     .execute(THANDEKA, 42, true)
+    .upload('report', 'Marking_Moderation_Visit_Report_Welding.pdf', THANDEKA, 42)
     .report('report-submit', THANDEKA, 41)
     .report('report-approve', PETER, 38)
     .done();
@@ -488,6 +513,7 @@ export function seedSiteVisits(
   // shared with the QP, who has not acknowledged it yet.
   autoRplVisit('sdp-lerato-training-institute', workingDateFromToday(-75))
     .execute(SIPHO, 72, true)
+    .upload('report', 'RPL_ARPL_Monitoring_Visit_Report_Lerato.pdf', SIPHO, 72)
     .report('report-submit', SIPHO, 70)
     .report('report-approve', GRACE, 66)
     .report('share-visit-outcome', GRACE, 64)
@@ -500,6 +526,7 @@ export function seedSiteVisits(
     .plan('plan-approve', NOKUTHULA, 43)
     .plan('plan-book', KATLEGO, 41)
     .execute(SIPHO, 16, true)
+    .upload('report', 'EISA_Readiness_Visit_Report_Bloemfontein.pdf', SIPHO, 16)
     .report('report-submit', SIPHO, 14)
     .report(
       'report-send-back',
@@ -528,6 +555,7 @@ export function seedSiteVisits(
     .plan('plan-approve', NOKUTHULA, 98)
     .plan('plan-book', KATLEGO, 95)
     .execute(SIPHO, 72, true)
+    .upload('report', 'Marking_Moderation_Visit_Report_Plumbing.pdf', SIPHO, 72)
     .report('report-submit', SIPHO, 71)
     .report('report-approve', GRACE, 68)
     .report('share-visit-outcome', GRACE, 66)

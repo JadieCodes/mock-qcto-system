@@ -1,5 +1,9 @@
 import type { ProcessStageTeam, Role } from '../../types';
 
+// QCTO feedback 2.2 (replaces approved correction 6 in 09-visibility-matrix.md): modules every
+// role on both portals can open. Only status-only views belong here.
+export const MODULES_VISIBLE_TO_ALL_ROLES: string[] = ['qasa-status'];
+
 // 09-visibility-matrix.md Table A (external portal). SDP additions beyond the existing
 // CR-018 instrument-validation hide: qsa-addendum, eisa-confirmation, site-visits,
 // approval-of-results, rpl-toolkit. QP additions: eisa-registration, fisa.

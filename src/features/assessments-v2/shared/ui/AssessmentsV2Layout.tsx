@@ -10,6 +10,7 @@ import {
   FileCheck,
   FileText,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   MapPin,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   'qsa-addendum': FileCheck,
   'instrument-validation': CheckCircle2,
+  'qasa-status': ListChecks,
   'eisa-calendar': Calendar,
   'eisa-registration': ClipboardList,
   'eisa-confirmation': FileText,

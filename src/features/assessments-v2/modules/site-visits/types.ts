@@ -55,6 +55,11 @@ export interface SiteVisit {
   completedBy: string;
   completedDate: string;
 
+  // QCTO feedback 1.12: supporting evidence uploaded on the Execution & Report tab (UI-only:
+  // name and size, as elsewhere in v2). Optional so visits stored before Batch D still load —
+  // read it through evidence.ts evidenceOf(), which treats a missing value as an empty list.
+  evidence?: { fileName: string; fileSize: number; uploadedAt: string; uploadedBy: string; category: 'report' | 'attendance' | 'other' }[];
+
   // Set only for the RPL/ARPL visit auto-created from a Phase 4 registration (CR-042/CR-044 —
   // the only automatic trigger into this hub). Null for every officially-created visit.
   sourceRegistrationId: string | null;

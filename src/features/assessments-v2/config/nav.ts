@@ -15,6 +15,8 @@ export const INTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
   { path: 'qsa-addendum', label: 'QAS Addendum (QASA)' },
   { path: 'instrument-validation', label: 'EISA Instrument Validation' },
+  // QCTO feedback 2.2: status only, visible to every role (shared/visibility/config.ts).
+  { path: 'qasa-status', label: 'QASA Status and Approved Instruments' },
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'Learner EISA Registration' },
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
@@ -30,6 +32,7 @@ export const EXTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
   { path: 'qsa-addendum', label: 'QAS Addendum (QASA)' },
   { path: 'instrument-validation', label: 'EISA Instrument Validation' },
+  { path: 'qasa-status', label: 'QASA Status and Approved Instruments' },
   { path: 'eisa-calendar', label: 'EISA Calendar' },
   { path: 'eisa-registration', label: 'Learner EISA Registration' },
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },

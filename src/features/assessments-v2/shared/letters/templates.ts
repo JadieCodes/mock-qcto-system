@@ -36,14 +36,16 @@ ${d.notes ?? ''}
 `.trim(),
 };
 
-export function generateLetter(kind: LetterKind, recordId: string, data: LetterData): GeneratedLetter {
+// `title` lets a module show its own name for a shared template (QASA calls the outcome
+// letter its "feedback letter", RPL Toolkit keeps "Outcome Letter").
+export function generateLetter(kind: LetterKind, recordId: string, data: LetterData, title: string = LETTER_TITLES[kind]): GeneratedLetter {
   return {
     id: crypto.randomUUID(),
     kind,
     recordId,
     generatedAt: new Date().toISOString(),
     data,
-    title: LETTER_TITLES[kind],
+    title,
     body: TEMPLATES[kind](data),
   };
 }

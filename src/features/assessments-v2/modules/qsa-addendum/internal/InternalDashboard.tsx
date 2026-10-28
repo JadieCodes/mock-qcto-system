@@ -65,9 +65,9 @@ export function InternalDashboard() {
         title="QAS Addendum (QASA)"
         description={
           <>
-            <span className="block">Roles: ASD evaluates · DD reviews · IAC decides · CEO signs the outcome letter.</span>
+            <span className="block">Roles: ASD evaluates · DD reviews · IAC decides · CEO signs the feedback letter.</span>
             {isCeoQueue
-              ? 'Outcome letters you can sign now — the IAC has approved or declined these QASAs.'
+              ? 'Feedback letters you can sign now — the IAC has approved or declined these QASAs.'
               : 'Open one to act on it — only the actions your current role may perform are shown.'}
           </>
         }
@@ -86,7 +86,7 @@ export function InternalDashboard() {
           isCeoQueue ? (
             <EmptyState
               title="Nothing to sign"
-              description="An outcome letter appears here once the IAC has approved or declined a QASA."
+              description="A feedback letter appears here once the IAC has approved or declined a QASA."
             />
           ) : (
             <EmptyState title="No submissions yet" description="QASAs submitted by a QP in the external portal will appear here." />

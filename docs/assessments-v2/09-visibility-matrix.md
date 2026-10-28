@@ -124,4 +124,16 @@ QCTO's corrections to the draft above, as given to the developer. These override
 3. **Records link to a QP or SDP by stable id (`qpId`/`sdpId`), not by free-text name.**
 4. Assumption 3 (Section 5) should read: *"SDP is None on Site Visits; already correct in the code."*
 5. All other assumptions (Section 5) are **approved as written**.
-6. The EISA Instrument Validation status dashboard **stays ASD-only**. CR-025 ("should other officials get a read-only status dashboard?") remains an **open question for QCTO**.
+6. ~~The EISA Instrument Validation status dashboard **stays ASD-only**. CR-025 ("should other officials get a read-only status dashboard?") remains an **open question for QCTO**.~~ **Replaced on 28 Oct 2026 by QCTO feedback 2.2** (see below).
+
+### QCTO feedback 2.2 — status view for all system users (28 Oct 2026, replaces correction 6)
+
+QCTO: "The information regarding the QASA status and approved instruments needs to be available for viewing by all system users." This answers CR-025's open question and replaces correction 6. Where it differs from the original change request (CR-025 limited the dashboard to internal officials), QCTO's feedback wins.
+
+- **Who:** every role on both portals — QP and SDP (external); ASD, Assistant Director, Deputy Director, Director, Domain Director, Chief Director, IAC, CEO, Sub Domain Admin, Director Office and Qualifications Development (internal). `[ASSUMPTION]` "All system users" includes SDPs, who get the same status-only view.
+- **Where:** its own menu item, "QASA Status and Approved Instruments" (path `qasa-status`), right after EISA Instrument Validation on both portals. Granted in one place: `MODULES_VISIBLE_TO_ALL_ROLES` in `src/features/assessments-v2/shared/visibility/config.ts`, read by `isModuleVisible()`. No role is special-cased in the screen.
+- **What it shows (read-only):**
+  - *QASA status* — qualification, QP, and a plain-language current status (Under evaluation · Returned to the QP for corrections · Under review · Awaiting IAC decision · Approved by the IAC — feedback letter awaiting CEO signature · Approved — approval letter being finalised · Approved · Declined by the IAC — feedback letter awaiting CEO signature · Declined).
+  - *Approved instruments* — EISA instrument validations whose outcome is Approved or Approved with conditions: qualification, validation date, and the conditions (or "None").
+- **What it never shows:** documents, checklists, evaluations, letters, comments/notes other than validation conditions, audit trail, or any link or button into a QASA or validation record. The view's api (`modules/qasa-status/api.ts`) returns only those columns.
+- **Unchanged:** every role's access to every other module, including QASA itself. SDPs still cannot open the QASA or EISA Instrument Validation modules or records (Table A). The ASD's own "Status Dashboard" tab inside EISA Instrument Validation stays as it was (an ASD working list of every validation, in progress or not).
