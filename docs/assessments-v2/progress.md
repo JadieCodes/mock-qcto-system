@@ -739,6 +739,8 @@ Demo seed data for QASA, EISA Instrument Validation and the EISA Calendar (items
 
 Found, not changed (it would be a visibility/logic change):
 - **CEO queue shows QASAs that are not ready to sign.** `createApplication()` starts every QASA's `outcomeState` at `ceo-signature`, and the CEO list (`qsa-addendum/internal/InternalDashboard.tsx`) filters on that stage alone. So "Awaiting Your Signature" lists all 7 QASAs with no IAC decision yet, as well as Millwright, the only one that can be signed. The others open to "Not yet available — the IAC has not reached a decision." The fix would be to also require `evalState` `approved`/`declined` in that filter.
+- **Fixed (2026-10-28):** the CEO's QASA "My items" now lists only QASAs the CEO can sign now (`canSignOutcomeNow()` in `qsa-addendum/internal/InternalDashboard.tsx`: IAC decided + `canActInStage(OUTCOME_WORKFLOW, …)`), so after Reset it shows only Millwright; the CEO now also gets the My items / All items for my role switch, and "All items for my role" shows every QASA. Tiles, section title, description and empty state follow the list.
+- **Not changed:** RPL Toolkit's CEO queue (`rpl-toolkit/internal/InternalDashboard.tsx`) has the same bug — `createApplication()` starts `outcomeState` at `ceo-signature` and the CEO filter checks that stage alone (no RPL seed data, so it only shows once a QP submits a toolkit).
 
 Assumptions / left open:
 - There are only 4 qualifications in `accreditedQualifications.ts`/`qpDirectory.ts`, so 8 of the 12 QASAs use other trade titles under the same three QPs. These are qualifications with no accredited SDPs yet, so they never reach the calendar. The SAQA ids for them are placeholders, as in Batch B.
