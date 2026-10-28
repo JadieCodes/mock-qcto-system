@@ -179,10 +179,9 @@ function replaceValidation(records: FisaValidationRecord[], updated: FisaValidat
 
 // CR-026 entry rule: an SDP can only start instrument development/validation for a Skills
 // Programme whose FISA Standard is Approved — mirrors Instrument Validation's CR entry rule.
+// QCTO feedback 2.11 follow-up: a standard can have more than one validation.
 export async function listEligibleFisaStandards(): Promise<FisaStandardRecord[]> {
-  const approved = await listApprovedFisaStandards();
-  const existingIds = new Set(loadValidations().map((r) => r.fisaStandardId));
-  return approved.filter((s) => !existingIds.has(s.id));
+  return listApprovedFisaStandards();
 }
 
 export async function listFisaValidations(): Promise<FisaValidationRecord[]> {
@@ -201,9 +200,6 @@ export async function startFisaValidation(input: NewFisaValidationInput): Promis
   }
 
   const all = loadValidations();
-  if (all.some((r) => r.fisaStandardId === input.fisaStandardId)) {
-    throw new Error('A FISA Instrument Validation already exists for this FISA Standard.');
-  }
 
   const record: FisaValidationRecord = {
     id: crypto.randomUUID(),

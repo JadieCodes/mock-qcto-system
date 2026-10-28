@@ -37,8 +37,7 @@ export function NewValidationDialog({ open, onOpenChange }: { open: boolean; onO
 
         {eligible.length === 0 ? (
           <p className="text-sm text-gray-500 py-4">
-            No Skills Programmes are eligible yet — their FISA Standard must be Approved first, and each standard can only have one
-            instrument validation.
+            No Skills Programmes are eligible yet — their FISA Standard must be Approved first.
           </p>
         ) : (
           <div className="space-y-4 py-2">

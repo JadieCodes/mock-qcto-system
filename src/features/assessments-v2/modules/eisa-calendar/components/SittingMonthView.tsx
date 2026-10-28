@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { calcRegistrationClosingDate } from '../registrationClosing';
+import { displayOrDash, qualificationIdOf } from '../sittingDetails';
+import { SittingDetailsDialog } from './SittingDetailsDialog';
 import { StatusLegend } from './StatusBadge';
 import { STATUS_CLASSES } from './statusStyles';
 import type { EisaSitting } from '../types';
@@ -14,6 +17,9 @@ function pad(n: number): string {
 
 // CR-033: month view of the visual calendar, with status colours.
 export function SittingMonthView({ sittings, onSelectSitting }: { sittings: EisaSitting[]; onSelectSitting?: (sitting: EisaSitting) => void }) {
+  // QCTO feedback 2.3: without a parent handler, clicking an entry opens its details here.
+  const [detailsTarget, setDetailsTarget] = useState<EisaSitting | null>(null);
+  const selectSitting = onSelectSitting ?? setDetailsTarget;
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -72,8 +78,8 @@ export function SittingMonthView({ sittings, onSelectSitting }: { sittings: Eisa
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => onSelectSitting?.(s)}
-                      title={`${s.qualificationTitle} — ${s.status}`}
+                      onClick={() => selectSitting(s)}
+                      title={`${qualificationIdOf(s)} ${displayOrDash(s.qualificationTitle)} — QP: ${displayOrDash(s.qpName)} — Registration closes ${calcRegistrationClosingDate(s.date)} — ${s.status}`}
                       className={cn('block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-medium', STATUS_CLASSES[s.status])}
                     >
                       {s.qualificationTitle}
@@ -87,6 +93,7 @@ export function SittingMonthView({ sittings, onSelectSitting }: { sittings: Eisa
         </div>
       </div>
       <StatusLegend />
+      <SittingDetailsDialog sitting={detailsTarget} onClose={() => setDetailsTarget(null)} />
     </div>
   );
 }

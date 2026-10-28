@@ -7,6 +7,7 @@ import { NotificationBanner } from '../../../shared/notifications/NotificationBa
 import { useNotifications } from '../../../shared/notifications/useNotifications';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
+import { DatesWithClosing } from '../components/RegistrationCloses';
 import { SittingListView } from '../components/SittingListView';
 import { SittingMonthView } from '../components/SittingMonthView';
 import { UpcomingDeadlinesBanner } from '../components/UpcomingDeadlinesBanner';
@@ -36,7 +37,7 @@ export function QpCalendarView() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">EISA Calendar</h2>
-          <p className="text-sm text-gray-500 mt-1">Propose sitting dates for a qualification with an Approved QASA.</p>
+          <p className="text-sm text-gray-500 mt-1">Propose sitting dates for a qualification with accredited SDPs.</p>
         </div>
         <Button className="gap-2" onClick={() => setFormOpen(true)}>
           <Plus className="h-4 w-4" />
@@ -77,7 +78,9 @@ export function QpCalendarView() {
                       <TableRow key={batch.id}>
                         <TableCell className="max-w-[220px] truncate font-medium">{batch.qualificationTitle}</TableCell>
                         <TableCell>{batch.year}</TableCell>
-                        <TableCell className="text-xs text-gray-500">{batch.dates.join(', ')}</TableCell>
+                        <TableCell>
+                          <DatesWithClosing dates={batch.dates} />
+                        </TableCell>
                         <TableCell>
                           <EisaSittingStatusBadge status={batchDisplayStatus(batch)} />
                           {/* Row 21 (D-08): every past rejection stays visible, not just the latest. */}
