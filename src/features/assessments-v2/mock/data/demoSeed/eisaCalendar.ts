@@ -20,6 +20,17 @@
 //  S6  Plumbing           today + 65   Postponed (reason, proposed new date, audit entry, notifications)
 //  S7  Electrical Trades  today + 80   Cancelled (reason, audit entry, notifications)
 //  S8  Welding            today + 125  Published — registration open
+// Added in phase C2, so Confirmation and Approval of Results have enough past sittings (one
+// results batch per sitting) and Lerato Training Institute has an open Plumbing sitting:
+//  S9  Electrical Trades  today - 60   Published (past)
+//  S10 Plumbing           today - 75   Published (past)
+//  S11 Welding            today - 90   Published (past)
+//  S12 Electrical Trades  today - 105  Published (past)
+//  S13 Plumbing           today - 130  Published (past)
+//  S14 Welding            today - 150  Published (past)
+//  S15 Electrical Trades  today - 170  Published (past)
+//  S16 Plumbing           today - 50   Published (past)
+//  S17 Plumbing           today + 150  Published — registration open
 // B1's three dates are published with registration open.
 //
 // Batch sittings-per-year counts come from the approved QASA (qasa.ts: Electrical Trades 3,
@@ -279,6 +290,16 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
       null,
     ),
     addDirect(welding, 125, THANDEKA, 20).sitting,
+    // Phase C2 — each added about 200 days before it was held, like S1–S3.
+    addDirect(electrical, -60, SIPHO, 260).sitting,
+    addDirect(plumbing, -75, SIPHO, 275).sitting,
+    addDirect(welding, -90, THANDEKA, 290).sitting,
+    addDirect(electrical, -105, SIPHO, 305).sitting,
+    addDirect(plumbing, -130, SIPHO, 330).sitting,
+    addDirect(welding, -150, THANDEKA, 350).sitting,
+    addDirect(electrical, -170, SIPHO, 370).sitting,
+    addDirect(plumbing, -50, SIPHO, 250).sitting,
+    addDirect(plumbing, 150, SIPHO, 25).sitting,
   );
 
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,

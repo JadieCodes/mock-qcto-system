@@ -7,7 +7,7 @@ import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api'
 import { CONFIRMATION_WORKFLOW } from './workflow';
 import type { ConfirmDetailsInput, ConsolidatedLearnerRow, EisaConfirmationRecord, GenerateConfirmationInput } from './types';
 
-const KEY = 'eisaConfirmation:records';
+export const KEY = 'eisaConfirmation:records';
 
 function loadAll(): EisaConfirmationRecord[] {
   return readStore<EisaConfirmationRecord[]>(KEY, []);

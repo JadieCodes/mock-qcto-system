@@ -170,7 +170,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
             {record.instrumentStatus === 'validated' && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                 This instrument is marked <strong>Validated</strong> on the qualification's record. This does not create or open an
-                EISA Registration.
+                Learner EISA Registration.
               </div>
             )}
 

@@ -15,8 +15,13 @@ import type { EisaRegistrationRecord } from '../types';
 
 // A brand-new submission nobody has personally touched yet still belongs under "My items" for
 // whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
+// A flagged SOR with every other SOR already accepted is waiting for the SDP, not the
+// Assistant Director, so it is left out until the SDP resubmits.
 function isUnassignedActionable(record: EisaRegistrationRecord, role: Role): boolean {
-  return canActInStage(REGISTRATION_WORKFLOW, record.workflow.stageId, role);
+  return (
+    canActInStage(REGISTRATION_WORKFLOW, record.workflow.stageId, role) &&
+    !(record.learners.some((l) => l.sorStatus === 'flagged') && record.learners.every((l) => l.sorStatus === 'flagged' || l.sorStatus === 'accepted'))
+  );
 }
 
 // CR-019/CR-035: its own section, separate from EISA Instrument Validation. CR: category split
@@ -86,7 +91,7 @@ export function InternalDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">EISA Registration</h2>
+          <h2 className="text-xl font-bold text-gray-900">Learner EISA Registration</h2>
           <p className="text-sm text-gray-500 mt-1">Roles: Assistant Director reviews the SORs and creates the registration number.</p>
           <p className="text-sm text-gray-500 mt-1">The Assistant Director reviews each learner's SOR and creates the registration number.</p>
         </div>

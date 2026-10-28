@@ -57,7 +57,7 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Start EISA Registration</DialogTitle>
+          <DialogTitle>Start Learner EISA Registration</DialogTitle>
           <DialogDescription>Register enrolled learners against a published EISA sitting.</DialogDescription>
         </DialogHeader>
 

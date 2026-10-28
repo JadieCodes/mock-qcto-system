@@ -13,7 +13,7 @@ import type { SiteVisit } from '../site-visits/types';
 import { competencyRatePercent, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
 import type { EvidenceDocument, LearnerResult, NewResultsBatchInput, ResultsBatch } from './types';
 
-const KEY = 'approvalOfResults:batches';
+export const KEY = 'approvalOfResults:batches';
 
 function loadAll(): ResultsBatch[] {
   return readStore<ResultsBatch[]>(KEY, []);

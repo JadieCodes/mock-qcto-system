@@ -20,8 +20,9 @@ export function writeStore<T>(key: string, value: T): void {
 // QCTO feedback Batch C: bump this in every change to mock/data/demoSeed/. When the stored
 // version differs, demoSeed's ensureDemoSeed() clears the workflow stores once and re-seeds,
 // so a browser that already used the app gets the new seed without clicking "Reset demo data".
-// History: 'C1' = QASA, EISA Instrument Validation, EISA Calendar.
-export const SEED_VERSION = 'C1';
+// History: 'C1' = QASA, EISA Instrument Validation, EISA Calendar. 'C2' = Learner EISA
+// Registration, EISA Confirmation, Approval of Results (plus more past sittings).
+export const SEED_VERSION = 'C2';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

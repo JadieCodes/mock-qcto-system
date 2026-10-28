@@ -14,7 +14,7 @@ import { REGISTRATION_NUMBER_PREFIX } from './config';
 import { REGISTRATION_WORKFLOW } from './workflow';
 import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SorStatus, SupportingDocument } from './types';
 
-const KEY = 'eisaRegistration:records';
+export const KEY = 'eisaRegistration:records';
 
 function loadAll(): EisaRegistrationRecord[] {
   return readStore<EisaRegistrationRecord[]>(KEY, []);

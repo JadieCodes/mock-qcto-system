@@ -749,6 +749,62 @@ Assumptions / left open:
 - Notifications are role-addressed (existing pattern), so every QP sees every QP notification.
 - Batch dates are in "Y1" (the year of today + 240 days). If the seed runs early in a year, the published Electrical Trades batch and the directly added sittings can fall in the same year.
 
+## QCTO feedback — Batch C (phase C2)
+
+Learner EISA Registration, EISA Confirmation and Approval of Results (items 1.1, 1.2, 1.10). Same seeding approach as C1 (see "How seeding works" above). No workflow, permission, validation or type change; no route, role key, id, file or storage key renamed.
+
+**Rename — done.** "EISA Registration" → "Learner EISA Registration" on: the menu entry on both portals (`config/nav.ts`; the layout and Dashboard take the page name from there), the page heading on both portals (`eisa-registration/external/ExternalDashboard.tsx`, `internal/InternalDashboard.tsx`), the "Start Learner EISA Registration" dialog title (`external/NewRegistrationDialog.tsx`), and two on-screen sentences that name the module (`instrument-validation/internal/ValidationWorkspace.tsx` "…does not create or open a Learner EISA Registration.", and the plan note of an automatic RPL/ARPL visit in `site-visits/api.ts`). Left: code comments only. Notification titles such as "New EISA registration submitted" were not changed (not a menu, title, description, breadcrumb or heading).
+
+**New seed files** (`mock/data/demoSeed/`, each with its records and stages listed at the top): `eisaRegistration.ts`, `eisaConfirmation.ts`, `approvalOfResults.ts`, added to `index.ts` after the C1 seeds. Ids: `5eed0005-…` registrations, `5eed0006-…` confirmations, `5eed0007-…` results batches. Store keys exported (no rename): `eisa-registration/api.ts`, `eisa-confirmation/api.ts`, `approval-of-results/api.ts` `KEY`. `SEED_VERSION` is now `'C2'`.
+
+**Added to existing data (needed, no type change):**
+- **9 published sittings in `eisaCalendar.ts`** (S9–S17): eight in the past (Electrical Trades −60/−105/−170, Plumbing −50/−75/−130, Welding −90/−150 days) because Approval of Results allows one batch per sitting and C1 had only three past sittings; and Plumbing at today + 150, because Lerato Training Institute is accredited only for Plumbing and C1 had no Plumbing sitting with registration open. Each was added by the ASD about 200 days before it is held. Side effect on the C1 table: QP "own sittings" are now Nomvula 9, Johan 6, Precious 5, and each SDP sees 20 sittings. EISA Instrument Validation's pre-filled "Date of upcoming EISA" picks the new sittings where they are the next one.
+- **58 learners in `mock/data/enrolledLearners.ts`** (learner-013 to learner-070: Khanya 28, Thabo 13, Lerato 17). The directory had 12, and CR-040 allows a learner on only one registration ever, so 12 could not cover 20 registrations. ID numbers are in the 13-digit format with a valid check digit; they are not real people. Vuma Trade Centre's 2 learners are unused.
+
+**What is seeded**
+- **Learner EISA Registration (20):** Khanya Skills Academy: one being built (Electrical Trades, 2 learners, 1 SOR still to upload), one in internal review (1 SOR accepted, 1 under review, 1 not looked at), one with a flagged SOR waiting for the SDP (Welding, today + 125, reason given), one completed (Welding, today + 55, now closed) and one Non-Trades completed with files prepared for the QP and the SDP list shared with QA (Electrical Trades, today + 35). Thabo Technical College: Registered on the same Electrical Trades sitting. Lerato Training Institute: just submitted to the Assistant Director (Plumbing, today + 150). **Vuma Trade Centre: no record.** It is non-compliant, so `startRegistration()` refuses it ("… is not compliant and is blocked from submitting an EISA registration."), and the Start dialog shows the block — that is the real outcome, so nothing is seeded around it. Plus 13 Registered registrations behind the 11 past sittings (Khanya and Thabo for Electrical Trades, Khanya for Welding, Lerato for Plumbing, matching `accreditedQualifications.ts`). Every registration starts and finishes on or before its sitting's registration closing date (the seed throws otherwise). 61 learners in total, each on one registration. No learner is flagged RPL/ARPL, so no Site Visits monitoring item is created. Registration numbers EISA-REG-2025-0001 to EISA-REG-2026-0016, in the order they were created.
+- **EISA Confirmation (12):** ready to confirm — Electrical Trades at today + 35 (Nomvula Dlamini; 2 centres, Khanya 2 + Thabo 3; list acknowledged, QP still to confirm centres, counts and dates). Already confirmed — the 11 past sittings, each with centres, learner counts, marking (sitting + 2 working days) and moderation (+7) dates and the consolidated learner list. Electrical Trades at today − 15 is the confirmed one still awaiting its results. Welding at today + 55 is left without a confirmation, so it shows under the Assistant Director's "Ready to Confirm" with the Generate button.
+- **Approval of Results (10 batches + 1 awaiting):** awaiting submission (QP side) Electrical Trades today − 15; submitted, Plumbing −30 (75%); compliance review, Welding −45 (75%); evidence evaluation, Electrical Trades −60 (100%, AD uploaded an attendance register); DD, Plumbing −75 (66.7%); Director, Welding −90 (100%); Chief Director pending, Electrical Trades −105 (75%); approved ≥ 60%, Plumbing −130 (80%, recommended to Certification); **two approved below 60% with no Post-EISA visit yet** (below); declined by the DD with a reason, Plumbing −50 (66.7%, QP can resubmit). Every batch has a result per learner and was submitted inside the 21-working-day deadline.
+
+**The two low-competency batches (for C3):**
+- **Welding — Precious Mahlangu, sitting today − 150 (2026-06-01 when seeded on 2026-10-28), 2 of 5 competent = 40%**, approved by Chief Director Francois Le Roux. Id `5eed0007-0000-4000-8000-000000000009` (`RESULTS_SEED_IDS.lowCompetencyWelding` in `approvalOfResults.ts`).
+- **Electrical Trades — Nomvula Dlamini, sitting today − 170 (2026-05-11 when seeded on 2026-10-28), 2 of 4 competent = 50%**, approved by Chief Director Busisiwe Radebe. Id `5eed0007-0000-4000-8000-00000000000a` (`RESULTS_SEED_IDS.lowCompetencyElectrical`).
+
+**Checked by running the seed** (bundled outside the project with a localStorage stand-in): no throw; 234 audit entries, 141 notifications; `listSittingsReadyToConfirm()` = Welding today + 55 only; `listSittingsAwaitingSubmission()` = Electrical Trades today − 15 (deadline on track); a real `startRegistration()` call for Vuma throws the compliance error; a browser holding `'C1'` re-seeds once and keeps the selected person; Reset clears every key and the reload re-seeds.
+
+**"My items" after Reset** (same predicates as the dashboards). "Act now" = records the person's role can act on now; the rest are records this person was the last to act on, which the approved definition keeps in "My items" (Fix 1B-ii correction). The external portal has no switch, so QP/SDP figures are their own records.
+
+| Person (role) | Learner EISA Registration | EISA Confirmation | Approval of Results |
+|---|---|---|---|
+| Lindiwe Khumalo (Assistant Director) | 9 — act now 2 (Khanya review, Lerato), 7 she registered | 8 she generated (QP acts on them) + 1 in "Ready to Confirm" | 3 — act now 3 |
+| Riaan Pretorius (Assistant Director) | 11 — act now 2, 9 he registered | 4 he generated + 1 in "Ready to Confirm" | 4 — act now 3, 1 he sent to the DD |
+| Grace Mokoena (DD) | no access | no access | 2 — act now 1, 1 she declined |
+| Peter Botha (DD) | no access | no access | 2 — act now 1, 1 he sent to the Director |
+| Zanele Mthembu (Director) | no access | no access | 2 — act now 1, 1 she sent to the Chief Director |
+| Sarah Naidoo (Director) | no access | no access | 1 — act now 1 |
+| Busisiwe Radebe (Chief Director) | no access | no access | 3 — act now 1, 2 she approved (Electrical Trades −170 shows "Create Post-EISA Monitoring Visit") |
+| Francois Le Roux (Chief Director) | no access | no access | 2 — act now 1, 1 he approved (Welding −150 shows the button) |
+| Nomvula Dlamini (QP) | no access | 5 (1 to confirm) | 1 awaiting submission + 3 batches |
+| Johan van der Merwe (QP) | no access | 4 | 4 batches (1 declined — Resubmit) |
+| Precious Mahlangu (QP) | no access | 3 | 3 batches |
+| Khanya Skills Academy (SDP) | 10 (building and flagged ones need the SDP) | no access | no access |
+| Thabo Technical College (SDP) | 5 (all Registered) | no access | no access |
+| Lerato Training Institute (SDP) | 5 (1 with the Assistant Director) | no access | no access |
+| Vuma Trade Centre (SDP) | 0 — blocked as non-compliant (CR-041) | no access | no access |
+
+Every other internal role has no access to these three modules (`shared/visibility/config.ts`). Still empty: Vuma's list (by rule). No confirmation is seeded at "Awaiting QP acknowledgement"; one appears as soon as the Assistant Director generates the Welding today + 55 confirmation.
+
+**"My items" check (the C1 CEO problem: a record listed because "my role can act at this stage" that opens with nothing to do):**
+- **Learner EISA Registration — had it, fixed.** A registration at `ad-review` whose flagged SORs are the only ones not yet accepted is waiting for the SDP, but it was listed for both Assistant Directors and opened to "Resolve every flagged SOR (the SDP must correct and resubmit)…". One extra condition in `isUnassignedActionable()` (`eisa-registration/internal/InternalDashboard.tsx`): `&& !(some SOR is flagged && every SOR is flagged or accepted)`. It returns to "My items" once the SDP resubmits (status Replaced). "All items for my role" still shows it.
+- **Approval of Results — not affected.** Every stage an internal role can act in (`ad-review`, `dd-review`, `director-review`, `chief-director-review`) opens with that role's actions.
+- **EISA Confirmation — not affected.** Its internal list has no "my role can act here" part (only "generated by me"); the actionable list, "Ready to Confirm", is not scope-filtered.
+- Not changed (the approved definition, not this bug): the "last acted by me" half lists records the person has already passed on (counts above). Showing only "act now" records would mean dropping that half in `filterByScope`, a visibility decision for QCTO.
+
+Assumptions / left open:
+- A confirmation is generated about 5 weeks before its sitting, and results are submitted about 20 days after it. Both are inside the module rules, but QCTO has not given typical timings.
+- The first N learners on a batch are Competent and the rest Not yet competent (no learner-level pattern was asked for).
+- Notifications stay role-addressed (existing pattern), so every SDP sees every SDP notification and every QP every QP notification.
+
 ## Change log
 
 - **2026-10-20** — Phase 0 foundation built: skeleton, config (roles/teams/nav/labels/flags), v2-local role switcher, workflow engine, shared checklist component, letters, audit trail, in-app notifications, mock persistence layer, backend-dependent stubs, old checklist/form wording copied into mock data, module folder skeleton, entry point with its own QueryClientProvider. Router mount (`/assessments-v2/*` in `src/App.tsx`) approved and applied.
@@ -777,3 +833,4 @@ Assumptions / left open:
 - **2026-10-27** — QCTO feedback Batch A2 (removals): items 1.6, 2.6, 2.10, 2.11 and the five leftover system statements done; 3.6 done in code, but the readiness checklist wording was left for QCTO (see "QCTO feedback — Batch A2" above). `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
 - **2026-10-28** — QCTO feedback Batch B (EISA Calendar): items 1.8, 3.5, 2.3, 1.9 and the FISA 2.11 follow-up done; 1.9 needed one fix (Update now notifies the QP). Two assumptions recorded (`DEFAULT_SITTINGS_PER_YEAR`, `REGISTRATION_CLOSING_MONTHS_BEFORE`) — see "QCTO feedback — Batch B" above. `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
 - **2026-10-28** — QCTO feedback Batch C, phase C1 (demo seed): QASA (12 records), EISA Instrument Validation (4) and EISA Calendar (3 batches, 15 sittings: 8 added directly, 7 from batches) now open with records at every stage after Reset; `SEED_VERSION = 'C1'` re-seeds older browsers once. Found but not changed: the CEO's QASA queue lists undecided QASAs (see "QCTO feedback — Batch C (phase C1)" above). `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
+- **2026-10-28** — QCTO feedback Batch C, phase C2 (demo seed): Learner EISA Registration (20), EISA Confirmation (12) and Approval of Results (10 batches + 1 awaiting submission) now open with records at every stage after Reset; "EISA Registration" renamed to "Learner EISA Registration" on screen; 9 sittings added to the calendar seed and 58 learners to the enrolled-learner directory; `SEED_VERSION = 'C2'`. Fixed: the Assistant Director's Registration "My items" listed registrations waiting only for the SDP to correct a flagged SOR (one extra condition). See "QCTO feedback — Batch C (phase C2)" above. `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
