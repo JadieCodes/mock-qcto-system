@@ -805,6 +805,63 @@ Assumptions / left open:
 - The first N learners on a batch are Competent and the rest Not yet competent (no learner-level pattern was asked for).
 - Notifications stay role-addressed (existing pattern), so every SDP sees every SDP notification and every QP every QP notification.
 
+## QCTO feedback — Batch C (phase C3)
+
+Site Visits & Monitoring, FISA Instrument Validation and RPL Toolkit (items 1.11, 1.12, 2.8). Same seeding approach as C1/C2 (see "How seeding works" above). No workflow, permission, validation or type change apart from the two "My items" filter fixes below; nothing renamed.
+
+**New seed files** (`mock/data/demoSeed/`, each with its records and stages listed at the top): `siteVisits.ts`, `fisaValidation.ts`, `rplToolkit.ts`, added to `index.ts` after the C2 seeds. Ids: `5eed0008-…` site visits, `5eed0009-…` RPL/ARPL monitoring items, `5eed000a-…` FISA validations, `5eed000b-…` RPL Toolkit submissions. Store keys exported (`export` added, no rename): `site-visits/api.ts` `KEY`, `mock/api/siteVisitsStore.ts` `KEY`, `fisa/api.ts` `VALIDATION_KEY`, `rpl-toolkit/api.ts` `KEY`. `SEED_VERSION` is now `'C3'`.
+
+**Added to the C2 data (needed for RPL/ARPL visits, no type change):** `eisaRegistration.ts` can now flag a learner RPL/ARPL while a registration is being built (as `setLearnerRplArpl()` does), and creating the registration number then creates the Site Visits monitoring item plus the Assistant Director and ASD notifications (as `performRegistrationAction('reg-create-number')` does). Two learners are flagged: `learner-043` on G6 (Thabo, Electrical Trades today + 35) and `learner-063` on P5 (Lerato, Plumbing today − 75). `seedEisaRegistrations()` now returns `{ registrations, monitoringItems }`. An RPL/ARPL visit is only ever created this way in the app, so both RPL/ARPL visits come from these items (built in the shape of `buildAutoCreatedVisit()`, with the item id as `sourceMonitoringItemId`, so `syncAutoCreatedVisits()` does not add a second copy — checked).
+
+**What is seeded**
+- **Site Visits (12):** Readiness for Nomvula Dlamini, plan with the DD (SV1). Marking & Moderation, Electrical Trades today + 35, with the Domain Director (SV2). **Post-EISA Monitoring for the Electrical Trades 50% batch** (`5eed0007-…000a`, Nomvula Dlamini, sitting today − 170), created in the shape of `createPemVisitForBatch()` (linked sitting, "results approved" flag set, `pemVisitId` written on the batch), then dated today + 21 at Thabo Technical College by the Assistant Director, recommended and approved — waiting for Sub Domain Admin booking (SV3). RPL/ARPL monitoring at Thabo Technical College, booked, awaiting execution (SV4, the Execution & Report tab is open). Marking & Moderation, Electrical Trades today − 15, report in draft (SV5). Readiness for Precious Mahlangu, report with the DD (SV6). Marking & Moderation, Welding today − 45, report approved, outcome not shared yet (SV7). RPL/ARPL monitoring at Lerato Training Institute, outcome shared, waiting for the QP (SV8). Readiness for Johan van der Merwe, report sent back for clarification (SV9). Readiness for Johan van der Merwe, plan rejected by the Domain Director (SV10). Marking & Moderation, Plumbing today − 75, closed (SV11). Marking & Moderation, Welding today + 55, plan sent back to the Assistant Director (SV12). A2 rules hold: Readiness has no qualification, sitting or SDP; Marking & Moderation has a sitting and no SDP.
+- **Welding 40% batch** (`5eed0007-…0009`, Precious Mahlangu) has **no** visit, so "Create Post-EISA Monitoring Visit" still shows on it.
+- **Approval of Results, Electrical Trades 50% batch:** the amber "Below the 60% competency threshold." box stays, the button is gone, and it reads "A Post-EISA Monitoring visit has been created." The Welding −45 batch (Assistant Director compliance review) now shows SV7's approved report under "Marking & Moderation Monitoring Status", and the Plumbing −75 batch (with the DD) shows SV11 (Closed).
+- **FISA Instrument Validation (5), all against the approved Electrical Installation Skills Programme standard:** Thabo developing, instrument uploaded, QCTO not notified yet (F1); Khanya notified QCTO, awaiting Assistant Director allocation (F2); Thabo allocated by Riaan Pretorius to Thandeka Zulu, validation under way (F3); Lerato not approved by Sipho Ndlovu with the changes needed, back with the SDP in cycle 2 (F4); Khanya validated, Approved (F5). Khanya and Thabo have two validations each for the same standard.
+- **RPL Toolkit (11):** just submitted (Johan, Plumbing); an updated toolkit v2 awaiting allocation (Nomvula, Electrical Trades, supersedes the approved v1); ASD evaluation (Precious, Welding, Thandeka Zulu); returned to the QP for corrections (Johan, Drainlayer); with the DD (Precious, Boilermaker); Director Office moderation (Nomvula, Electrical Line Mechanic); with the IAC, endorsement note still to write (Johan, Lift Mechanic); approved and signed (Nomvula, Electrical Trades v1); declined and signed (Precious, Metal Fabricator); **in the CEO's queue and signable:** approved by the IAC (Johan, Gas Practitioner) and declined by the IAC (Precious, Rigger).
+
+**Checked by running the seed** (bundled outside the project with Vite's esbuild and a localStorage stand-in): no throw; 320 audit entries; `listVisits()` returns 12 (no duplicate RPL/ARPL visit); the Electrical Trades batch has `pemVisitId` = SV3 and the Welding batch has none; a browser holding `'C2'` re-seeds once and keeps the selected person.
+
+**"My items" fixes**
+- **RPL Toolkit CEO queue — fixed.** `rpl-toolkit/internal/InternalDashboard.tsx`: new `canSignOutcomeNow()` (IAC decided + `canActInStage(RPL_OUTCOME_WORKFLOW, …)`), same as the QASA fix. The CEO's "My items" lists only those (2 after Reset, was 9); the CEO now has the My items / All items for my role switch, and "All items for my role" shows all 11. Tiles, description ("Outcome letters you can sign now — the IAC has approved or declined these toolkits."), section title ("Awaiting Your Signature") and empty state ("Nothing to sign") follow the list.
+- **Site Visits — had it, fixed.** Every visit is created with its report at `awaiting-execution`, which the ASD can act in, so both ASDs saw every visit still in planning and the rejected plan, and those open to "Not yet available — the visit must be booked first". `isUnassignedActionable()` in `site-visits/internal/InternalDashboard.tsx` now counts the report stage only when the plan is `booked`. Sipho Ndlovu 8 → 3, Thandeka Zulu 9 → 4. "All items for my role" unchanged.
+- **FISA Instrument Validation — not affected.** Each stage an internal role can act in (`awaiting-allocation`, `asd-validation` for the allocated ASD) opens with that role's action.
+- Not changed (the approved definition, as in C2): "My items" still includes records the person was the last to act on.
+
+**"My items" after Reset** ("act now" where it differs from the total; the rest are records the person last acted on). QP/SDP = their own records on the external portal (no switch).
+
+| Person (role) | Site Visits | FISA Instrument Validation | RPL Toolkit |
+|---|---|---|---|
+| Sipho Ndlovu (ASD) | 3 — act now 3 | 2 — act now 0 | 5 — act now 0 |
+| Thandeka Zulu (ASD) | 4 — act now 3 | 1 — act now 1 | 4 — act now 1 |
+| Lindiwe Khumalo (Assistant Director) | 2 — act now 1 | 1 — act now 1 | 2 — act now 2 |
+| Riaan Pretorius (Assistant Director) | 1 — act now 1 | 2 — act now 1 | 3 — act now 2 |
+| Grace Mokoena (DD) | 6 — act now 3 | 0 (no DD stage, PM-01) | 2 — act now 1 |
+| Peter Botha (DD) | 4 — act now 3 | 0 (no DD stage, PM-01) | 1 — act now 1 |
+| Michael van Wyk / Nokuthula Dube (Domain Director) | 2 each — act now 1 | no access | no access |
+| Karabo Sithole / Katlego Mahlangu (Sub Domain Admin) | 3 / 4 — act now 1 | no access | no access |
+| Thabiso Molefe / Palesa Nkosi (IAC) | no access | 0 (no IAC stage) | 3 each — act now 1 |
+| Angela Fourie / David Molewa (CEO) | no access | no access | 2 each (all signable) |
+| Elsabe Steyn / Johannes Pretorius (Director Office) | no access | no access | 1 / 2 — act now 1 |
+| Fundiswa Ngcobo / Ayesha Patel (Qualifications Development) | no access | 0 (no QD stage) | no access |
+| Director, Chief Director (all four) | no access | no access | no access |
+| Nomvula Dlamini (QP) | 5 | no access | 3 |
+| Johan van der Merwe (QP) | 4 (1 to acknowledge) | no access | 4 (1 to correct) |
+| Precious Mahlangu (QP) | 3 | no access | 4 |
+| Khanya Skills Academy (SDP) | no access | 2 | no access |
+| Thabo Technical College (SDP) | no access | 2 (1 to notify QCTO) | no access |
+| Lerato Training Institute (SDP) | no access | 1 (1 to fix and resubmit) | no access |
+| Vuma Trade Centre (SDP) | no access | 0 | no access |
+
+Still empty: DD, IAC and Qualifications Development under FISA Instrument Validation (no stage in that workflow; they act on FISA Standards); Vuma Trade Centre (the non-compliant demo SDP, nothing seeded for it); Sipho Ndlovu has nothing to act on now in FISA and RPL (Thandeka holds the open ASD items — the role still has work).
+
+Assumptions / left open:
+- "SDP notified" in the brief was read as "the SDP has developed the instrument and is about to notify QCTO" (F1), next to "notified, awaiting allocation" (F2). "Submitted" and "awaiting allocation" for RPL are the same stage in the workflow, so there is one fresh submission and one updated toolkit that has waited 5 days.
+- The Post-EISA visit keeps no SDP (as `createPemVisitForBatch()` writes it); the venue names Thabo Technical College, the SDP whose learners sat. Its visit date was moved from the sitting date to today + 21 through `updateVisitDetails()`.
+- The two RPL/ARPL visits (Thabo, Lerato) still carry the QP and qualification of the registration (existing `buildAutoCreatedVisit()` shape); item 2.7 (select SDP/AC, no EISA link) is Batch A3 and not done.
+- The Marking & Moderation visits are dated on the sitting day, because a linked sitting sets the date (CR-050), even though marking follows the sitting.
+- No report re-route (CR-055) is seeded.
+
 ## Change log
 
 - **2026-10-20** — Phase 0 foundation built: skeleton, config (roles/teams/nav/labels/flags), v2-local role switcher, workflow engine, shared checklist component, letters, audit trail, in-app notifications, mock persistence layer, backend-dependent stubs, old checklist/form wording copied into mock data, module folder skeleton, entry point with its own QueryClientProvider. Router mount (`/assessments-v2/*` in `src/App.tsx`) approved and applied.

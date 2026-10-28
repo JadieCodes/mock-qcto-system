@@ -21,8 +21,9 @@ export function writeStore<T>(key: string, value: T): void {
 // version differs, demoSeed's ensureDemoSeed() clears the workflow stores once and re-seeds,
 // so a browser that already used the app gets the new seed without clicking "Reset demo data".
 // History: 'C1' = QASA, EISA Instrument Validation, EISA Calendar. 'C2' = Learner EISA
-// Registration, EISA Confirmation, Approval of Results (plus more past sittings).
-export const SEED_VERSION = 'C2';
+// Registration, EISA Confirmation, Approval of Results (plus more past sittings). 'C3' = Site
+// Visits, FISA Instrument Validation, RPL Toolkit (plus two RPL/ARPL-flagged registrations).
+export const SEED_VERSION = 'C3';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

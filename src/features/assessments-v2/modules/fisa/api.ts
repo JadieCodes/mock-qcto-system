@@ -157,7 +157,7 @@ export async function listApprovedFisaStandards(): Promise<FisaStandardRecord[]>
 // Stage 2 & 3 — Instrument development + FISA Instrument Validation
 // ---------------------------------------------------------------------------
 
-const VALIDATION_KEY = 'fisa:validations';
+export const VALIDATION_KEY = 'fisa:validations';
 
 function loadValidations(): FisaValidationRecord[] {
   return readStore<FisaValidationRecord[]>(VALIDATION_KEY, []);

@@ -4,8 +4,11 @@
 // performRegistrationAction), with the audit entries and notifications each step implies.
 // Every registration is against a published sitting from eisaCalendar.ts and is started (and,
 // if registered, completed) on or before that sitting's registration closing date. Learners
-// come from mock/data/enrolledLearners.ts; no learner is on two registrations (CR-040). No
-// learner is flagged RPL/ARPL, so no Site Visits monitoring item is created. Days are "days ago".
+// come from mock/data/enrolledLearners.ts; no learner is on two registrations (CR-040). Two
+// registrations have one RPL/ARPL-flagged learner each (phase C3): G6 (Thabo, Electrical Trades
+// today + 35) and P5 (Lerato, Plumbing today - 75). Creating their registration numbers creates
+// the Site Visits monitoring item (CR-042/CR-044), returned as `monitoringItems` for
+// siteVisits.ts. Days are "days ago".
 //
 // Open registrations (the screens' live demo):
 //  #   SDP                        Sitting                     Category    Stage
@@ -36,6 +39,7 @@
 // Assistant Directors (09-visibility-matrix.md Section 3): Lindiwe Khumalo handles Khanya Skills
 // Academy; Riaan Pretorius handles Thabo Technical College and Lerato Training Institute.
 // Registration numbers are given in the order the numbers were created, as the api does.
+import type { RplArplMonitoringItem } from '../../api/siteVisitsStore';
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
 import { SDP_DIRECTORY } from '../sdpDirectory';
 import { calcRegistrationClosingDate, isRegistrationClosed } from '../../../modules/eisa-calendar/registrationClosing';
@@ -46,6 +50,7 @@ import type { EisaRegistrationRecord, RegistrationCategory, SorStatus } from '..
 import { audit, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
 
 const REGISTRATION_ID_GROUP = 5;
+const RPL_MONITORING_ITEM_ID_GROUP = 9;
 const B1_BATCH_ID = seedId(3, 1);
 
 const LINDIWE = 'lindiwe-khumalo';
@@ -73,6 +78,7 @@ function b1Sitting(sittings: EisaSitting[], index: number): EisaSitting {
 // One method per api function, chained in the order the steps happened.
 interface RegistrationSeedBuilder {
   addLearners: (learnerIds: string[], atDaysAgo: number) => RegistrationSeedBuilder;
+  rplArpl: (learnerIds: string[]) => RegistrationSeedBuilder;
   uploadSors: (learnerIds: string[] | 'all', atDaysAgo: number) => RegistrationSeedBuilder;
   supportingDocument: (fileName: string, fileSize: number, atDaysAgo: number) => RegistrationSeedBuilder;
   submit: (atDaysAgo: number) => RegistrationSeedBuilder;
@@ -86,8 +92,14 @@ function sorFileName(fullName: string): string {
   return `SOR_${fullName.replace(/\s+/g, '_')}.pdf`;
 }
 
-export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): EisaRegistrationRecord[] {
+export interface RegistrationSeed {
+  registrations: EisaRegistrationRecord[];
+  monitoringItems: RplArplMonitoringItem[];
+}
+
+export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): RegistrationSeed {
   const records: EisaRegistrationRecord[] = [];
+  const monitoringItems: RplArplMonitoringItem[] = [];
   const usedLearnerIds = new Set<string>();
   // performRegistrationAction('reg-create-number') numbers registrations in the order they were
   // registered, so numbering and the notifications that quote the number happen at the end.
@@ -173,6 +185,13 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
         }
         return api;
       },
+      // setLearnerRplArpl(): only while the registration is still being built (no audit entry).
+      rplArpl(learnerIds: string[]) {
+        if (record.workflow.stageId !== 'sdp-submission') throw new Error('Demo seed: the RPL/ARPL indicator can only be set while the registration is being built.');
+        for (const learnerId of learnerIds) learnerOf(learnerId);
+        set({ ...record, learners: record.learners.map((l) => (learnerIds.includes(l.learnerId) ? { ...l, rplArpl: true } : l)) });
+        return api;
+      },
       uploadSors(learnerIds: string[] | 'all', atDaysAgo: number) {
         const ids = learnerIds === 'all' ? record.learners.map((l) => l.learnerId) : learnerIds;
         for (const learnerId of ids) {
@@ -253,6 +272,30 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
             timestamp: at,
           });
         }
+        // CR-042/CR-044: the only automatic trigger into Site Visits & Monitoring — one
+        // monitoring item per registration, covering every RPL/ARPL-flagged learner on it.
+        const rplLearners = record.learners.filter((l) => l.rplArpl);
+        if (rplLearners.length > 0 && !record.rplMonitoringItemId) {
+          const item: RplArplMonitoringItem = {
+            id: seedId(RPL_MONITORING_ITEM_ID_GROUP, monitoringItems.length + 1),
+            visitType: 'rpl-arpl-monitoring',
+            sourceRegistrationId: record.id,
+            qualificationTitle: record.qualificationTitle,
+            qpId: record.qpId,
+            qpName: record.qpName,
+            sdpId: record.sdpId,
+            sdpName: record.sdpName,
+            sittingDate: record.sittingDate,
+            learnerNames: rplLearners.map((l) => l.fullName),
+            createdBy: ad.name,
+            createdAt: at,
+          };
+          monitoringItems.push(item);
+          set({ ...record, rplMonitoringItemId: item.id });
+          const body = `A monitoring item was created for "${record.qualificationTitle}" (${record.sdpName}) — ${rplLearners.length} RPL/ARPL learner(s).`;
+          notify(log, at, { recipientRole: 'Assistant Director', title: 'RPL/ARPL monitoring item created', body });
+          notify(log, at, { recipientRole: 'ASD', title: 'RPL/ARPL monitoring item created', body });
+        }
         pendingNumbers.push({ record: () => record, set, at });
         return api;
       },
@@ -262,10 +305,11 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
 
   // Past sittings: started ~160 days before the sitting, registered ~12 days later (all well
   // before the ~3-month closing date). Learners are listed per SDP.
-  function pastRegistration(sitting: EisaSitting, sdpId: string, learnerIds: string[], adId: string, sittingDaysAgo: number) {
+  function pastRegistration(sitting: EisaSitting, sdpId: string, learnerIds: string[], adId: string, sittingDaysAgo: number, rplLearnerIds: string[] = []) {
     const s = sittingDaysAgo + 160;
     start(sdpId, sitting, 'trades', s)
       .addLearners(learnerIds, s)
+      .rplArpl(rplLearnerIds)
       .uploadSors('all', s - 1)
       .supportingDocument('Assessment_Centre_Readiness_Declaration.pdf', 412_160, s - 1)
       .submit(s - 5)
@@ -273,7 +317,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
       .createNumber(adId, s - 12);
   }
 
-  const past: { title: string; offset: number; parts: { sdpId: string; learnerIds: string[]; adId: string }[] }[] = [
+  const past: { title: string; offset: number; parts: { sdpId: string; learnerIds: string[]; adId: string; rpl?: string[] }[] }[] = [
     { title: 'Electrical Trades', offset: -170, parts: [{ sdpId: THABO, learnerIds: ['learner-051', 'learner-052', 'learner-053', 'learner-005'], adId: RIAAN }] },
     { title: 'Welding', offset: -150, parts: [{ sdpId: KHANYA, learnerIds: ['learner-037', 'learner-038', 'learner-039', 'learner-040', 'learner-001'], adId: LINDIWE }] },
     { title: 'Plumbing', offset: -130, parts: [{ sdpId: LERATO, learnerIds: ['learner-064', 'learner-065', 'learner-066', 'learner-067', 'learner-068'], adId: RIAAN }] },
@@ -286,7 +330,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
       ],
     },
     { title: 'Welding', offset: -90, parts: [{ sdpId: KHANYA, learnerIds: ['learner-032', 'learner-033', 'learner-034'], adId: LINDIWE }] },
-    { title: 'Plumbing', offset: -75, parts: [{ sdpId: LERATO, learnerIds: ['learner-061', 'learner-062', 'learner-063'], adId: RIAAN }] },
+    { title: 'Plumbing', offset: -75, parts: [{ sdpId: LERATO, learnerIds: ['learner-061', 'learner-062', 'learner-063'], adId: RIAAN, rpl: ['learner-063'] }] },
     { title: 'Electrical Trades', offset: -60, parts: [{ sdpId: THABO, learnerIds: ['learner-046', 'learner-047', 'learner-048'], adId: RIAAN }] },
     { title: 'Plumbing', offset: -50, parts: [{ sdpId: LERATO, learnerIds: ['learner-069', 'learner-070', 'learner-010'], adId: RIAAN }] },
     { title: 'Welding', offset: -45, parts: [{ sdpId: KHANYA, learnerIds: ['learner-028', 'learner-029', 'learner-030', 'learner-031'], adId: LINDIWE }] },
@@ -302,13 +346,15 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
   ];
   for (const p of past) {
     const sitting = sittingAt(sittings, p.title, p.offset);
-    for (const part of p.parts) pastRegistration(sitting, part.sdpId, part.learnerIds, part.adId, -p.offset);
+    for (const part of p.parts) pastRegistration(sitting, part.sdpId, part.learnerIds, part.adId, -p.offset, part.rpl);
   }
 
-  // G6 — Thabo, registered for the Electrical Trades sitting at today + 35.
+  // G6 — Thabo, registered for the Electrical Trades sitting at today + 35. One learner is
+  // RPL/ARPL, so registering it created a Site Visits monitoring item.
   const electrical35 = sittingAt(sittings, 'Electrical Trades', 35);
   start(THABO, electrical35, 'trades', 118)
     .addLearners(['learner-041', 'learner-042', 'learner-043'], 118)
+    .rplArpl(['learner-043'])
     .uploadSors('all', 117)
     .submit(110)
     .accept('all', RIAAN, 101)
@@ -386,6 +432,9 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Ei
     });
   });
 
-  // Newest first, the order startRegistration() leaves the list in.
-  return [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Newest first, the order startRegistration() and createMonitoringItem() leave the lists in.
+  return {
+    registrations: [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    monitoringItems: [...monitoringItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  };
 }

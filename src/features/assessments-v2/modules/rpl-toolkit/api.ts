@@ -9,7 +9,7 @@ import type { Role } from '../../types';
 import { RPL_EVAL_WORKFLOW, RPL_OUTCOME_WORKFLOW } from './workflow';
 import type { NewRplToolkitInput, RplEvaluationReport, RplToolkitApplication } from './types';
 
-const KEY = 'rplToolkit:applications';
+export const KEY = 'rplToolkit:applications';
 
 function loadAll(): RplToolkitApplication[] {
   return readStore<RplToolkitApplication[]>(KEY, []);

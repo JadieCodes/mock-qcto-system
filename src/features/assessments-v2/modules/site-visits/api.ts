@@ -27,7 +27,7 @@ import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
 import type { NewVisitInput, SiteVisit, VisitType } from './types';
 import { visitSubject } from './visitTypeLabels';
 
-const KEY = 'siteVisits:visits';
+export const KEY = 'siteVisits:visits';
 
 function loadAll(): SiteVisit[] {
   return readStore<SiteVisit[]>(KEY, []);

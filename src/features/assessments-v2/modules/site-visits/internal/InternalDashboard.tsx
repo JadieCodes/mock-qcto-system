@@ -28,9 +28,11 @@ function myItemIds(v: SiteVisit): (string | null | undefined)[] {
 // whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
 // CR-055: a report re-routed to a specific Deputy Director belongs to that person only — it
 // must not also show as an unassigned item for every other Deputy Director.
+// Every visit is created with its report at `awaiting-execution`, so the report stage only
+// counts once the visit is booked (the Execution & Report tab is closed until then).
 function isUnassignedActionable(v: SiteVisit, role: Role, personId: string): boolean {
   if (canActInStage(PLANNING_WORKFLOW, v.planningWorkflow.stageId, role)) return true;
-  if (canActInStage(REPORT_WORKFLOW, v.reportWorkflow.stageId, role)) {
+  if (v.planningWorkflow.stageId === 'booked' && canActInStage(REPORT_WORKFLOW, v.reportWorkflow.stageId, role)) {
     return !v.reroutedToId || v.reroutedToId === personId;
   }
   return false;

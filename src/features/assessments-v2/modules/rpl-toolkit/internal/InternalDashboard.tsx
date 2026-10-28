@@ -9,7 +9,7 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import { useRplToolkitApplications } from '../hooks';
 import type { RplToolkitApplication } from '../types';
-import { RPL_EVAL_WORKFLOW } from '../workflow';
+import { RPL_EVAL_WORKFLOW, RPL_OUTCOME_WORKFLOW } from '../workflow';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 
 function myItemIds(app: RplToolkitApplication): (string | null | undefined)[] {
@@ -33,16 +33,28 @@ function isUnassignedActionable(app: RplToolkitApplication, role: Role, personId
   return true;
 }
 
+// Every submission is created with its outcome letter already at `ceo-signature`, so the stage
+// alone doesn't mean it can be signed — the IAC must have decided first (same check as the
+// Outcome Letter section in ApplicationWorkspace and performRplOutcomeAction).
+function canSignOutcomeNow(app: RplToolkitApplication, role: Role): boolean {
+  const decided = app.evalState.stageId === 'approved' || app.evalState.stageId === 'declined';
+  return decided && canActInStage(RPL_OUTCOME_WORKFLOW, app.outcomeState.stageId, role);
+}
+
 // PM-09: RPL Toolkit Team. Self-contained — no inbound or outbound links to the other maps.
 export function InternalDashboard() {
   const { role, person } = useV2Role();
   const { data: allApplications = [] } = useRplToolkitApplications();
   const [scope, setScope] = useState<ListScope>('mine');
 
-  // B-19-style fix, same as QSA Addendum: the CEO only ever sees the signature queue.
+  // B-19-style fix, same as QSA Addendum: the CEO's "My items" is only the outcome letters they
+  // can sign right now; "All items for my role" still shows every submission.
   const isCeo = role === 'CEO';
+  const isCeoQueue = isCeo && scope === 'mine';
   const applications = isCeo
-    ? allApplications.filter((a) => a.outcomeState.stageId === 'ceo-signature')
+    ? isCeoQueue
+      ? allApplications.filter((a) => canSignOutcomeNow(a, role))
+      : allApplications
     : filterByScope(allApplications, scope, person.id, myItemIds, (a) => isUnassignedActionable(a, role, person.id));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,12 +76,12 @@ export function InternalDashboard() {
             outcome letter.
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            {isCeo
-              ? 'Applications awaiting your outcome-letter signature only.'
+            {isCeoQueue
+              ? 'Outcome letters you can sign now — the IAC has approved or declined these toolkits.'
               : 'Open one to act on it — only the actions your current role may perform are shown.'}
           </p>
         </div>
-        {!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
+        <ScopeToggle scope={scope} onChange={setScope} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
@@ -90,13 +102,20 @@ export function InternalDashboard() {
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b bg-gray-50/80">
-          <h3 className="text-base font-semibold text-gray-900">Submissions</h3>
+          <h3 className="text-base font-semibold text-gray-900">{isCeoQueue ? 'Awaiting Your Signature' : 'Submissions'}</h3>
         </div>
         {applications.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="font-medium text-gray-500">No submissions yet</p>
-            <p className="text-sm text-gray-400 mt-1">Submissions made by a QP in the external portal will appear here.</p>
-          </div>
+          isCeoQueue ? (
+            <div className="text-center py-16">
+              <p className="font-medium text-gray-500">Nothing to sign</p>
+              <p className="text-sm text-gray-400 mt-1">An outcome letter appears here once the IAC has approved or declined a toolkit.</p>
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <p className="font-medium text-gray-500">No submissions yet</p>
+              <p className="text-sm text-gray-400 mt-1">Submissions made by a QP in the external portal will appear here.</p>
+            </div>
+          )
         ) : (
           <div className="overflow-x-auto">
             <Table>
