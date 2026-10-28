@@ -702,6 +702,51 @@ Uncertain / left:
 - Updating a sitting that came from a QP batch does not change the dates listed on that batch (existing behaviour, not changed).
 - `src/features/assessments-v2/CLAUDE.md` does not list module constants, and there is no module-level CLAUDE.md for `eisa-calendar`, so the two new constants are recorded here only.
 
+## QCTO feedback — Batch C (phase C1)
+
+Demo seed data for QASA, EISA Instrument Validation and the EISA Calendar (items 1.3, 1.4, 1.9; source: `10-feedback-audit.md` "the one finding" and List 3). No workflow, permission, validation or type change, and nothing was renamed.
+
+**How seeding works**
+- `mock/data/demoSeed/` — `helpers.ts` (relative dates, stable seed ids, `step()` and a log for audit entries and notifications), `qasa.ts`, `instrumentValidation.ts`, `eisaCalendar.ts`, `index.ts`. Each file starts with a comment that lists its records and stages.
+- Records are built in the shape the real api functions write. `step()` uses each module's own `workflow.ts` definition and makes the same checks as `shared/workflow/engine.ts`: the action exists from that stage, the role may act there, the approver is a different person, and a note is given where one is required. It writes the same audit entry, with a past timestamp. A seed mistake throws instead of writing a record no real action could produce. The notifications and documents that each api function writes are written too: QASA documents, the IAC presentation, approval-letter notes, instrument files and validation outcomes. Letters are generated from the record state, so they need no stored data.
+- Ids keep the UUID format but are fixed (`5eed0001-…` QASA, `5eed0002-…` validations, `5eed0003-…` batches, `5eed0004-…` sittings), so later phases can link to them.
+- Every date is relative to today. Actions fall on working days at office hours in SAST. Notifications older than 7 days are seeded as read.
+- `mock/api/storage.ts`: new `SEED_VERSION` (now `'C1'`), `isSeedCurrent()`, `markSeedCurrent()`, `clearWorkflowStores()`. `index.tsx` calls `ensureDemoSeed()` once at module load. When the stored version differs, it clears the `assessmentsV2:` keys once and re-seeds. The person selection (`activePersonId`/`currentRole`) is kept. "Reset demo data" still clears every key, the version included, so the reload re-seeds. If the seed throws, the stores are cleared and the app opens empty instead of crashing.
+- Store keys are now exported (`export` added, no rename) so the seed writes to the same keys: `qsa-addendum/api.ts` `KEY`, `instrument-validation/api.ts` `KEY`, `eisa-calendar/api.ts` `BATCHES_KEY`/`SITTINGS_KEY`, `shared/audit/auditLog.ts` `KEY`, `shared/notifications/store.ts` `KEY`.
+
+**What is seeded**
+- **QASA (12):** Electrical Trades, Welding and Plumbing are approved and their approval letters were sent to the QP, so they are eligible for EISA Instrument Validation. Gas Practitioner: approval letter drafted by the ASD and waiting for the DD's signature. Millwright: approved by the IAC, with the outcome (feedback) letter waiting for the CEO (item 1.4). Boilermaker: declined by the IAC, with the outcome letter signed. Rigger: waiting for the IAC decision. Lift Mechanic: with the DD for review. Drainlayer: returned to the ASD with a DD comment, and the DD's part-done checklist stays visible. Electrical Line Mechanic: negative evaluation, so corrections were requested from the QP. Water and Wastewater Process Controller: acknowledgement letter with the DD while the ASD's evaluation is half done. Metal Fabricator: just submitted, **not registered with SAQA** (the QP uploaded the three documents), with the acknowledgement letter at the ASD.
+- **EISA Instrument Validation (4):** Plumbing is scheduled (slot agreed, QP to upload the instrument). Electrical Trades is in validation (the slot was agreed after an ASD counter-proposal). Welding was not approved and returned with the changes needed (cycle 2). Electrical Trades also has an earlier instrument, approved with written conditions.
+- **EISA Calendar:** Plumbing batch proposed and waiting for ASD review. Welding batch rejected with a reason, which the QP can correct and resubmit. Electrical Trades batch published (3 dates, registration open). Sittings the ASD added directly: three in the past, Electrical Trades and Welding inside 3 months (registration closed), Welding more than 3 months ahead (registration open), one Plumbing sitting postponed (reason and proposed new date) and one Electrical Trades sitting cancelled (reason). The postponed and cancelled sittings each have their audit entry plus SDP and QP notifications. Batch sizes follow the approved QASA's sittings per year (Electrical Trades 3, Plumbing 2, Welding 2).
+
+**Checked by running the seed** (compiled outside the project with a localStorage stand-in): no throw; 87 audit entries and 51 notifications (6 unread); `listApprovedQsaAddenda()` returns the 3 approved QASAs; `listEligibleQualifications()` returns Electrical Trades 3, Plumbing 2, Welding 2 (none on the default); every batch date passes `checkSittingDate()`; registration closed/open is as listed above; the DD return note and the QP corrections note are found by the screens' audit lookups; an old seed version is cleared once and the person selection is kept.
+
+"My items" after Reset (same predicates as the dashboards; QP/SDP = their own records):
+
+| Person (role) | QASA | EISA Instrument Validation | EISA Calendar |
+|---|---|---|---|
+| Sipho Ndlovu (ASD) | 8 | 3 | 2 batches |
+| Thandeka Zulu (ASD) | 4 | 2 | 2 batches |
+| Grace Mokoena (DD) | 8 | — | — |
+| Peter Botha (DD) | 6 | — | — |
+| Thabiso Molefe (IAC) | 5 | — | — |
+| Palesa Nkosi (IAC) | 3 | — | — |
+| Angela Fourie / David Molewa (CEO) | 7 each (only 1 can be signed, see below) | — | — |
+| Nomvula Dlamini (QP) | 4 | 2 | 1 batch, 6 own sittings |
+| Johan van der Merwe (QP) | 4 | 1 | 1 batch, 2 own sittings |
+| Precious Mahlangu (QP) | 4 | 1 | 1 batch, 3 own sittings |
+| Each SDP | no access | no access | 11 sittings (published, postponed, cancelled) |
+
+Found, not changed (it would be a visibility/logic change):
+- **CEO queue shows QASAs that are not ready to sign.** `createApplication()` starts every QASA's `outcomeState` at `ceo-signature`, and the CEO list (`qsa-addendum/internal/InternalDashboard.tsx`) filters on that stage alone. So "Awaiting Your Signature" lists all 7 QASAs with no IAC decision yet, as well as Millwright, the only one that can be signed. The others open to "Not yet available — the IAC has not reached a decision." The fix would be to also require `evalState` `approved`/`declined` in that filter.
+
+Assumptions / left open:
+- There are only 4 qualifications in `accreditedQualifications.ts`/`qpDirectory.ts`, so 8 of the 12 QASAs use other trade titles under the same three QPs. These are qualifications with no accredited SDPs yet, so they never reach the calendar. The SAQA ids for them are placeholders, as in Batch B.
+- The not-registered QASA has the SAQA ID "Pending" and the submission date as its registration date. The real form requires both fields even when the gate check says "not registered".
+- Past sittings (3) are seeded as `published` so phase C2 (Registration, Confirmation, Approval of Results) can link to them. There is no "held" status.
+- Notifications are role-addressed (existing pattern), so every QP sees every QP notification.
+- Batch dates are in "Y1" (the year of today + 240 days). If the seed runs early in a year, the published Electrical Trades batch and the directly added sittings can fall in the same year.
+
 ## Change log
 
 - **2026-10-20** — Phase 0 foundation built: skeleton, config (roles/teams/nav/labels/flags), v2-local role switcher, workflow engine, shared checklist component, letters, audit trail, in-app notifications, mock persistence layer, backend-dependent stubs, old checklist/form wording copied into mock data, module folder skeleton, entry point with its own QueryClientProvider. Router mount (`/assessments-v2/*` in `src/App.tsx`) approved and applied.
@@ -729,3 +774,4 @@ Uncertain / left:
 - **2026-10-27** — QCTO feedback Batch A1 (wording only): items 1.5, 1.7, 1.13, 3.1, 3.2, 3.9, 3.12 done; 3.11 partly (Director Office done, Assistant Director → ASD stopped — role key/lookup key, see "QCTO feedback — Batch A1" above). `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
 - **2026-10-27** — QCTO feedback Batch A2 (removals): items 1.6, 2.6, 2.10, 2.11 and the five leftover system statements done; 3.6 done in code, but the readiness checklist wording was left for QCTO (see "QCTO feedback — Batch A2" above). `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
 - **2026-10-28** — QCTO feedback Batch B (EISA Calendar): items 1.8, 3.5, 2.3, 1.9 and the FISA 2.11 follow-up done; 1.9 needed one fix (Update now notifies the QP). Two assumptions recorded (`DEFAULT_SITTINGS_PER_YEAR`, `REGISTRATION_CLOSING_MONTHS_BEFORE`) — see "QCTO feedback — Batch B" above. `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.
+- **2026-10-28** — QCTO feedback Batch C, phase C1 (demo seed): QASA (12 records), EISA Instrument Validation (4) and EISA Calendar (3 batches, 15 sittings: 8 added directly, 7 from batches) now open with records at every stage after Reset; `SEED_VERSION = 'C1'` re-seeds older browsers once. Found but not changed: the CEO's QASA queue lists undecided QASAs (see "QCTO feedback — Batch C (phase C1)" above). `npx eslint src/features/assessments-v2` and a scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean.

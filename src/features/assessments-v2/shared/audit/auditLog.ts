@@ -1,7 +1,7 @@
 import { readStore, writeStore } from '../../mock/api/storage';
 import type { AuditEntry } from './types';
 
-const KEY = 'audit';
+export const KEY = 'audit';
 
 export function appendAuditEntry(entry: Omit<AuditEntry, 'id' | 'timestamp'>): AuditEntry {
   const full: AuditEntry = { ...entry, id: crypto.randomUUID(), timestamp: new Date().toISOString() };

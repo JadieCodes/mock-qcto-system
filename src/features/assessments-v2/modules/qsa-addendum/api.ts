@@ -10,7 +10,7 @@ import { QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from './config';
 import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from './workflow';
 import type { ApprovalLetterDraft, EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
 
-const KEY = 'qsaAddendum:applications';
+export const KEY = 'qsaAddendum:applications';
 
 function loadAll(): QsaAddendumApplication[] {
   return readStore<QsaAddendumApplication[]>(KEY, []);

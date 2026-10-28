@@ -18,8 +18,8 @@ import type {
   ProposeSittingBatchInput,
 } from './types';
 
-const BATCHES_KEY = 'eisaCalendar:batches';
-const SITTINGS_KEY = 'eisaCalendar:sittings';
+export const BATCHES_KEY = 'eisaCalendar:batches';
+export const SITTINGS_KEY = 'eisaCalendar:sittings';
 
 function loadBatches(): EisaSittingBatch[] {
   return readStore<EisaSittingBatch[]>(BATCHES_KEY, []);

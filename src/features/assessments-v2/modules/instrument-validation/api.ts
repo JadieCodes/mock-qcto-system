@@ -20,7 +20,7 @@ import type {
   ValidationOutcomeDecision,
 } from './types';
 
-const KEY = 'instrumentValidation:records';
+export const KEY = 'instrumentValidation:records';
 
 function loadAll(): InstrumentValidationRecord[] {
   return readStore<InstrumentValidationRecord[]>(KEY, []);

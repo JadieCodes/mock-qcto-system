@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { RPL_TOOLKIT_ENABLED } from './config/featureFlags';
 import { navForPortal, type NavItem } from './config/nav';
+import { ensureDemoSeed } from './mock/data/demoSeed';
 import { ApprovalOfResultsExternal, ApprovalOfResultsInternal } from './modules/approval-of-results';
 import { EisaCalendarExternal, EisaCalendarInternal } from './modules/eisa-calendar';
 import { EisaConfirmationExternal, EisaConfirmationInternal } from './modules/eisa-confirmation';
@@ -25,6 +26,10 @@ import type { Portal } from './types';
 // is never touched. Workflow/domain state always lives in mock/api (memory + localStorage);
 // this cache is only used for request/loading/error ergonomics around those calls.
 const queryClient = new QueryClient();
+
+// QCTO feedback Batch C: write the demo seed before any screen reads the mock stores — on first
+// load, after "Reset demo data", and once whenever SEED_VERSION changes.
+ensureDemoSeed();
 
 // 09-visibility-matrix.md Tables A/B: a role that cannot see a module gets RoleBlocked even on
 // a direct URL visit, not just a hidden nav link — the real module component never even
