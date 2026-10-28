@@ -1,19 +1,16 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import {
-  fisaRegistrationStatusLabel,
-  fisaRegistrationStatusTone,
   fisaStandardStatusLabel,
   fisaStandardStatusTone,
   fisaValidationStatusLabel,
   fisaValidationStatusTone,
-  type FisaRegistrationStatusTone,
   type FisaStandardStatusTone,
   type FisaValidationStatusTone,
 } from '../workflow';
-import type { FisaRegistrationRecord, FisaStandardRecord, FisaValidationRecord } from '../types';
+import type { FisaStandardRecord, FisaValidationRecord } from '../types';
 
-const TONE_CLASSES: Record<FisaStandardStatusTone | FisaValidationStatusTone | FisaRegistrationStatusTone, string> = {
+const TONE_CLASSES: Record<FisaStandardStatusTone | FisaValidationStatusTone, string> = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
   blue: 'bg-blue-50 text-blue-700 border-blue-200',
   indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
@@ -33,14 +30,6 @@ export function FisaValidationStatusBadge({ record }: { record: FisaValidationRe
   return (
     <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[fisaValidationStatusTone(record)])}>
       {fisaValidationStatusLabel(record)}
-    </Badge>
-  );
-}
-
-export function FisaRegistrationStatusBadge({ record }: { record: FisaRegistrationRecord }) {
-  return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[fisaRegistrationStatusTone(record)])}>
-      {fisaRegistrationStatusLabel(record)}
     </Badge>
   );
 }

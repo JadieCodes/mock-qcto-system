@@ -1,24 +1,18 @@
 import { buildInstrumentValidationChecklist } from '../../mock/data/instrumentValidationChecklistItems';
 import { buildFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
 import { seedFisaStandards } from '../../mock/data/fisaStandardsSeed';
-import { getSdpComplianceStatus, listEnrolledLearners } from '../../mock/api/qaDomain';
 import { getPerson } from '../../shared/people/directory';
-import { verifyLearnerIdentity } from '../../mock/integrations/homeAffairs';
-import { validateSorAgainstModules } from '../../mock/integrations/qualificationsModules';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { addNotification } from '../../shared/notifications/store';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
-import { FISA_REGISTRATION_NUMBER_PREFIX } from './config';
-import { FISA_REGISTRATION_WORKFLOW, FISA_STANDARD_WORKFLOW, FISA_VALIDATION_WORKFLOW } from './workflow';
+import { FISA_STANDARD_WORKFLOW, FISA_VALIDATION_WORKFLOW } from './workflow';
 import type {
-  FisaRegistrationRecord,
   FisaStandardRecord,
   FisaValidationOutcome,
   FisaValidationDecision,
   FisaValidationRecord,
-  NewFisaRegistrationInput,
   NewFisaStandardInput,
   NewFisaValidationInput,
 } from './types';
@@ -343,198 +337,5 @@ export async function performFisaValidationAction(params: FisaValidationActionPa
   }
 
   saveValidations(replaceValidation(all, updated));
-  return updated;
-}
-
-// Read by FISA Registration (stage 4): registration only starts against a validated instrument.
-export async function listValidatedFisaValidations(): Promise<FisaValidationRecord[]> {
-  return loadValidations().filter((r) => r.instrumentStatus === 'validated');
-}
-
-// ---------------------------------------------------------------------------
-// Stage 4 — FISA Registration (simplified EISA Registration)
-// ---------------------------------------------------------------------------
-
-const REGISTRATION_KEY = 'fisa:registrations';
-
-function loadRegistrations(): FisaRegistrationRecord[] {
-  return readStore<FisaRegistrationRecord[]>(REGISTRATION_KEY, []);
-}
-
-function saveRegistrations(records: FisaRegistrationRecord[]): void {
-  writeStore(REGISTRATION_KEY, records);
-}
-
-function getRegistrationOrThrow(records: FisaRegistrationRecord[], id: string): FisaRegistrationRecord {
-  const record = records.find((r) => r.id === id);
-  if (!record) throw new Error(`FISA registration "${id}" not found.`);
-  return record;
-}
-
-function replaceRegistration(records: FisaRegistrationRecord[], updated: FisaRegistrationRecord): FisaRegistrationRecord[] {
-  return records.map((r) => (r.id === updated.id ? updated : r));
-}
-
-export async function listFisaRegistrations(): Promise<FisaRegistrationRecord[]> {
-  return loadRegistrations();
-}
-
-export async function getFisaRegistration(id: string): Promise<FisaRegistrationRecord | undefined> {
-  return loadRegistrations().find((r) => r.id === id);
-}
-
-export async function startFisaRegistration(input: NewFisaRegistrationInput): Promise<FisaRegistrationRecord> {
-  const validated = await listValidatedFisaValidations();
-  const validation = validated.find((v) => v.id === input.fisaValidationId);
-  if (!validation) {
-    throw new Error('A FISA registration can only be started for a validated FISA instrument.');
-  }
-
-  const compliant = await getSdpComplianceStatus(input.sdpName);
-  if (!compliant) {
-    throw new Error(`"${input.sdpName}" is not compliant and is blocked from submitting a FISA registration.`);
-  }
-
-  const record: FisaRegistrationRecord = {
-    id: crypto.randomUUID(),
-    fisaValidationId: validation.id,
-    skillsProgrammeTitle: validation.skillsProgrammeTitle,
-    sdpId: input.sdpId,
-    sdpName: input.sdpName,
-    sittingDate: input.sittingDate,
-    workflow: { stageId: 'sdp-submission', submittedBy: input.createdBy },
-    learners: [],
-    registrationNumber: null,
-    createdBy: input.createdBy,
-    createdAt: new Date().toISOString(),
-  };
-  saveRegistrations([record, ...loadRegistrations()]);
-  return record;
-}
-
-export async function listFisaEnrollableLearners(sdpName: string) {
-  return listEnrolledLearners(sdpName);
-}
-
-export async function addFisaRegistrationLearner(registrationId: string, learnerId: string): Promise<FisaRegistrationRecord> {
-  const all = loadRegistrations();
-  const record = getRegistrationOrThrow(all, registrationId);
-  if (record.workflow.stageId !== 'sdp-submission') {
-    throw new Error('Learners can only be added while the registration is still being built.');
-  }
-  if (record.learners.some((l) => l.learnerId === learnerId)) {
-    throw new Error('This learner is already on this registration.');
-  }
-
-  const enrolled = await listEnrolledLearners(record.sdpName);
-  const learner = enrolled.find((l) => l.id === learnerId);
-  if (!learner) throw new Error('That learner is not enrolled with this SDP.');
-
-  // CR-039-equivalent: backend-dependent, no screen — call the stub and move on regardless.
-  await verifyLearnerIdentity(learner.idNumber);
-
-  const updated: FisaRegistrationRecord = {
-    ...record,
-    learners: [
-      ...record.learners,
-      { learnerId: learner.id, fullName: learner.fullName, idNumber: learner.idNumber, sor: null, addedAt: new Date().toISOString() },
-    ],
-  };
-  saveRegistrations(replaceRegistration(all, updated));
-  return updated;
-}
-
-// Row 44 (test findings): the SDP can remove a learner they added, same as adding, only while
-// the registration is still being built.
-export async function removeFisaRegistrationLearner(registrationId: string, learnerId: string): Promise<FisaRegistrationRecord> {
-  const all = loadRegistrations();
-  const record = getRegistrationOrThrow(all, registrationId);
-  if (record.workflow.stageId !== 'sdp-submission') {
-    throw new Error('Learners can only be removed while the registration is still being built.');
-  }
-  const updated: FisaRegistrationRecord = {
-    ...record,
-    learners: record.learners.filter((l) => l.learnerId !== learnerId),
-  };
-  saveRegistrations(replaceRegistration(all, updated));
-  return updated;
-}
-
-export async function uploadFisaLearnerSor(
-  registrationId: string,
-  learnerId: string,
-  file: { fileName: string; fileSize: number },
-): Promise<FisaRegistrationRecord> {
-  const all = loadRegistrations();
-  const record = getRegistrationOrThrow(all, registrationId);
-  if (record.workflow.stageId !== 'sdp-submission') {
-    throw new Error('SORs can only be uploaded while the registration is still being built.');
-  }
-  const learner = record.learners.find((l) => l.learnerId === learnerId);
-  if (!learner) throw new Error('Learner not found on this registration.');
-
-  // CR-037-equivalent: backend-dependent, no screen.
-  await validateSorAgainstModules(file.fileName, record.skillsProgrammeTitle);
-
-  const updated: FisaRegistrationRecord = {
-    ...record,
-    learners: record.learners.map((l) =>
-      l.learnerId === learnerId ? { ...l, sor: { ...file, uploadedAt: new Date().toISOString() } } : l,
-    ),
-  };
-  saveRegistrations(replaceRegistration(all, updated));
-  return updated;
-}
-
-interface FisaRegistrationActionParams {
-  registrationId: string;
-  actionId: 'freg-submit' | 'freg-create-number';
-  actorRole: Role;
-  actorId: string;
-  actorName: string;
-}
-
-export async function performFisaRegistrationAction(params: FisaRegistrationActionParams): Promise<FisaRegistrationRecord> {
-  const all = loadRegistrations();
-  const record = getRegistrationOrThrow(all, params.registrationId);
-
-  if (params.actionId === 'freg-submit') {
-    if (record.learners.length === 0) throw new Error('Add at least one learner before submitting.');
-    if (record.learners.some((l) => !l.sor)) throw new Error('Every learner needs an uploaded SOR before submitting.');
-  }
-
-  const nextWorkflow = performAction({
-    definition: FISA_REGISTRATION_WORKFLOW,
-    record: record.workflow,
-    actionId: params.actionId,
-    actorRole: params.actorRole,
-    actorId: params.actorId,
-    actorName: params.actorName,
-    recordType: 'fisa-registration',
-    recordId: record.id,
-  });
-
-  let updated: FisaRegistrationRecord = { ...record, workflow: nextWorkflow };
-
-  if (params.actionId === 'freg-submit') {
-    addNotification({
-      recipientRole: 'Assistant Director',
-      title: 'New FISA registration submitted',
-      body: `${record.sdpName} submitted a FISA registration for "${record.skillsProgrammeTitle}" (${record.learners.length} learner(s)).`,
-    });
-  }
-
-  if (params.actionId === 'freg-create-number') {
-    const registeredCount = all.filter((r) => r.workflow.stageId === 'registered').length + 1;
-    const registrationNumber = `${FISA_REGISTRATION_NUMBER_PREFIX}-${new Date().getFullYear()}-${String(registeredCount).padStart(4, '0')}`;
-    updated = { ...updated, registrationNumber };
-    addNotification({
-      recipientRole: 'SDP',
-      title: 'FISA registration complete',
-      body: `Your FISA registration for "${record.skillsProgrammeTitle}" is complete — registration number ${registrationNumber}.`,
-    });
-  }
-
-  saveRegistrations(replaceRegistration(all, updated));
   return updated;
 }

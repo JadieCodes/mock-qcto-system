@@ -25,6 +25,7 @@ import {
 } from './config';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
 import type { NewVisitInput, SiteVisit, VisitType } from './types';
+import { visitSubject } from './visitTypeLabels';
 
 const KEY = 'siteVisits:visits';
 
@@ -258,19 +259,19 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
   // plan-approve were already two of these; plan-submit was the missing one, so the Deputy
   // Director only ever found out a plan was waiting by opening the dashboard themselves.
   if (params.actionId === 'plan-submit') {
-    addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, title: 'Visit plan awaiting recommendation', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Deputy Director recommendation.` });
+    addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, title: 'Visit plan awaiting recommendation', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Deputy Director recommendation.` });
   }
   if (params.actionId === 'plan-recommend') {
-    addNotification({ recipientRole: PLAN_APPROVER_ROLE, title: 'Visit plan awaiting approval', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Domain Director approval.` });
+    addNotification({ recipientRole: PLAN_APPROVER_ROLE, title: 'Visit plan awaiting approval', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Domain Director approval.` });
   }
   if (params.actionId === 'plan-approve') {
-    addNotification({ recipientRole: BOOKING_ROLE, title: 'Visit plan awaiting booking', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Sub Domain Admin booking.` });
+    addNotification({ recipientRole: BOOKING_ROLE, title: 'Visit plan awaiting booking', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Sub Domain Admin booking.` });
   }
   if (nextWorkflow.stageId === 'booked') {
     addNotification({
       recipientRole: REPORT_SUBMITTER_ROLE,
       title: bookedVisitNotificationTitle(visit.visitType),
-      body: `"${visit.qualificationTitle}" is booked for ${visit.visitDate}. The execution form is ready.`,
+      body: `"${visitSubject(visit)}" is booked for ${visit.visitDate}. The execution form is ready.`,
     });
   }
 
@@ -280,7 +281,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
     addNotification({
       recipientRole: nextOwner,
       title: isReject ? 'Visit plan rejected' : 'Visit plan sent back for clarification',
-      body: `"${visit.qualificationTitle}" (${visit.visitType}): ${params.note ?? ''}`,
+      body: `"${visitSubject(visit)}" (${visit.visitType}): ${params.note ?? ''}`,
     });
   }
 
@@ -349,7 +350,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     addNotification({
       recipientRole: target.role,
       title: 'A visit report was re-routed to you',
-      body: `"${visit.qualificationTitle}" (${visit.visitType}) was re-routed to ${target.name} by ${params.actorName}: ${params.note}`,
+      body: `"${visitSubject(visit)}" (${visit.visitType}) was re-routed to ${target.name} by ${params.actorName}: ${params.note}`,
     });
     return updated;
   }
@@ -370,10 +371,10 @@ export async function performReportAction(params: ReportActionParams): Promise<S
   saveAll(replace(all, updated));
 
   if (params.actionId === 'report-submit') {
-    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'Site visit report submitted', body: `"${visit.qualificationTitle}" (${visit.visitType}) is awaiting your review.` });
+    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'Site visit report submitted', body: `"${visitSubject(visit)}" (${visit.visitType}) is awaiting your review.` });
   }
   if (params.actionId === 'report-approve') {
-    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved', body: `Your report for "${visit.qualificationTitle}" was approved.` });
+    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved', body: `Your report for "${visitSubject(visit)}" was approved.` });
   }
   if (params.actionId === 'report-send-back') {
     addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report sent back for clarification', body: params.note ?? '' });
@@ -386,12 +387,12 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     // named on the visit, not only Post-EISA Monitoring. PM-07's extra QA/Accreditation/SDP
     // hand-off stays specific to Post-EISA Monitoring — the register only names those extra
     // recipients for that visit type.
-    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `The outcome for "${visit.qualificationTitle}" (${visit.qpName}) is ready to review.` });
+    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `The outcome for "${visitSubject(visit)}" (${visit.qpName}) is ready to review.` });
     if (visit.visitType === 'post-eisa-monitoring') {
       // PM-07: QA and Accreditation have no role in this build's Role union to notify directly —
       // simulated as an audit entry alongside the real in-app notifications to QP and SDP.
       if (visit.sdpName) {
-        addNotification({ recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visit.qualificationTitle}" (${visit.sdpName}) has been shared.` });
+        addNotification({ recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visitSubject(visit)}" (${visit.sdpName}) has been shared.` });
       }
       appendAuditEntry({
         recordType: 'site-visit-report',
@@ -404,7 +405,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     }
   }
   if (params.actionId === 'qp-acknowledge-outcome') {
-    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'QP acknowledged the visit outcome', body: `"${visit.qualificationTitle}" — the QP has acknowledged the shared outcome.` });
+    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'QP acknowledged the visit outcome', body: `"${visitSubject(visit)}" — the QP has acknowledged the shared outcome.` });
   }
 
   return updated;

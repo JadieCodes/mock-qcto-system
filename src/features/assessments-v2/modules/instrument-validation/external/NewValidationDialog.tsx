@@ -53,10 +53,7 @@ export function NewValidationDialog({ open, onOpenChange }: { open: boolean; onO
       }
     >
       {eligible.length === 0 ? (
-        <p className="text-sm text-gray-500 py-4">
-          No qualifications are eligible yet — their QASA must be Approved first, and each addendum can only have one
-          validation.
-        </p>
+        <p className="text-sm text-gray-500 py-4">No qualifications are eligible yet — their QASA must be Approved first.</p>
       ) : (
         <div className="space-y-2">
           <Select value={selectedId} onValueChange={setSelectedId}>

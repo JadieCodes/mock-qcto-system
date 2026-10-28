@@ -9,5 +9,3 @@ export const FISA_STANDARD_SIGNOFF_ROLE = 'Qualifications Development' as const;
 // build has no individual logins, so "allocating to an ASD" is recorded as a free-text name
 // for the audit trail/display rather than a real assignment to one of several ASD accounts.
 export const FISA_VALIDATION_ALLOCATOR_ROLE = 'Assistant Director' as const;
-
-export const FISA_REGISTRATION_NUMBER_PREFIX = 'FISA-REG';

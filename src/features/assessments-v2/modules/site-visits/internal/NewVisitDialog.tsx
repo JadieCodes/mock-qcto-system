@@ -9,7 +9,7 @@ import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS } from '../config';
 import { useCreateVisit, useSchedulableSittings, useSdpsForSitting } from '../hooks';
-import { VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
+import { isPerQualificationVisit, VISIT_TYPE_OPTIONS, visitHasSdp } from '../visitTypeLabels';
 import type { NotificationFlag, VisitType } from '../types';
 
 const NO_SITTING = '__none__';
@@ -59,21 +59,34 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     }
   };
 
+  const perQualification = isPerQualificationVisit(visitType);
+  const hasSdp = visitHasSdp(visitType);
+
+  // QCTO feedback 2.6: switching to EISA Readiness drops any sitting link and qualification
+  // picked for another type, since Readiness has neither.
+  const onVisitTypeChange = (value: VisitType) => {
+    setVisitType(value);
+    if (!isPerQualificationVisit(value)) {
+      setSittingId(NO_SITTING);
+      setQualificationTitle('');
+    }
+  };
+
   const selectedQp = QP_DIRECTORY.find((q) => q.qpId === qpId);
-  const canSubmit = qpId && qualificationTitle.trim() && visitDate && venue.trim();
+  const canSubmit = qpId && (!perQualification || qualificationTitle.trim()) && visitDate && venue.trim();
 
   const onSubmit = () => {
     if (!canSubmit || !selectedQp) return;
-    const linkedSdp = linkedSdps[0] ?? null;
+    const linkedSdp = hasSdp ? (linkedSdps[0] ?? null) : null;
     createVisit.mutate(
       {
         visitType,
         qpId: selectedQp.qpId,
         qpName: selectedQp.name,
-        qualificationTitle: qualificationTitle.trim(),
+        qualificationTitle: perQualification ? qualificationTitle.trim() : '',
         sdpId: linkedSdp?.sdpId ?? null,
         sdpName: linkedSdp?.sdpName ?? null,
-        sittingId: sittingId === NO_SITTING ? null : sittingId,
+        sittingId: perQualification && sittingId !== NO_SITTING ? sittingId : null,
         visitDate,
         venue: venue.trim(),
         notificationFlag,
@@ -105,7 +118,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Visit Type *</Label>
-            <Select value={visitType} onValueChange={(v) => setVisitType(v as VisitType)}>
+            <Select value={visitType} onValueChange={(v) => onVisitTypeChange(v as VisitType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -119,25 +132,27 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Link to a Published EISA Sitting (optional)</Label>
-            <Select value={sittingId} onValueChange={onSittingChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Not linked" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SITTING}>Not linked</SelectItem>
-                {sittings.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.qualificationTitle} — {s.date}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {sittingId !== NO_SITTING && <p className="text-xs text-gray-400">QP, qualification and date were auto-populated from the sitting.</p>}
-          </div>
+          {perQualification && (
+            <div className="space-y-2">
+              <Label>Link to a Published EISA Sitting (optional)</Label>
+              <Select value={sittingId} onValueChange={onSittingChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Not linked" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SITTING}>Not linked</SelectItem>
+                  {sittings.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.qualificationTitle} — {s.date}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {sittingId !== NO_SITTING && <p className="text-xs text-gray-400">QP, qualification and date were auto-populated from the sitting.</p>}
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={perQualification ? 'grid grid-cols-2 gap-3' : 'space-y-2'}>
             <div className="space-y-2">
               <Label>QP *</Label>
               <Select value={qpId} onValueChange={setQpId} disabled={sittingId !== NO_SITTING}>
@@ -153,24 +168,28 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Qualification *</Label>
-              <Input value={qualificationTitle} onChange={(e) => setQualificationTitle(e.target.value)} disabled={sittingId !== NO_SITTING} />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>SDP</Label>
-            {/* G-06: information only — an SDP cannot be picked here, since the SDP role has
-                no access to Site Visits at all. */}
-            {sittingId === NO_SITTING ? (
-              <p className="text-sm text-gray-400">Not applicable — link a sitting to see the registered SDP.</p>
-            ) : linkedSdps.length === 0 ? (
-              <p className="text-sm text-gray-400">No SDP has registered learners for this sitting yet.</p>
-            ) : (
-              <p className="text-sm text-gray-700">{linkedSdps.map((s) => s.sdpName).join(', ')}</p>
+            {perQualification && (
+              <div className="space-y-2">
+                <Label>Qualification *</Label>
+                <Input value={qualificationTitle} onChange={(e) => setQualificationTitle(e.target.value)} disabled={sittingId !== NO_SITTING} />
+              </div>
             )}
           </div>
+
+          {hasSdp && (
+            <div className="space-y-2">
+              <Label>SDP</Label>
+              {/* G-06: information only — an SDP cannot be picked here, since the SDP role has
+                  no access to Site Visits at all. */}
+              {sittingId === NO_SITTING ? (
+                <p className="text-sm text-gray-400">Not applicable — link a sitting to see the registered SDP.</p>
+              ) : linkedSdps.length === 0 ? (
+                <p className="text-sm text-gray-400">No SDP has registered learners for this sitting yet.</p>
+              ) : (
+                <p className="text-sm text-gray-700">{linkedSdps.map((s) => s.sdpName).join(', ')}</p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

@@ -14,7 +14,7 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
-import { VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
+import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
@@ -59,7 +59,7 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
           {visits.map((v) => (
             <TableRow key={v.id} className="cursor-pointer hover:bg-gray-50" onClick={() => onSelect(v.id)}>
               <TableCell className="whitespace-nowrap">{VISIT_TYPE_LABELS[v.visitType]}</TableCell>
-              <TableCell className="max-w-[200px] truncate">{v.qualificationTitle}</TableCell>
+              <TableCell className="max-w-[200px] truncate">{qualificationDisplay(v)}</TableCell>
               <TableCell className="max-w-[160px] truncate">{v.qpName}</TableCell>
               <TableCell className="whitespace-nowrap">{v.visitDate}</TableCell>
               <TableCell>
@@ -95,7 +95,7 @@ export function InternalDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Site Visits & Monitoring"
-        description="A standalone hub for EISA Readiness, Marking & Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits — an RPL/ARPL monitoring item is created automatically from a registration, never from EISA Confirmation."
+        description="A standalone hub for EISA Readiness, Marking & Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits."
         actions={
           <>
             <ScopeToggle scope={scope} onChange={setScope} />

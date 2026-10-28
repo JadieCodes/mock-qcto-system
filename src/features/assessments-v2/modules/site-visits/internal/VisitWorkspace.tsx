@@ -20,7 +20,7 @@ import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
-import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
+import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasSdp, visitSubject } from '../visitTypeLabels';
 import type { SiteVisit } from '../types';
 import type { Role } from '../../../types';
 
@@ -119,22 +119,26 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
           <Label className="text-xs text-gray-400 uppercase">QP</Label>
           <Input value={visit.qpName} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qpName: e.target.value } })} />
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Qualification</Label>
-          <Input
-            value={visit.qualificationTitle}
-            disabled={!canEdit}
-            onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qualificationTitle: e.target.value } })}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">SDP</Label>
-          <Input
-            value={visit.sdpName ?? ''}
-            disabled={!canEdit}
-            onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { sdpName: e.target.value || null } })}
-          />
-        </div>
+        {isPerQualificationVisit(visit.visitType) && (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">Qualification</Label>
+            <Input
+              value={visit.qualificationTitle}
+              disabled={!canEdit}
+              onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qualificationTitle: e.target.value } })}
+            />
+          </div>
+        )}
+        {visitHasSdp(visit.visitType) && (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">SDP</Label>
+            <Input
+              value={visit.sdpName ?? ''}
+              disabled={!canEdit}
+              onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { sdpName: e.target.value || null } })}
+            />
+          </div>
+        )}
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Visit Date</Label>
           <Input
@@ -525,7 +529,7 @@ export function VisitWorkspace({ visitId, onClose }: { visitId: string | null; o
       open={!!visitId}
       onOpenChange={(open) => !open && onClose()}
       size="lg"
-      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visit.qualificationTitle}` : ''}
+      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visitSubject(visit)}` : ''}
       footer={<Button variant="outline" onClick={onClose}>Close</Button>}
     >
       {visit && <VisitWorkspaceContent visit={visit} />}

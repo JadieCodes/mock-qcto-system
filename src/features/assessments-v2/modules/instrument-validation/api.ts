@@ -62,11 +62,10 @@ async function buildPrefilledFields(addendum: QsaAddendumApplication): Promise<P
 }
 
 // CR: entry point. A QP can only start a validation for a qualification whose QSA Addendum
-// is Approved (`listApprovedQsaAddenda`), and only one validation record exists per addendum.
+// is Approved (`listApprovedQsaAddenda`). QCTO feedback 2.11: one QASA may have several
+// validations, so an existing validation does not remove it from this list.
 export async function listEligibleQsaAddenda(): Promise<QsaAddendumApplication[]> {
-  const approved = await listApprovedQsaAddenda();
-  const existingIds = new Set(loadAll().map((r) => r.qsaAddendumId));
-  return approved.filter((a) => !existingIds.has(a.id));
+  return listApprovedQsaAddenda();
 }
 
 export async function listRecords(): Promise<InstrumentValidationRecord[]> {
@@ -85,9 +84,6 @@ export async function startValidation(input: NewValidationInput): Promise<Instru
   }
 
   const all = loadAll();
-  if (all.some((r) => r.qsaAddendumId === input.qsaAddendumId)) {
-    throw new Error('An instrument validation already exists for this QASA.');
-  }
 
   const record: InstrumentValidationRecord = {
     id: crypto.randomUUID(),

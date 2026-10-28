@@ -4,7 +4,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useReportAction, useSiteVisit } from '../hooks';
 import type { SiteVisit } from '../types';
-import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
+import { VISIT_TYPE_LABELS, visitSubject } from '../visitTypeLabels';
 import { checklistCompletionSummary } from '../workflow';
 
 // Row 37/G-26 (Fix 4 Part 2 correction): once the outcome is shared, the QP sees a read-only
@@ -44,7 +44,7 @@ export function VisitDetail({ visitId, onClose }: { visitId: string | null; onCl
       open={!!visitId}
       onOpenChange={(open) => !open && onClose()}
       size="md"
-      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visit.qualificationTitle}` : ''}
+      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visitSubject(visit)}` : ''}
       footer={<Button variant="outline" onClick={onClose}>Close</Button>}
     >
       {visit && (

@@ -17,6 +17,7 @@ import {
   useUpdateVisitDetails,
 } from '../hooks';
 import type { SiteVisit } from '../types';
+import { isPerQualificationVisit } from '../visitTypeLabels';
 
 // CR-049: the full set of qualifications known to the QP directory — used to restrict the QP
 // choice below to QPs linked to the chosen qualification. If a visit's existing qualification
@@ -33,12 +34,14 @@ function qpsForQualification(qualificationTitle: string) {
 // pre-filled from the visit (itself pre-filled from the linked sitting at creation time, if any).
 function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; readonly: boolean }) {
   const updateVisitDetails = useUpdateVisitDetails();
+  const perQualification = isPerQualificationVisit(visit.visitType);
 
   const qualificationOptions =
     visit.qualificationTitle && !KNOWN_QUALIFICATIONS.includes(visit.qualificationTitle)
       ? [visit.qualificationTitle, ...KNOWN_QUALIFICATIONS]
       : KNOWN_QUALIFICATIONS;
-  const qpOptionsForCurrentQualification = qpsForQualification(visit.qualificationTitle);
+  // QCTO feedback 2.6: EISA Readiness has no qualification, so every QP can be chosen.
+  const qpOptionsForCurrentQualification = perQualification ? qpsForQualification(visit.qualificationTitle) : QP_DIRECTORY;
   const currentQpStillValid = qpOptionsForCurrentQualification.some((q) => q.qpId === visit.qpId);
   const qpOptions = currentQpStillValid || !visit.qpId
     ? qpOptionsForCurrentQualification
@@ -62,23 +65,25 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
 
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-      <p className="text-xs font-semibold text-gray-500 uppercase">QP &amp; Qualification</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase">{perQualification ? 'QP & Qualification' : 'QP'}</p>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Qualification *</Label>
-          <Select value={visit.qualificationTitle} onValueChange={onQualificationChange} disabled={readonly}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {qualificationOptions.map((q) => (
-                <SelectItem key={q} value={q}>
-                  {q}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {perQualification && (
+          <div className="space-y-1.5">
+            <Label>Qualification *</Label>
+            <Select value={visit.qualificationTitle} onValueChange={onQualificationChange} disabled={readonly}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {qualificationOptions.map((q) => (
+                  <SelectItem key={q} value={q}>
+                    {q}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label>QP *</Label>
           <Select value={visit.qpId} onValueChange={onQpChange} disabled={readonly}>
@@ -95,7 +100,7 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
           </Select>
         </div>
       </div>
-      <p className="text-xs text-gray-400">Choosing a qualification restricts the QP list to QPs linked to it.</p>
+      {perQualification && <p className="text-xs text-gray-400">Choosing a qualification restricts the QP list to QPs linked to it.</p>}
     </div>
   );
 }
