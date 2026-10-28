@@ -10,7 +10,16 @@ const LETTER_TITLES: Record<LetterKind, string> = {
   approval: 'Approval Letter',
 };
 
-const TEMPLATES: Record<LetterKind, (data: LetterData) => string> = {
+// What an outcome letter is about. QASA is the default; the RPL Toolkit names its toolkit
+// instead (Batch A3).
+export type LetterSubject = 'qasa' | 'rpl-toolkit';
+
+const OUTCOME_SUBJECT: Record<LetterSubject, (title: string) => string> = {
+  qasa: (title) => `the QASA for "${title}"`,
+  'rpl-toolkit': (title) => `the RPL toolkit "${title}"`,
+};
+
+const TEMPLATES: Record<LetterKind, (data: LetterData, subject: LetterSubject) => string> = {
   acknowledgement: (d) => `
 Dear ${d.qpName},
 
@@ -19,10 +28,10 @@ This letter acknowledges receipt of the QASA submitted for evaluation for "${d.q
 Your submission has been received and is being evaluated. We will contact you once the Assessment Standards Domain has completed its review.
 `.trim(),
 
-  outcome: (d) => `
+  outcome: (d, subject) => `
 Dear ${d.qpName},
 
-Following the Internal Assessment Committee's review, the QASA for "${d.qualificationTitle}" has reached a final outcome.
+Following the Internal Assessment Committee's review, ${OUTCOME_SUBJECT[subject](d.qualificationTitle)} has reached a final outcome.
 
 ${d.notes ?? ''}
 `.trim(),
@@ -37,8 +46,15 @@ ${d.notes ?? ''}
 };
 
 // `title` lets a module show its own name for a shared template (QASA calls the outcome
-// letter its "feedback letter", RPL Toolkit keeps "Outcome Letter").
-export function generateLetter(kind: LetterKind, recordId: string, data: LetterData, title: string = LETTER_TITLES[kind]): GeneratedLetter {
+// letter its "feedback letter", RPL Toolkit keeps "Outcome Letter"). `subject` changes only
+// the outcome letter's body wording.
+export function generateLetter(
+  kind: LetterKind,
+  recordId: string,
+  data: LetterData,
+  title: string = LETTER_TITLES[kind],
+  subject: LetterSubject = 'qasa',
+): GeneratedLetter {
   return {
     id: crypto.randomUUID(),
     kind,
@@ -46,6 +62,6 @@ export function generateLetter(kind: LetterKind, recordId: string, data: LetterD
     generatedAt: new Date().toISOString(),
     data,
     title,
-    body: TEMPLATES[kind](data),
+    body: TEMPLATES[kind](data, subject),
   };
 }

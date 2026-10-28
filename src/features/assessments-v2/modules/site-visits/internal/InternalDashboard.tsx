@@ -14,7 +14,7 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
-import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS } from '../visitTypeLabels';
+import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitPartyName } from '../visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
@@ -50,7 +50,7 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
       <Table>
         <TableHeader>
           <TableRow>
-            {['Type', 'Qualification', 'QP', 'Visit Date', 'Status', ''].map((h) => (
+            {['Type', 'Qualification', 'QP / SDP or Centre', 'Visit Date', 'Status', ''].map((h) => (
               <TableHead key={h} className="whitespace-nowrap">
                 {h}
               </TableHead>
@@ -62,8 +62,8 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
             <TableRow key={v.id} className="cursor-pointer hover:bg-gray-50" onClick={() => onSelect(v.id)}>
               <TableCell className="whitespace-nowrap">{VISIT_TYPE_LABELS[v.visitType]}</TableCell>
               <TableCell className="max-w-[200px] truncate">{qualificationDisplay(v)}</TableCell>
-              <TableCell className="max-w-[160px] truncate">{v.qpName}</TableCell>
-              <TableCell className="whitespace-nowrap">{v.visitDate}</TableCell>
+              <TableCell className="max-w-[160px] truncate">{visitPartyName(v)}</TableCell>
+              <TableCell className="whitespace-nowrap">{v.visitDate || 'To be scheduled'}</TableCell>
               <TableCell>
                 <SiteVisitStatusBadge visit={v} />
               </TableCell>

@@ -11,15 +11,22 @@ export interface SiteVisit {
   id: string;
   visitType: VisitType;
 
-  // CR-049: QP + qualification selectors at the top of every execution form.
+  // CR-049: QP + qualification selectors at the top of every execution form. Empty ('') for
+  // RPL/ARPL monitoring, which has no QP (QCTO feedback 2.7).
   qpId: string;
   qpName: string;
   qualificationTitle: string;
   sdpId: string | null;
   sdpName: string | null;
+  // QCTO feedback 2.7: an RPL/ARPL visit is held at an SDP (sdpId/sdpName) or at an assessment
+  // centre typed in by the planner (this field, with sdpId/sdpName null), never with a QP.
+  // Optional so visits stored before Batch A3 still load — read it through visitTypeLabels.ts
+  // visitSiteName().
+  assessmentCentreName?: string | null;
 
   // CR-050: optional link to a published EISA Calendar sitting — when linked, the date is
-  // auto-populated from the sitting instead of typed in by hand.
+  // auto-populated from the sitting instead of typed in by hand. Always null for EISA Readiness
+  // and RPL/ARPL monitoring (QCTO feedback 2.6, 2.7).
   sittingId: string | null;
   visitDate: string;
   venue: string;

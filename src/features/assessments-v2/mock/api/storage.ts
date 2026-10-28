@@ -24,7 +24,9 @@ export function writeStore<T>(key: string, value: T): void {
 // Registration, EISA Confirmation, Approval of Results (plus more past sittings). 'C3' = Site
 // Visits, FISA Instrument Validation, RPL Toolkit (plus two RPL/ARPL-flagged registrations).
 // 'D' = Site Visits evidence files (QCTO feedback 1.12) and the QASA "feedback letter" wording.
-export const SEED_VERSION = 'D';
+// 'A3' = RPL/ARPL visits at the SDP with no QP or sitting (2.7); sharing an outcome completes
+// the visit (2.12).
+export const SEED_VERSION = 'A3';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

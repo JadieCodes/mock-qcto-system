@@ -12,7 +12,10 @@ export const EXTERNAL_MODULE_HIDDEN_FOR_ROLE: Record<string, Role[]> = {
   'instrument-validation': ['SDP'], // CR-018
   'eisa-registration': ['QP'],
   'eisa-confirmation': ['SDP'],
-  'site-visits': ['SDP'],
+  // QCTO feedback 2.12 (replaces CR-047's "QP sees own visits"): visits are scheduled by QCTO,
+  // so external Site Visits is hidden and blocked for every external role. The external screens
+  // stay in modules/site-visits/external/ but are never reached.
+  'site-visits': ['SDP', 'QP'],
   'approval-of-results': ['SDP'],
   fisa: ['QP'],
   'rpl-toolkit': ['SDP'],

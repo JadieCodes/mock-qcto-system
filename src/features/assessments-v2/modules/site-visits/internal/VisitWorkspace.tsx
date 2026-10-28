@@ -21,7 +21,7 @@ import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
-import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasSdp, visitSubject } from '../visitTypeLabels';
+import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasQp, visitHasSdp, visitSiteKindLabel, visitSiteName, visitSubject } from '../visitTypeLabels';
 import type { SiteVisit } from '../types';
 import type { Role } from '../../../types';
 
@@ -116,10 +116,18 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
         <SiteVisitStatusBadge visit={visit} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">QP</Label>
-          <Input value={visit.qpName} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qpName: e.target.value } })} />
-        </div>
+        {visitHasQp(visit.visitType) ? (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">QP</Label>
+            <Input value={visit.qpName} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qpName: e.target.value } })} />
+          </div>
+        ) : (
+          // QCTO feedback 2.7: RPL/ARPL is held at an SDP or assessment centre — no QP.
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">{visitSiteKindLabel(visit)}</Label>
+            <p className="text-sm font-medium pt-2">{visitSiteName(visit) || '—'}</p>
+          </div>
+        )}
         {isPerQualificationVisit(visit.visitType) && (
           <div className="space-y-1">
             <Label className="text-xs text-gray-400 uppercase">Qualification</Label>
@@ -130,7 +138,7 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
             />
           </div>
         )}
-        {visitHasSdp(visit.visitType) && (
+        {visitHasSdp(visit.visitType) && visitHasQp(visit.visitType) && (
           <div className="space-y-1">
             <Label className="text-xs text-gray-400 uppercase">SDP</Label>
             <Input
@@ -471,7 +479,9 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       {stage === 'rejected' && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Report rejected.</div>}
       {(stage === 'approved' || stage === 'outcome-shared' || stage === 'closed') && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Report {stage === 'approved' ? 'approved' : stage === 'outcome-shared' ? 'approved — outcome shared, awaiting QP' : 'closed'}.
+          {/* QCTO feedback 2.12: sharing the outcome now completes the visit, so 'outcome-shared'
+              only remains on visits stored before Batch A3. */}
+          Report {stage === 'approved' ? 'approved' : stage === 'outcome-shared' ? 'approved — outcome shared, awaiting QP' : 'approved — outcome shared, visit completed'}.
         </div>
       )}
 

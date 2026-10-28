@@ -265,7 +265,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
                 notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
                 signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
                 signatoryTitle: 'CEO',
-              })}
+              }, undefined, 'rpl-toolkit')}
             />
             {application.outcomeState.stageId === 'signed' ? (
               <p className="text-sm text-emerald-700 font-medium">Signed by {application.outcomeState.submittedBy}.</p>

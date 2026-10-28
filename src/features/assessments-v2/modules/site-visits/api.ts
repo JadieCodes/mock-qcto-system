@@ -26,7 +26,7 @@ import {
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory, type VisitEvidenceFile } from './evidence';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
 import type { NewVisitInput, SiteVisit, VisitType } from './types';
-import { visitSubject } from './visitTypeLabels';
+import { visitHasQp, visitHasSiteSelection, visitHasSittingLink, visitSubject } from './visitTypeLabels';
 
 export const KEY = 'siteVisits:visits';
 
@@ -81,14 +81,16 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
   return {
     id: crypto.randomUUID(),
     visitType: 'rpl-arpl-monitoring',
-    // Phase 6 fix: carried over from the registration's EISA sitting instead of a placeholder.
-    qpId: item.qpId,
-    qpName: item.qpName,
+    // QCTO feedback 2.7: held at the registering SDP, with no QP and no link to the EISA sitting
+    // or its date — the officials set the visit date and venue on the Details tab.
+    qpId: '',
+    qpName: '',
     qualificationTitle: item.qualificationTitle,
     sdpId: item.sdpId,
     sdpName: item.sdpName,
+    assessmentCentreName: null,
     sittingId: null,
-    visitDate: item.sittingDate,
+    visitDate: '',
     venue: '',
     notificationFlag: 'notified',
     noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
@@ -153,16 +155,23 @@ export async function listSdpsForSitting(sittingId: string): Promise<{ sdpId: st
   return [...seen.entries()].map(([sdpId, sdpName]) => ({ sdpId, sdpName }));
 }
 
-export async function createVisit(input: NewVisitInput): Promise<SiteVisit> {
+export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assessmentCentreName'>): Promise<SiteVisit> {
+  // QCTO feedback 2.7: an RPL/ARPL visit needs its SDP or assessment centre, and never has a
+  // QP or a sitting link.
+  const hasQp = visitHasQp(input.visitType);
+  if (visitHasSiteSelection(input.visitType) && !input.sdpName?.trim() && !input.assessmentCentreName?.trim()) {
+    throw new Error('Choose the SDP or enter the assessment centre where the RPL/ARPL visit takes place.');
+  }
   const visit: SiteVisit = {
     id: crypto.randomUUID(),
     visitType: input.visitType,
-    qpId: input.qpId,
-    qpName: input.qpName,
+    qpId: hasQp ? input.qpId : '',
+    qpName: hasQp ? input.qpName : '',
     qualificationTitle: input.qualificationTitle,
     sdpId: input.sdpId,
     sdpName: input.sdpName,
-    sittingId: input.sittingId,
+    assessmentCentreName: input.assessmentCentreName?.trim() || null,
+    sittingId: visitHasSittingLink(input.visitType) ? input.sittingId : null,
     visitDate: input.visitDate,
     venue: input.venue,
     notificationFlag: input.notificationFlag,
@@ -371,8 +380,24 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     recordId: visit.id,
   });
 
-  const updated: SiteVisit = { ...visit, reportWorkflow: nextWorkflow };
+  // QCTO feedback 2.12: Site Visits is no longer on the external side, so the QP has no screen
+  // to acknowledge the outcome on. [DEFAULT — to be confirmed with QCTO] sharing the outcome
+  // completes the visit straight away; 'outcome-shared' -> 'closed' (the old
+  // qp-acknowledge-outcome step) is applied here, with its own audit entry.
+  const sharedAndClosed = params.actionId === 'share-visit-outcome';
+  const updated: SiteVisit = { ...visit, reportWorkflow: sharedAndClosed ? { ...nextWorkflow, stageId: 'closed' } : nextWorkflow };
   saveAll(replace(all, updated));
+
+  if (sharedAndClosed) {
+    appendAuditEntry({
+      recordType: 'site-visit-report',
+      recordId: visit.id,
+      actorRole: params.actorRole,
+      actorId: params.actorId,
+      actorName: params.actorName,
+      action: 'Visit completed — outcome shared, no QP acknowledgement needed (QCTO feedback 2.12)',
+    });
+  }
 
   if (params.actionId === 'report-submit') {
     addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'Site visit report submitted', body: `"${visitSubject(visit)}" (${visit.visitType}) is awaiting your review.` });
@@ -390,8 +415,10 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     // Fix 4 Part 2 correction (G-23/G-26): every visit type shares the outcome with the QP
     // named on the visit, not only Post-EISA Monitoring. PM-07's extra QA/Accreditation/SDP
     // hand-off stays specific to Post-EISA Monitoring — the register only names those extra
-    // recipients for that visit type.
-    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `The outcome for "${visitSubject(visit)}" (${visit.qpName}) is ready to review.` });
+    // recipients for that visit type. QCTO feedback 2.7: an RPL/ARPL visit has no QP to notify.
+    if (visitHasQp(visit.visitType) && visit.qpId) {
+      addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${visitSubject(visit)}" (${visit.qpName}).` });
+    }
     if (visit.visitType === 'post-eisa-monitoring') {
       // PM-07: QA and Accreditation have no role in this build's Role union to notify directly —
       // simulated as an audit entry alongside the real in-app notifications to QP and SDP.

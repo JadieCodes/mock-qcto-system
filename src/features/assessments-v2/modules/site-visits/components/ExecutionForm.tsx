@@ -20,7 +20,7 @@ import {
   useUploadEvidence,
 } from '../hooks';
 import type { SiteVisit } from '../types';
-import { isPerQualificationVisit } from '../visitTypeLabels';
+import { isPerQualificationVisit, visitHasQp, visitSiteKindLabel, visitSiteName } from '../visitTypeLabels';
 
 // CR-049: the full set of qualifications known to the QP directory — used to restrict the QP
 // choice below to QPs linked to the chosen qualification. If a visit's existing qualification
@@ -38,6 +38,8 @@ function qpsForQualification(qualificationTitle: string) {
 function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; readonly: boolean }) {
   const updateVisitDetails = useUpdateVisitDetails();
   const perQualification = isPerQualificationVisit(visit.visitType);
+  // QCTO feedback 2.7: RPL/ARPL has no QP; the SDP or assessment centre is shown instead.
+  const hasQp = visitHasQp(visit.visitType);
 
   const qualificationOptions =
     visit.qualificationTitle && !KNOWN_QUALIFICATIONS.includes(visit.qualificationTitle)
@@ -51,6 +53,10 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
     : [{ qpId: visit.qpId, name: visit.qpName, qualifications: [] }, ...qpOptionsForCurrentQualification];
 
   const onQualificationChange = (qualificationTitle: string) => {
+    if (!hasQp) {
+      updateVisitDetails.mutate({ id: visit.id, patch: { qualificationTitle } });
+      return;
+    }
     const qpsForNewQualification = qpsForQualification(qualificationTitle);
     const stillValid = qpsForNewQualification.some((q) => q.qpId === visit.qpId);
     if (stillValid) {
@@ -68,7 +74,9 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
 
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-      <p className="text-xs font-semibold text-gray-500 uppercase">{perQualification ? 'QP & Qualification' : 'QP'}</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase">
+        {!hasQp ? `${visitSiteKindLabel(visit)} & Qualification` : perQualification ? 'QP & Qualification' : 'QP'}
+      </p>
       <div className="grid grid-cols-2 gap-3">
         {perQualification && (
           <div className="space-y-1.5">
@@ -87,23 +95,30 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
             </Select>
           </div>
         )}
-        <div className="space-y-1.5">
-          <Label>QP *</Label>
-          <Select value={visit.qpId} onValueChange={onQpChange} disabled={readonly}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a QP" />
-            </SelectTrigger>
-            <SelectContent>
-              {qpOptions.map((q) => (
-                <SelectItem key={q.qpId} value={q.qpId}>
-                  {q.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {hasQp ? (
+          <div className="space-y-1.5">
+            <Label>QP *</Label>
+            <Select value={visit.qpId} onValueChange={onQpChange} disabled={readonly}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a QP" />
+              </SelectTrigger>
+              <SelectContent>
+                {qpOptions.map((q) => (
+                  <SelectItem key={q.qpId} value={q.qpId}>
+                    {q.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label>{visitSiteKindLabel(visit)}</Label>
+            <p className="text-sm font-medium pt-2">{visitSiteName(visit) || '—'}</p>
+          </div>
+        )}
       </div>
-      {perQualification && <p className="text-xs text-gray-400">Choosing a qualification restricts the QP list to QPs linked to it.</p>}
+      {perQualification && hasQp && <p className="text-xs text-gray-400">Choosing a qualification restricts the QP list to QPs linked to it.</p>}
     </div>
   );
 }

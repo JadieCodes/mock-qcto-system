@@ -18,7 +18,7 @@ import {
   updateVisitDetails,
   uploadEvidence,
 } from './api';
-import type { NewVisitInput, SiteVisit } from './types';
+import type { SiteVisit } from './types';
 
 const LIST_KEY = ['site-visits', 'visits'] as const;
 const detailKey = (id: string) => ['site-visits', 'visits', id] as const;
@@ -60,7 +60,7 @@ function useSiteVisitMutation<TArgs>(mutationFn: (args: TArgs) => Promise<SiteVi
 export function useCreateVisit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: NewVisitInput) => createVisit(input),
+    mutationFn: (input: Parameters<typeof createVisit>[0]) => createVisit(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LIST_KEY });
       toast.success('Visit created.');

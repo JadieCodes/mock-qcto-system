@@ -3,7 +3,8 @@
 // saveFreeTextNotes, saveCompletionDetails, performReportAction), with the audit entries and
 // notifications each step implies. Days are "days ago"; visit dates are relative to today.
 // QCTO feedback A2: EISA Readiness has no qualification, sitting or SDP; Marking & Moderation
-// has a sitting but no SDP.
+// has a sitting but no SDP. Batch A3 (QCTO feedback 2.7, 2.12): RPL/ARPL visits are held at
+// the SDP with no QP and no sitting or EISA date; sharing an outcome completes the visit.
 //
 //  #     Type                  QP / subject                         Visit date    Stage
 //  SV1   EISA Readiness        Nomvula Dlamini                      today + 30    Plan submitted — waiting for the Deputy Director
@@ -12,17 +13,17 @@
 //                              (Nomvula Dlamini, 50% batch)                       Created from the low-competency results batch
 //                                                                                 (createPemVisitForBatch), so that batch no longer
 //                                                                                 offers "Create Post-EISA Monitoring Visit".
-//  SV4   RPL/ARPL Monitoring   Thabo Technical College, Electrical  today + 35    Booked — awaiting execution (auto-created from
-//                              Trades (registration G6)                           the RPL/ARPL-flagged registration)
+//  SV4   RPL/ARPL Monitoring   Thabo Technical College (SDP, no QP) today + 20    Booked — awaiting execution (auto-created from
+//                              Electrical Trades (registration G6)                the RPL/ARPL-flagged registration)
 //  SV5   Marking & Moderation  Electrical Trades sitting today - 15 today - 15    Booked — report in draft (first section done,
 //                                                                                 one attendance register uploaded)
 //  SV6   EISA Readiness        Precious Mahlangu                    today - 10    Report submitted — waiting for the Deputy Director
 //  SV7   Marking & Moderation  Welding sitting today - 45           today - 45    Report approved — waiting to share the outcome
-//  SV8   RPL/ARPL Monitoring   Lerato Training Institute, Plumbing  today - 75    Outcome shared — waiting for the QP to acknowledge
-//                              (registration P5)
+//  SV8   RPL/ARPL Monitoring   Lerato Training Institute (SDP, no   today - 80    Closed — outcome shared, visit completed
+//                              QP), Plumbing (registration P5)
 //  SV9   EISA Readiness        Johan van der Merwe                  today - 20    Report sent back for clarification — ASD to answer
 //  SV10  EISA Readiness        Johan van der Merwe                  today + 10    Plan rejected by the Domain Director (reason given)
-//  SV11  Marking & Moderation  Plumbing sitting today - 75          today - 75    Closed — outcome shared and acknowledged by the QP
+//  SV11  Marking & Moderation  Plumbing sitting today - 75          today - 75    Closed — outcome shared, QP notified
 //  SV12  Marking & Moderation  Welding sitting today + 55           today + 55    Plan sent back to the Assistant Director (reason given)
 //
 // The Welding low-competency batch (Precious Mahlangu, 40%) is left without a visit, so its
@@ -63,7 +64,7 @@ import {
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory } from '../../../modules/site-visits/evidence';
 import { freeTextFieldsForType } from '../../../modules/site-visits/freeTextFields';
 import type { NotificationFlag, SiteVisit, VisitType } from '../../../modules/site-visits/types';
-import { isPerQualificationVisit, visitHasSdp, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
+import { isPerQualificationVisit, visitHasQp, visitHasSdp, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../../../modules/site-visits/workflow';
 import { RESULTS_SEED_IDS } from './approvalOfResults';
 import { sittingAt } from './eisaRegistration';
@@ -282,7 +283,18 @@ export function seedSiteVisits(
           notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report rejected', body: note ?? '' });
         }
         if (actionId === 'share-visit-outcome') {
-          notify(log, at, { recipientRole: 'QP', title: 'Visit outcome shared', body: `The outcome for "${subject()}" (${visit.qpName}) is ready to review.` });
+          // QCTO feedback 2.12: sharing completes the visit (no QP acknowledgement); RPL/ARPL has no QP.
+          visit = { ...visit, reportWorkflow: { ...reportWorkflow, stageId: 'closed' } };
+          audit(log, {
+            recordType: 'site-visit-report',
+            recordId: visit.id,
+            actor,
+            action: 'Visit completed — outcome shared, no QP acknowledgement needed (QCTO feedback 2.12)',
+            timestamp: at,
+          });
+          if (visitHasQp(visit.visitType) && visit.qpId) {
+            notify(log, at, { recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${subject()}" (${visit.qpName}).` });
+          }
           if (visit.visitType === 'post-eisa-monitoring') {
             if (visit.sdpName) {
               notify(log, at, { recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${subject()}" (${visit.sdpName}) has been shared.` });
@@ -295,9 +307,6 @@ export function seedSiteVisits(
               timestamp: at,
             });
           }
-        }
-        if (actionId === 'qp-acknowledge-outcome') {
-          notify(log, at, { recipientRole: REPORT_APPROVER_ROLE, title: 'QP acknowledged the visit outcome', body: `"${subject()}" — the QP has acknowledged the shared outcome.` });
         }
         return api;
       },
@@ -412,8 +421,9 @@ export function seedSiteVisits(
   }
 
   // api.ts buildAutoCreatedVisit(): the RPL/ARPL visit syncAutoCreatedVisits() makes from a
-  // monitoring item — already booked, no sitting link. Seeded with the item's id as
-  // sourceMonitoringItemId so the sync does not create it a second time.
+  // monitoring item — already booked, held at the registering SDP, with no QP, no sitting link
+  // and no date (QCTO feedback 2.7; the officials set the date and venue on the Details tab).
+  // Seeded with the item's id as sourceMonitoringItemId so the sync does not create it a second time.
   function autoRplVisit(registrationSdpId: string, sittingDate: string): VisitSeedBuilder {
     const registration = registrations.find((r) => r.sdpId === registrationSdpId && r.sittingDate === sittingDate && r.rplMonitoringItemId);
     const item = monitoringItems.find((i) => i.id === registration?.rplMonitoringItemId);
@@ -422,13 +432,14 @@ export function seedSiteVisits(
     const visit: SiteVisit = {
       id: seedId(VISIT_ID_GROUP, ++n),
       visitType: 'rpl-arpl-monitoring',
-      qpId: item.qpId,
-      qpName: item.qpName,
+      qpId: '',
+      qpName: '',
       qualificationTitle: item.qualificationTitle,
       sdpId: item.sdpId,
       sdpName: item.sdpName,
+      assessmentCentreName: null,
       sittingId: null,
-      visitDate: item.sittingDate,
+      visitDate: '',
       venue: '',
       notificationFlag: 'notified',
       noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
@@ -473,8 +484,11 @@ export function seedSiteVisits(
     .plan('plan-approve', MICHAEL, 9)
     .done();
 
-  // SV4 — RPL/ARPL monitoring from Thabo's Electrical Trades registration (G6): booked, awaiting execution.
-  autoRplVisit('sdp-thabo-technical-college', workingDateFromToday(35)).done();
+  // SV4 — RPL/ARPL monitoring at Thabo Technical College, from its Electrical Trades
+  // registration (G6): booked, awaiting execution. Dated by the officials, not by the sitting.
+  autoRplVisit('sdp-thabo-technical-college', workingDateFromToday(35))
+    .updateDetails({ visitDate: workingDateFromToday(20), venue: 'Thabo Technical College, Pretoria' })
+    .done();
 
   // SV5 — Marking & Moderation, Electrical Trades sitting at today - 15: booked, report in draft.
   planVisit({ visitType: 'marking-moderation', qpId: NOMVULA, sitting: sittingAt(sittings, 'Electrical Trades', -15), venue: 'Marking centre, Germiston', plannerId: RIAAN, createdDaysAgo: 45 })
@@ -509,9 +523,10 @@ export function seedSiteVisits(
     .report('report-approve', PETER, 38)
     .done();
 
-  // SV8 — RPL/ARPL monitoring from Lerato's Plumbing registration (P5, today - 75): outcome
-  // shared with the QP, who has not acknowledged it yet.
+  // SV8 — RPL/ARPL monitoring at Lerato Training Institute, from its Plumbing registration
+  // (P5, sitting today - 75): outcome shared, so the visit is completed (QCTO feedback 2.12).
   autoRplVisit('sdp-lerato-training-institute', workingDateFromToday(-75))
+    .updateDetails({ visitDate: workingDateFromToday(-80), venue: 'Lerato Training Institute, Durban' })
     .execute(SIPHO, 72, true)
     .upload('report', 'RPL_ARPL_Monitoring_Visit_Report_Lerato.pdf', SIPHO, 72)
     .report('report-submit', SIPHO, 70)
@@ -548,7 +563,8 @@ export function seedSiteVisits(
     )
     .done();
 
-  // SV11 — Marking & Moderation, Plumbing sitting at today - 75: closed (QP acknowledged the outcome).
+  // SV11 — Marking & Moderation, Plumbing sitting at today - 75: outcome shared, so the visit is
+  // completed and the QP notified (QCTO feedback 2.12 — no QP acknowledgement step any more).
   planVisit({ visitType: 'marking-moderation', qpId: JOHAN, sitting: sittingAt(sittings, 'Plumbing', -75), venue: 'Marking centre, Bloemfontein', plannerId: RIAAN, createdDaysAgo: 105 })
     .submitPlan(104, 'Monitor the marking session and verify a sample of marked and moderated scripts.')
     .plan('plan-recommend', GRACE, 101)
@@ -559,7 +575,6 @@ export function seedSiteVisits(
     .report('report-submit', SIPHO, 71)
     .report('report-approve', GRACE, 68)
     .report('share-visit-outcome', GRACE, 66)
-    .report('qp-acknowledge-outcome', JOHAN, 60)
     .done();
 
   // SV12 — Marking & Moderation, Welding sitting at today + 55: plan sent back to the planner.
