@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listSdps } from '../../../mock/api/qaDomain';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { calcRegistrationClosingDate, isRegistrationClosed } from '../../eisa-calendar/registrationClosing';
 import { useRegistrableSittings, useStartRegistration } from '../hooks';
 import type { RegistrationCategory } from '../types';
 
@@ -56,7 +57,7 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Start EISA Registration</DialogTitle>
+          <DialogTitle>Start Learner EISA Registration</DialogTitle>
           <DialogDescription>Register enrolled learners against a published EISA sitting.</DialogDescription>
         </DialogHeader>
 
@@ -68,11 +69,17 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
                 <SelectValue placeholder="Select a published sitting" />
               </SelectTrigger>
               <SelectContent>
-                {sittings.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.qualificationTitle} — {s.date}
-                  </SelectItem>
-                ))}
+                {/* QCTO feedback 3.5: closed sittings stay listed, disabled, with their closing date. */}
+                {sittings.map((s) => {
+                  const closing = calcRegistrationClosingDate(s.date);
+                  const closed = isRegistrationClosed(s.date);
+                  return (
+                    <SelectItem key={s.id} value={s.id} disabled={closed}>
+                      {s.qualificationTitle} — {s.date} ·{' '}
+                      {closed ? `Registration closed on ${closing}` : `Registration closes ${closing}`}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
             {sittings.length === 0 && (

@@ -1,5 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { calcRegistrationClosingDate } from '../registrationClosing';
+import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import { EisaSittingStatusBadge } from './StatusBadge';
 import type { EisaSitting } from '../types';
 
@@ -39,20 +41,24 @@ export function SittingListView({
         <Table>
           <TableHeader>
             <TableRow>
-              {['Date', 'Qualification', 'QP', 'Year', 'Status', ...(canManage ? [''] : [])].map((h) => (
-                <TableHead key={h} className="whitespace-nowrap">
-                  {h}
-                </TableHead>
-              ))}
+              {/* QCTO feedback 2.3 / 3.5 */}
+              {['Date(s)', 'Qualification ID', 'Qualification name', 'QP', 'Registration closes', 'Status', ...(canManage ? [''] : [])].map(
+                (h) => (
+                  <TableHead key={h} className="whitespace-nowrap">
+                    {h}
+                  </TableHead>
+                ),
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.map((s) => (
               <TableRow key={s.id}>
                 <TableCell className="whitespace-nowrap font-medium">{s.date}</TableCell>
-                <TableCell className="max-w-[220px] truncate">{s.qualificationTitle}</TableCell>
-                <TableCell className="whitespace-nowrap">{s.qpName}</TableCell>
-                <TableCell>{s.year}</TableCell>
+                <TableCell className="whitespace-nowrap font-mono text-xs">{qualificationIdOf(s)}</TableCell>
+                <TableCell className="max-w-[220px] truncate">{displayOrDash(s.qualificationTitle)}</TableCell>
+                <TableCell className="whitespace-nowrap">{displayOrDash(s.qpName)}</TableCell>
+                <TableCell className="whitespace-nowrap">{calcRegistrationClosingDate(s.date)}</TableCell>
                 <TableCell>
                   <EisaSittingStatusBadge status={s.status} />
                   {s.status === 'rejected' && s.rejectionReason && <p className="mt-1 text-xs text-red-600">{s.rejectionReason}</p>}
@@ -78,7 +84,7 @@ export function SittingListView({
                     )}
                     {onEdit && (
                       <Button size="sm" variant="ghost" onClick={() => onEdit(s)}>
-                        Edit
+                        Update
                       </Button>
                     )}
                     {onDelete && sittingIdsWithRegistrations?.has(s.id) ? (

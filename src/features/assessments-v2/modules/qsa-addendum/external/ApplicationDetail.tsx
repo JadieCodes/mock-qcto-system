@@ -9,6 +9,7 @@ import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
 import { QsaStatusBadge } from '../components/StatusBadge';
+import { FEEDBACK_LETTER_TITLE } from '../config';
 import { useQsaAddendumApplication } from '../hooks';
 
 function DetailRow({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: ReactNode }) {
@@ -44,7 +45,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
               <TabsList>
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="acknowledgement">Acknowledgement</TabsTrigger>
-                <TabsTrigger value="outcome">Outcome Letter</TabsTrigger>
+                <TabsTrigger value="outcome">Feedback Letter</TabsTrigger>
                 <TabsTrigger value="approval">Approval Letter</TabsTrigger>
                 <TabsTrigger value="audit">Audit Trail</TabsTrigger>
               </TabsList>
@@ -102,7 +103,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                       notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
                       signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
                       signatoryTitle: 'CEO',
-                    })}
+                    }, FEEDBACK_LETTER_TITLE)}
                   />
                 ) : (
                   <p className="text-sm text-gray-400">Not yet available — the IAC has not reached a decision.</p>

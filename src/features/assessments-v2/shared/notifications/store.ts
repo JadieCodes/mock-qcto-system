@@ -1,7 +1,7 @@
 import { readStore, writeStore } from '../../mock/api/storage';
 import type { AppNotification } from './types';
 
-const KEY = 'notifications';
+export const KEY = 'notifications';
 
 // Email/SMS are not built — in-app notifications only, per the module CLAUDE.md.
 export function addNotification(notification: Omit<AppNotification, 'id' | 'read' | 'createdAt'>): AppNotification {

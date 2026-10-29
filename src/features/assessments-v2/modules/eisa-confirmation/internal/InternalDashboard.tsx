@@ -25,8 +25,7 @@ export function InternalDashboard() {
         <div>
           <h2 className="text-xl font-bold text-gray-900">EISA Confirmation</h2>
           <p className="text-sm text-gray-500 mt-1">
-            After registration is complete the QP confirms centres, learner counts and marking/moderation dates. RPL monitoring items in Site
-            Visits come from the registration, not from Confirmation.
+            After registration is complete the QP confirms centres, learner counts and marking/moderation dates.
           </p>
         </div>
         <ScopeToggle scope={scope} onChange={setScope} />

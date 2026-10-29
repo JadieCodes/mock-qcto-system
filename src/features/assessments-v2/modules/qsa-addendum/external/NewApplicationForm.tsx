@@ -28,7 +28,7 @@ interface FormValues {
 const UPLOAD_SLOTS: { key: RequiredDocument['key']; label: string }[] = [
   { key: 'saqaQualificationDocument', label: '1. SAQA Qualification Document' },
   { key: 'curriculumDocument', label: '2. Curriculum Document' },
-  { key: 'qsaAddendumDocument', label: '3. QSA Addendum' },
+  { key: 'qsaAddendumDocument', label: '3. QASA' },
 ];
 
 export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -103,7 +103,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
         ? [
             { key: 'saqaQualificationDocument', label: 'SAQA Qualification Document', fileName: autoDocuments[0]?.fileName ?? '', source: 'saqa-auto' },
             { key: 'curriculumDocument', label: 'Curriculum Document', fileName: autoDocuments[1]?.fileName ?? '', source: 'saqa-auto' },
-            { key: 'qsaAddendumDocument', label: 'QSA Addendum', fileName: autoDocuments[2]?.fileName ?? '', source: 'saqa-auto' },
+            { key: 'qsaAddendumDocument', label: 'QASA', fileName: autoDocuments[2]?.fileName ?? '', source: 'saqa-auto' },
           ]
         : UPLOAD_SLOTS.map((slot) => ({
             key: slot.key,
@@ -134,14 +134,14 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
       open={open}
       onOpenChange={(next) => { onOpenChange(next); if (!next) resetAll(); }}
       size="md"
-      title="New QSA Addendum Application"
+      title="New QASA Submission"
       description="Fill in the details below, run the SAQA gate check, then submit."
       onSubmit={handleSubmit(onSubmit)}
       footer={
         <>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button type="submit" disabled={!nqfLevel || !gateReady || createApplication.isPending} className="gap-2">
-            <Upload className="h-4 w-4" />Submit Application
+            <Upload className="h-4 w-4" />Submit QASA
           </Button>
         </>
       }

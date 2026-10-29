@@ -10,7 +10,7 @@ import { QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from './config';
 import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from './workflow';
 import type { ApprovalLetterDraft, EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
 
-const KEY = 'qsaAddendum:applications';
+export const KEY = 'qsaAddendum:applications';
 
 function loadAll(): QsaAddendumApplication[] {
   return readStore<QsaAddendumApplication[]>(KEY, []);
@@ -22,7 +22,7 @@ function saveAll(apps: QsaAddendumApplication[]): void {
 
 function getOrThrow(apps: QsaAddendumApplication[], id: string): QsaAddendumApplication {
   const app = apps.find((a) => a.id === id);
-  if (!app) throw new Error(`QSA Addendum application "${id}" not found.`);
+  if (!app) throw new Error(`QASA submission "${id}" not found.`);
   return app;
 }
 
@@ -155,8 +155,8 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
   if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
     addNotification({
       recipientRole: 'QP',
-      title: 'QSA Addendum decision reached',
-      body: `The IAC has reached a decision on "${app.qualificationTitle}". The outcome letter is being prepared.`,
+      title: 'QASA decision reached',
+      body: `The IAC has reached a decision on "${app.qualificationTitle}". The feedback letter is being prepared.`,
     });
   }
   return updated;
@@ -166,7 +166,7 @@ export async function performOutcomeAction(params: ActionParams): Promise<QsaAdd
   const all = loadAll();
   const app = getOrThrow(all, params.applicationId);
   if (app.evalState.stageId !== 'approved' && app.evalState.stageId !== 'declined') {
-    throw new Error('The outcome letter is only ready once the IAC has reached a decision.');
+    throw new Error('The feedback letter is only ready once the IAC has reached a decision.');
   }
 
   const nextState = performAction({
@@ -191,8 +191,8 @@ export async function performOutcomeAction(params: ActionParams): Promise<QsaAdd
   if (nextState.stageId === 'signed') {
     addNotification({
       recipientRole: 'QP',
-      title: 'Outcome letter signed',
-      body: `The outcome letter for "${app.qualificationTitle}" has been signed and is ready to view.`,
+      title: 'Feedback letter signed',
+      body: `The feedback letter for "${app.qualificationTitle}" has been signed and is ready to view.`,
     });
   }
   return updated;
@@ -202,7 +202,7 @@ export async function performApprovalLetterAction(params: ActionParams): Promise
   const all = loadAll();
   const app = getOrThrow(all, params.applicationId);
   if (!app.approvalState) {
-    throw new Error('The approval letter is only ready once the outcome letter has been signed.');
+    throw new Error('The approval letter is only ready once the feedback letter has been signed.');
   }
 
   const nextState = performAction({

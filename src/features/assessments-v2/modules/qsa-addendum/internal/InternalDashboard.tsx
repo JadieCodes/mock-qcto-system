@@ -29,16 +29,27 @@ function isUnassignedActionable(app: QsaAddendumApplication, role: Role): boolea
   );
 }
 
+// Every QASA is created with its outcome letter already at `ceo-signature`, so the stage alone
+// doesn't mean it can be signed — the IAC must have decided first (same check as the Outcome
+// Letter tab in ApplicationWorkspace).
+function canSignOutcomeNow(app: QsaAddendumApplication, role: Role): boolean {
+  const decided = app.evalState.stageId === 'approved' || app.evalState.stageId === 'declined';
+  return decided && canActInStage(OUTCOME_WORKFLOW, app.outcomeState.stageId, role);
+}
+
 export function InternalDashboard() {
   const { role, person } = useV2Role();
   const { data: allApplications = [] } = useQsaAddendumApplications();
   const [scope, setScope] = useState<ListScope>('mine');
 
-  // B-19: the CEO only ever gets the "awaiting my signature" queue, not the team's full list —
-  // the My items/All in my team switch doesn't apply to this already-maximally-filtered view.
+  // B-19: the CEO's "My items" is only the outcome letters they can sign right now;
+  // "All items for my role" still shows every QASA.
   const isCeo = role === 'CEO';
+  const isCeoQueue = isCeo && scope === 'mine';
   const applications = isCeo
-    ? allApplications.filter((a) => a.outcomeState.stageId === 'ceo-signature')
+    ? isCeoQueue
+      ? allApplications.filter((a) => canSignOutcomeNow(a, role))
+      : allApplications
     : filterByScope(allApplications, scope, person.id, myItemIds, (a) => isUnassignedActionable(a, role));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,13 +62,16 @@ export function InternalDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="QSA Addendum — QSA Evaluation Team"
+        title="QAS Addendum (QASA)"
         description={
-          isCeo
-            ? 'Applications awaiting your outcome-letter signature only.'
-            : 'Open one to act on it — only the actions your current role may perform are shown.'
+          <>
+            <span className="block">Roles: ASD evaluates · DD reviews · IAC decides · CEO signs the feedback letter.</span>
+            {isCeoQueue
+              ? 'Feedback letters you can sign now — the IAC has approved or declined these QASAs.'
+              : 'Open one to act on it — only the actions your current role may perform are shown.'}
+          </>
         }
-        actions={!isCeo && <ScopeToggle scope={scope} onChange={setScope} />}
+        actions={<ScopeToggle scope={scope} onChange={setScope} />}
       />
 
       <StatTileGrid>
@@ -67,9 +81,16 @@ export function InternalDashboard() {
         <StatTile label="Approved" value={approvedCount} />
       </StatTileGrid>
 
-      <SectionCard title={isCeo ? 'Awaiting Your Signature' : 'Applications'}>
+      <SectionCard title={isCeoQueue ? 'Awaiting Your Signature' : 'QASA Submissions'}>
         {applications.length === 0 ? (
-          <EmptyState title="No applications yet" description="Applications submitted by a QP in the external portal will appear here." />
+          isCeoQueue ? (
+            <EmptyState
+              title="Nothing to sign"
+              description="A feedback letter appears here once the IAC has approved or declined a QASA."
+            />
+          ) : (
+            <EmptyState title="No submissions yet" description="QASAs submitted by a QP in the external portal will appear here." />
+          )
         ) : (
           <div className="overflow-x-auto">
             <Table>

@@ -6,6 +6,7 @@ import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
+import { DatesWithClosing } from '../components/RegistrationCloses';
 import { EisaSittingStatusBadge } from '../components/StatusBadge';
 import { useBatchAction, useEisaSittingBatches } from '../hooks';
 import { BATCH_WORKFLOW, batchDisplayStatus } from '../workflow';
@@ -69,7 +70,9 @@ export function BatchReviewPanel() {
                     <TableCell className="max-w-[200px] truncate font-medium">{batch.qualificationTitle}</TableCell>
                     <TableCell className="whitespace-nowrap">{batch.qpName}</TableCell>
                     <TableCell>{batch.year}</TableCell>
-                    <TableCell className="text-xs text-gray-500">{batch.dates.join(', ')}</TableCell>
+                    <TableCell>
+                      <DatesWithClosing dates={batch.dates} />
+                    </TableCell>
                     <TableCell>
                       <EisaSittingStatusBadge status={status} />
                       {batch.rejectionHistory.map((entry, i) => (

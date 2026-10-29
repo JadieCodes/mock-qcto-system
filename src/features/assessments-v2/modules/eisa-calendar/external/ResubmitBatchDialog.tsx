@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { RegistrationCloses } from '../components/RegistrationCloses';
 import { checkSittingDate } from '../dateChecks';
 import { useResubmitBatch } from '../hooks';
 import type { EisaSittingBatch } from '../types';
@@ -94,6 +95,7 @@ function ResubmitBatchForm({ batch, onClose }: { batch: EisaSittingBatch; onClos
                         </Button>
                       )}
                     </div>
+                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" />}
                     {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
                     {check && check.ok && Number(d.slice(0, 4)) !== batch.year && (
                       <p className="text-xs text-red-600">This date is not in {batch.year}.</p>
@@ -107,7 +109,7 @@ function ResubmitBatchForm({ batch, onClose }: { batch: EisaSittingBatch; onClos
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-800">
-                  "{batch.qualificationTitle}" is approved for {batch.requiredCount} sitting(s) per year — you have entered {filledDates.length}.
+                  "{batch.qualificationTitle}" requires {batch.requiredCount} sitting(s) per year — you have entered {filledDates.length}.
                 </AlertDescription>
               </Alert>
             )}

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { RPL_TOOLKIT_ENABLED } from './config/featureFlags';
 import { navForPortal, type NavItem } from './config/nav';
+import { ensureDemoSeed } from './mock/data/demoSeed';
 import { ApprovalOfResultsExternal, ApprovalOfResultsInternal } from './modules/approval-of-results';
 import { EisaCalendarExternal, EisaCalendarInternal } from './modules/eisa-calendar';
 import { EisaConfirmationExternal, EisaConfirmationInternal } from './modules/eisa-confirmation';
@@ -9,6 +10,7 @@ import { EisaRegistrationExternal, EisaRegistrationInternal } from './modules/ei
 import { FisaExternal, FisaInternal } from './modules/fisa';
 import { InstrumentValidationExternal, InstrumentValidationInternal } from './modules/instrument-validation';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
+import { QasaStatusView } from './modules/qasa-status';
 import { RplToolkitExternal, RplToolkitInternal } from './modules/rpl-toolkit';
 import { SiteVisitsExternal, SiteVisitsInternal } from './modules/site-visits';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
@@ -26,6 +28,10 @@ import type { Portal } from './types';
 // this cache is only used for request/loading/error ergonomics around those calls.
 const queryClient = new QueryClient();
 
+// QCTO feedback Batch C: write the demo seed before any screen reads the mock stores — on first
+// load, after "Reset demo data", and once whenever SEED_VERSION changes.
+ensureDemoSeed();
+
 // 09-visibility-matrix.md Tables A/B: a role that cannot see a module gets RoleBlocked even on
 // a direct URL visit, not just a hidden nav link — the real module component never even
 // mounts (so none of its hooks/mock-api calls run) for a role it's blocked for.
@@ -37,6 +43,8 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'instrument-validation') {
     return portal === 'internal' ? <InstrumentValidationInternal /> : <InstrumentValidationExternal />;
   }
+  // QCTO feedback 2.2: the same status-only view on both portals.
+  if (item.path === 'qasa-status') return <QasaStatusView />;
   if (item.path === 'eisa-calendar') return portal === 'internal' ? <EisaCalendarInternal /> : <EisaCalendarExternal />;
   if (item.path === 'eisa-registration') return portal === 'internal' ? <EisaRegistrationInternal /> : <EisaRegistrationExternal />;
   if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;

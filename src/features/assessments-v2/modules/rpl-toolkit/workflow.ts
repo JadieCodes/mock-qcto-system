@@ -11,7 +11,7 @@ export const RPL_EVAL_WORKFLOW: WorkflowDefinition = {
     { id: 'asd-evaluation', label: 'ASD evaluation', allowedRoles: ['ASD'] },
     { id: 'qp-corrections', label: 'Corrections requested from QP', allowedRoles: ['QP'] },
     { id: 'dd-review', label: 'Deputy Director review', allowedRoles: ['Deputy Director'] },
-    { id: 'director-team-review', label: 'Director & Team review', allowedRoles: ['Director & Team'] },
+    { id: 'director-team-review', label: 'Director Office review', allowedRoles: ['Director & Team'] },
     { id: 'iac-review', label: 'IAC review', allowedRoles: ['IAC'] },
     { id: 'approved', label: 'Approved', allowedRoles: [] },
     { id: 'declined', label: 'Declined', allowedRoles: [] },
@@ -34,7 +34,7 @@ export const RPL_EVAL_WORKFLOW: WorkflowDefinition = {
 
     {
       id: 'rpl-dd-send-to-director-team',
-      label: 'Send to Director & Team',
+      label: 'Send to Director Office',
       fromStage: 'dd-review',
       toStage: 'director-team-review',
       kind: 'advance',
@@ -111,7 +111,7 @@ export function rplOverallStatusLabel(app: RplToolkitApplication): string {
     case 'dd-review':
       return 'Under Deputy Director review';
     case 'director-team-review':
-      return 'Under Director & Team review';
+      return 'Under Director Office review';
     case 'iac-review':
       return 'With IAC';
     case 'declined':

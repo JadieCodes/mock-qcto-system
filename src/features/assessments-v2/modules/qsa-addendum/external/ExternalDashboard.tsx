@@ -30,11 +30,11 @@ export function ExternalDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My QSA Addendum Applications"
-        description="Submit and track your QSA Addendum applications."
+        title="My QASA Submissions"
+        description="Submit your developed QASA for evaluation and approval, and track its progress."
         actions={
           <Button onClick={() => setIsFormOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />New QSA Addendum Application
+            <Plus className="h-4 w-4" />New QASA Submission
           </Button>
         }
       />
@@ -46,9 +46,9 @@ export function ExternalDashboard() {
         <StatTile label="Approved" value={approvedCount} />
       </StatTileGrid>
 
-      <SectionCard title="Applications">
+      <SectionCard title="Submissions">
         {applications.length === 0 ? (
-          <EmptyState title="No applications yet" description='Click "New QSA Addendum Application" above to submit your first one.' />
+          <EmptyState title="No submissions yet" description='Click "New QASA Submission" above to submit your first one.' />
         ) : (
           <div className="overflow-x-auto">
             <Table>

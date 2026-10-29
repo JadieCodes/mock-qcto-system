@@ -1,6 +1,6 @@
 import type { WorkflowDefinition } from '../../shared/workflow/types';
 import { FISA_STANDARD_SIGNOFF_ROLE } from './config';
-import type { FisaRegistrationRecord, FisaStandardRecord, FisaValidationRecord } from './types';
+import type { FisaStandardRecord, FisaValidationRecord } from './types';
 
 // CR-026/PM-10: evaluate -> moderate -> validate -> approve, the same shape as the QSA
 // Addendum's evaluation flow, but final sign-off is the Qualifications Development Director &
@@ -12,7 +12,7 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
     { id: 'asd-evaluation', label: 'ASD evaluation', allowedRoles: ['ASD'] },
     { id: 'dd-review', label: 'Deputy Director review', allowedRoles: ['Deputy Director'] },
     { id: 'iac-review', label: 'IAC review', allowedRoles: ['IAC'] },
-    { id: 'qd-signoff', label: 'Qualifications Development Director & Team sign-off', allowedRoles: [FISA_STANDARD_SIGNOFF_ROLE] },
+    { id: 'qd-signoff', label: 'Qualifications Development Director Office sign-off', allowedRoles: [FISA_STANDARD_SIGNOFF_ROLE] },
     { id: 'approved', label: 'Approved', allowedRoles: [] },
     { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],
@@ -185,34 +185,5 @@ export function fisaValidationStatusLabel(record: FisaValidationRecord): string 
 export function fisaValidationStatusTone(record: FisaValidationRecord): FisaValidationStatusTone {
   if (record.instrumentStatus === 'validated') return 'emerald';
   if (record.workflow.stageId === 'asd-validation') return 'blue';
-  return 'amber';
-}
-
-// Simplified version of EISA Registration (CR-026): no calendar to publish against, no
-// Trades/Non-Trades split, no RPL/ARPL indicator — those are EISA-only concerns.
-export const FISA_REGISTRATION_WORKFLOW: WorkflowDefinition = {
-  id: 'fisa-registration',
-  stages: [
-    { id: 'sdp-submission', label: 'SDP building registration', allowedRoles: ['SDP'] },
-    { id: 'ad-review', label: 'Assistant Director review', allowedRoles: ['Assistant Director'] },
-    { id: 'registered', label: 'Registered', allowedRoles: [] },
-  ],
-  actions: [
-    { id: 'freg-submit', label: 'Submit to Assistant Director', fromStage: 'sdp-submission', toStage: 'ad-review', kind: 'advance' },
-    { id: 'freg-create-number', label: 'Create registration number', fromStage: 'ad-review', toStage: 'registered', kind: 'complete' },
-  ],
-};
-
-export type FisaRegistrationStatusTone = 'amber' | 'blue' | 'emerald';
-
-export function fisaRegistrationStatusLabel(record: FisaRegistrationRecord): string {
-  if (record.workflow.stageId === 'registered') return `Registered — ${record.registrationNumber ?? ''}`.trim();
-  if (record.workflow.stageId === 'ad-review') return 'With Assistant Director';
-  return 'Building registration';
-}
-
-export function fisaRegistrationStatusTone(record: FisaRegistrationRecord): FisaRegistrationStatusTone {
-  if (record.workflow.stageId === 'registered') return 'emerald';
-  if (record.workflow.stageId === 'ad-review') return 'blue';
   return 'amber';
 }

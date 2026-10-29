@@ -16,8 +16,9 @@ import {
   saveLearnerAnswers,
   setResultsApprovedForSitting,
   updateVisitDetails,
+  uploadEvidence,
 } from './api';
-import type { NewVisitInput, SiteVisit } from './types';
+import type { SiteVisit } from './types';
 
 const LIST_KEY = ['site-visits', 'visits'] as const;
 const detailKey = (id: string) => ['site-visits', 'visits', id] as const;
@@ -59,7 +60,7 @@ function useSiteVisitMutation<TArgs>(mutationFn: (args: TArgs) => Promise<SiteVi
 export function useCreateVisit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: NewVisitInput) => createVisit(input),
+    mutationFn: (input: Parameters<typeof createVisit>[0]) => createVisit(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LIST_KEY });
       toast.success('Visit created.');
@@ -100,6 +101,12 @@ export function useSaveFacilitatorAnswers() {
 
 export function useSaveLearnerAnswers() {
   return useSiteVisitMutation((args: { id: string; learnerAnswers: Record<string, string> }) => saveLearnerAnswers(args.id, args.learnerAnswers));
+}
+
+export function useUploadEvidence() {
+  return useSiteVisitMutation((args: { id: string; file: Parameters<typeof uploadEvidence>[1]; uploadedBy: string }) =>
+    uploadEvidence(args.id, args.file, args.uploadedBy),
+  );
 }
 
 export function useSetResultsApprovedForSitting() {

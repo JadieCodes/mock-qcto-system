@@ -2,10 +2,11 @@ import { readStore, writeStore } from '../../mock/api/storage';
 import { addNotification } from '../../shared/notifications/store';
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { performAction } from '../../shared/workflow/engine';
+import { listQualificationsWithAccreditedSdps } from '../../mock/api/accreditation';
 import { listApprovedQsaAddenda } from '../qsa-addendum/api';
 import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listRegisteredSittingIds } from '../eisa-registration/api';
 import type { Role } from '../../types';
-import { CALENDAR_REVIEWER_ROLE } from './config';
+import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR } from './config';
 import { checkSittingDate } from './dateChecks';
 import { BATCH_WORKFLOW, SITTING_LIFECYCLE_WORKFLOW } from './workflow';
 import type {
@@ -17,8 +18,8 @@ import type {
   ProposeSittingBatchInput,
 } from './types';
 
-const BATCHES_KEY = 'eisaCalendar:batches';
-const SITTINGS_KEY = 'eisaCalendar:sittings';
+export const BATCHES_KEY = 'eisaCalendar:batches';
+export const SITTINGS_KEY = 'eisaCalendar:sittings';
 
 function loadBatches(): EisaSittingBatch[] {
   return readStore<EisaSittingBatch[]>(BATCHES_KEY, []);
@@ -33,16 +34,29 @@ function saveSittings(sittings: EisaSitting[]): void {
   writeStore(SITTINGS_KEY, sittings);
 }
 
-// CR-030: reads the approved EISA frequency straight from the approved QSA Addendum, per the
-// assumption recorded on that module (evaluationReport.approvedEisaSittingsPerYear).
+// QCTO feedback 1.8: every qualification with accredited SDPs must have an EISA date, so no
+// approved QASA is needed. CR-030: the sittings-per-year count still comes from the approved
+// QASA (evaluationReport.approvedEisaSittingsPerYear) when one exists for that QP and
+// qualification; otherwise DEFAULT_SITTINGS_PER_YEAR.
 export async function listEligibleQualifications(): Promise<EligibleQualification[]> {
-  const approved = await listApprovedQsaAddenda();
-  return approved.map((a) => ({
-    qualificationTitle: a.qualificationTitle,
-    qpId: a.qpId,
-    qpName: a.qpName,
-    approvedEisaSittingsPerYear: a.evaluationReport.approvedEisaSittingsPerYear,
-  }));
+  const [qualifications, approved] = await Promise.all([listQualificationsWithAccreditedSdps(), listApprovedQsaAddenda()]);
+  return qualifications.map((q) => {
+    const qasa = approved.find(
+      (a) =>
+        a.qpId === q.qpId &&
+        a.qualificationTitle.trim().toLowerCase() === q.qualificationName.toLowerCase() &&
+        a.evaluationReport.approvedEisaSittingsPerYear != null,
+    );
+    const fromQasa = qasa?.evaluationReport.approvedEisaSittingsPerYear ?? null;
+    return {
+      qualificationId: q.qualificationId,
+      qualificationTitle: q.qualificationName,
+      qpId: q.qpId,
+      qpName: q.qpName,
+      sittingsPerYear: fromQasa ?? DEFAULT_SITTINGS_PER_YEAR,
+      sittingsPerYearIsDefault: fromQasa == null,
+    };
+  });
 }
 
 export async function listBatches(): Promise<EisaSittingBatch[]> {
@@ -61,18 +75,15 @@ export async function listPublishedSittings(): Promise<EisaSitting[]> {
 
 export async function proposeSittingBatch(input: ProposeSittingBatchInput): Promise<EisaSittingBatch> {
   const eligible = await listEligibleQualifications();
-  const match = eligible.find((q) => q.qualificationTitle === input.qualificationTitle && q.qpId === input.qpId);
+  const match = eligible.find((q) => q.qualificationId === input.qualificationId && q.qpId === input.qpId);
   if (!match) {
-    throw new Error('This qualification does not have an approved QSA Addendum yet.');
-  }
-  if (match.approvedEisaSittingsPerYear == null) {
-    throw new Error('The approved EISA sitting frequency for this qualification has not been recorded yet.');
+    throw new Error('This qualification has no accredited SDPs under this QP.');
   }
 
-  // CR-030: block if the submitted count does not match the approved frequency exactly.
-  if (input.dates.length !== match.approvedEisaSittingsPerYear) {
+  // CR-030: block if the submitted count does not match the required frequency exactly.
+  if (input.dates.length !== match.sittingsPerYear) {
     throw new Error(
-      `"${input.qualificationTitle}" is approved for ${match.approvedEisaSittingsPerYear} sitting(s) per year — you submitted ${input.dates.length}.`,
+      `"${input.qualificationTitle}" requires ${match.sittingsPerYear} sitting(s) per year — you submitted ${input.dates.length}.`,
     );
   }
 
@@ -93,11 +104,12 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
 
   const batch: EisaSittingBatch = {
     id: crypto.randomUUID(),
+    qualificationId: match.qualificationId,
     qualificationTitle: input.qualificationTitle,
     qpId: input.qpId,
     qpName: input.qpName,
     year: input.year,
-    requiredCount: match.approvedEisaSittingsPerYear,
+    requiredCount: match.sittingsPerYear,
     dates: [...input.dates].sort(),
     state: { stageId: 'qcto-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     rejectionReason: null,
@@ -109,6 +121,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
   const sittings: EisaSitting[] = batch.dates.map((date) => ({
     id: crypto.randomUUID(),
     batchId: batch.id,
+    qualificationId: match.qualificationId,
     qualificationTitle: input.qualificationTitle,
     qpId: input.qpId,
     qpName: input.qpName,
@@ -219,7 +232,7 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
   if (!batch) throw new Error('EISA sitting batch not found.');
 
   if (params.dates.length !== batch.requiredCount) {
-    throw new Error(`"${batch.qualificationTitle}" is approved for ${batch.requiredCount} sitting(s) per year — you submitted ${params.dates.length}.`);
+    throw new Error(`"${batch.qualificationTitle}" requires ${batch.requiredCount} sitting(s) per year — you submitted ${params.dates.length}.`);
   }
   if (new Set(params.dates).size !== params.dates.length) {
     throw new Error('Duplicate dates are not allowed in the same submission.');
@@ -254,6 +267,7 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
   const newSittings: EisaSitting[] = updatedBatch.dates.map((date) => ({
     id: crypto.randomUUID(),
     batchId: batch.id,
+    qualificationId: batch.qualificationId ?? null,
     qualificationTitle: batch.qualificationTitle,
     qpId: batch.qpId,
     qpName: batch.qpName,
@@ -290,6 +304,7 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
   const sitting: EisaSitting = {
     id: crypto.randomUUID(),
     batchId: null,
+    qualificationId: input.qualificationId,
     qualificationTitle: input.qualificationTitle,
     qpId: input.qpId,
     qpName: input.qpName,
@@ -330,8 +345,15 @@ export async function editSitting(id: string, patch: EditSittingInput, actorId: 
     actorName,
     action:
       patch.date !== existing.date
-        ? `Edited sitting — date changed from ${existing.date} to ${patch.date}`
-        : 'Edited sitting',
+        ? `Updated sitting — date changed from ${existing.date} to ${patch.date}`
+        : 'Updated sitting',
+  });
+  // QCTO feedback 1.9: the QP is told about an update, the same as a postpone or cancel.
+  const dateNote = patch.date !== existing.date ? ` The date changed from ${existing.date} to ${patch.date}.` : '';
+  addNotification({
+    recipientRole: 'QP',
+    title: 'EISA sitting updated',
+    body: `Your EISA sitting for "${updated.qualificationTitle}" on ${updated.date} has been updated by QCTO.${dateNote}`,
   });
   return updated;
 }

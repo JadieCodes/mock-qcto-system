@@ -10,3 +10,7 @@ export const APPROVAL_LETTER_SIGNER_ROLE: Role = 'Deputy Director';
 // (the same reading the test finding itself suggests: "any No on a mandatory line"). Change
 // to a specific array of item ids if QCTO names a narrower set.
 export const QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS: string[] | 'all' = 'all';
+
+// QCTO feedback 1.4: on QASA screens the CEO-signed letter after the IAC decision is the
+// "feedback letter". It still uses the shared `outcome` template, which RPL Toolkit shares.
+export const FEEDBACK_LETTER_TITLE = 'Feedback Letter';

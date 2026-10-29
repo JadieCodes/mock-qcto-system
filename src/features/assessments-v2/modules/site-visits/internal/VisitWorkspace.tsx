@@ -16,11 +16,12 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
+import { hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE } from '../evidence';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
-import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
+import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasQp, visitHasSdp, visitSiteKindLabel, visitSiteName, visitSubject } from '../visitTypeLabels';
 import type { SiteVisit } from '../types';
 import type { Role } from '../../../types';
 
@@ -115,26 +116,38 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
         <SiteVisitStatusBadge visit={visit} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">QP</Label>
-          <Input value={visit.qpName} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qpName: e.target.value } })} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Qualification</Label>
-          <Input
-            value={visit.qualificationTitle}
-            disabled={!canEdit}
-            onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qualificationTitle: e.target.value } })}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">SDP</Label>
-          <Input
-            value={visit.sdpName ?? ''}
-            disabled={!canEdit}
-            onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { sdpName: e.target.value || null } })}
-          />
-        </div>
+        {visitHasQp(visit.visitType) ? (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">QP</Label>
+            <Input value={visit.qpName} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qpName: e.target.value } })} />
+          </div>
+        ) : (
+          // QCTO feedback 2.7: RPL/ARPL is held at an SDP or assessment centre — no QP.
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">{visitSiteKindLabel(visit)}</Label>
+            <p className="text-sm font-medium pt-2">{visitSiteName(visit) || '—'}</p>
+          </div>
+        )}
+        {isPerQualificationVisit(visit.visitType) && (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">Qualification</Label>
+            <Input
+              value={visit.qualificationTitle}
+              disabled={!canEdit}
+              onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qualificationTitle: e.target.value } })}
+            />
+          </div>
+        )}
+        {visitHasSdp(visit.visitType) && visitHasQp(visit.visitType) && (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">SDP</Label>
+            <Input
+              value={visit.sdpName ?? ''}
+              disabled={!canEdit}
+              onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { sdpName: e.target.value || null } })}
+            />
+          </div>
+        )}
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Visit Date</Label>
           <Input
@@ -386,7 +399,11 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
   // Item 2 (module audit): the Submit button had no completeness gate at all, letting the ASD
   // submit a report with a blank checklist (CR-011).
   const checklistComplete = isChecklistComplete(visit.checklist, true);
-  const submitIssues = canExecute ? getChecklistIssues(visit.checklist, true) : [];
+  // QCTO feedback 1.12: at least one "Visit report" file before the report can be submitted.
+  const reportFileUploaded = hasVisitReportFile(visit);
+  const submitIssues = canExecute
+    ? [...getChecklistIssues(visit.checklist, true), ...(reportFileUploaded ? [] : [{ field: 'evidence-report', message: MISSING_VISIT_REPORT_MESSAGE }])]
+    : [];
 
   const dialogCopy: Record<Exclude<ReportDialogAction, null>, { title: string; confirmLabel: string; destructive?: boolean; actionId: string }> = {
     'report-send-back': { title: 'Send back for clarification', confirmLabel: 'Send back', actionId: 'report-send-back' },
@@ -405,11 +422,11 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
 
       {canExecute && (
         <>
-          <ValidationSummary issues={submitIssues} title="Complete every checklist line before you can submit the report:" />
+          <ValidationSummary issues={submitIssues} title="Complete these before you can submit the report:" />
           <div className="flex justify-end">
             <Button
               className="gap-2"
-              disabled={!checklistComplete || reportAction.isPending}
+              disabled={!checklistComplete || !reportFileUploaded || reportAction.isPending}
               onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'report-submit', actorRole: role, actorId, actorName })}
             >
               <Send className="h-4 w-4" />
@@ -462,7 +479,9 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       {stage === 'rejected' && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Report rejected.</div>}
       {(stage === 'approved' || stage === 'outcome-shared' || stage === 'closed') && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Report {stage === 'approved' ? 'approved' : stage === 'outcome-shared' ? 'approved — outcome shared, awaiting QP' : 'closed'}.
+          {/* QCTO feedback 2.12: sharing the outcome now completes the visit, so 'outcome-shared'
+              only remains on visits stored before Batch A3. */}
+          Report {stage === 'approved' ? 'approved' : stage === 'outcome-shared' ? 'approved — outcome shared, awaiting QP' : 'approved — outcome shared, visit completed'}.
         </div>
       )}
 
@@ -525,7 +544,7 @@ export function VisitWorkspace({ visitId, onClose }: { visitId: string | null; o
       open={!!visitId}
       onOpenChange={(open) => !open && onClose()}
       size="lg"
-      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visit.qualificationTitle}` : ''}
+      title={visit ? `${VISIT_TYPE_LABELS[visit.visitType]} — ${visitSubject(visit)}` : ''}
       footer={<Button variant="outline" onClick={onClose}>Close</Button>}
     >
       {visit && <VisitWorkspaceContent visit={visit} />}

@@ -78,7 +78,7 @@ export function InternalDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Approval of Results"
-        description="QP results-batch submissions, checked through Assistant Director → Deputy Director → Director → Chief Director (CR-059)."
+        description="QP results-batch submissions, checked through Assistant Director → Deputy Director → Director → Chief Director."
         actions={<ScopeToggle scope={scope} onChange={setScope} />}
       />
 

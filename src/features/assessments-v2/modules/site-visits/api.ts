@@ -23,10 +23,12 @@ import {
   REPORT_APPROVER_ROLE,
   REPORT_SUBMITTER_ROLE,
 } from './config';
+import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory, type VisitEvidenceFile } from './evidence';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
 import type { NewVisitInput, SiteVisit, VisitType } from './types';
+import { visitHasQp, visitHasSiteSelection, visitHasSittingLink, visitSubject } from './visitTypeLabels';
 
-const KEY = 'siteVisits:visits';
+export const KEY = 'siteVisits:visits';
 
 function loadAll(): SiteVisit[] {
   return readStore<SiteVisit[]>(KEY, []);
@@ -79,18 +81,20 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
   return {
     id: crypto.randomUUID(),
     visitType: 'rpl-arpl-monitoring',
-    // Phase 6 fix: carried over from the registration's EISA sitting instead of a placeholder.
-    qpId: item.qpId,
-    qpName: item.qpName,
+    // QCTO feedback 2.7: held at the registering SDP, with no QP and no link to the EISA sitting
+    // or its date — the officials set the visit date and venue on the Details tab.
+    qpId: '',
+    qpName: '',
     qualificationTitle: item.qualificationTitle,
     sdpId: item.sdpId,
     sdpName: item.sdpName,
+    assessmentCentreName: null,
     sittingId: null,
-    visitDate: item.sittingDate,
+    visitDate: '',
     venue: '',
     notificationFlag: 'notified',
     noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
-    planNote: 'Automatically created from an RPL/ARPL-flagged EISA Registration (CR-042/CR-044) — the only automatic trigger into this hub.',
+    planNote: 'Automatically created from an RPL/ARPL-flagged Learner EISA Registration.',
     // CR-044: the one automatic trigger skips the planning chain — it is already a known,
     // real requirement, not a plan someone still needs to propose and get approved.
     planningWorkflow: { stageId: 'booked' },
@@ -151,16 +155,23 @@ export async function listSdpsForSitting(sittingId: string): Promise<{ sdpId: st
   return [...seen.entries()].map(([sdpId, sdpName]) => ({ sdpId, sdpName }));
 }
 
-export async function createVisit(input: NewVisitInput): Promise<SiteVisit> {
+export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assessmentCentreName'>): Promise<SiteVisit> {
+  // QCTO feedback 2.7: an RPL/ARPL visit needs its SDP or assessment centre, and never has a
+  // QP or a sitting link.
+  const hasQp = visitHasQp(input.visitType);
+  if (visitHasSiteSelection(input.visitType) && !input.sdpName?.trim() && !input.assessmentCentreName?.trim()) {
+    throw new Error('Choose the SDP or enter the assessment centre where the RPL/ARPL visit takes place.');
+  }
   const visit: SiteVisit = {
     id: crypto.randomUUID(),
     visitType: input.visitType,
-    qpId: input.qpId,
-    qpName: input.qpName,
+    qpId: hasQp ? input.qpId : '',
+    qpName: hasQp ? input.qpName : '',
     qualificationTitle: input.qualificationTitle,
     sdpId: input.sdpId,
     sdpName: input.sdpName,
-    sittingId: input.sittingId,
+    assessmentCentreName: input.assessmentCentreName?.trim() || null,
+    sittingId: visitHasSittingLink(input.visitType) ? input.sittingId : null,
     visitDate: input.visitDate,
     venue: input.venue,
     notificationFlag: input.notificationFlag,
@@ -258,19 +269,19 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
   // plan-approve were already two of these; plan-submit was the missing one, so the Deputy
   // Director only ever found out a plan was waiting by opening the dashboard themselves.
   if (params.actionId === 'plan-submit') {
-    addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, title: 'Visit plan awaiting recommendation', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Deputy Director recommendation.` });
+    addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, title: 'Visit plan awaiting recommendation', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Deputy Director recommendation.` });
   }
   if (params.actionId === 'plan-recommend') {
-    addNotification({ recipientRole: PLAN_APPROVER_ROLE, title: 'Visit plan awaiting approval', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Domain Director approval.` });
+    addNotification({ recipientRole: PLAN_APPROVER_ROLE, title: 'Visit plan awaiting approval', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Domain Director approval.` });
   }
   if (params.actionId === 'plan-approve') {
-    addNotification({ recipientRole: BOOKING_ROLE, title: 'Visit plan awaiting booking', body: `"${visit.qualificationTitle}" (${visit.visitType}) needs Sub Domain Admin booking.` });
+    addNotification({ recipientRole: BOOKING_ROLE, title: 'Visit plan awaiting booking', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Sub Domain Admin booking.` });
   }
   if (nextWorkflow.stageId === 'booked') {
     addNotification({
       recipientRole: REPORT_SUBMITTER_ROLE,
       title: bookedVisitNotificationTitle(visit.visitType),
-      body: `"${visit.qualificationTitle}" is booked for ${visit.visitDate}. The execution form is ready.`,
+      body: `"${visitSubject(visit)}" is booked for ${visit.visitDate}. The execution form is ready.`,
     });
   }
 
@@ -280,7 +291,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
     addNotification({
       recipientRole: nextOwner,
       title: isReject ? 'Visit plan rejected' : 'Visit plan sent back for clarification',
-      body: `"${visit.qualificationTitle}" (${visit.visitType}): ${params.note ?? ''}`,
+      body: `"${visitSubject(visit)}" (${visit.visitType}): ${params.note ?? ''}`,
     });
   }
 
@@ -308,6 +319,9 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     }
     if (!visit.completedBy.trim() || !visit.completedDate) {
       throw new Error('Complete "Completed By" and "Completion Date" before submitting.');
+    }
+    if (!hasVisitReportFile(visit)) {
+      throw new Error(MISSING_VISIT_REPORT_MESSAGE);
     }
   }
   // CR-055: re-routing is logged as an audit note only — it deliberately does NOT go through
@@ -349,7 +363,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     addNotification({
       recipientRole: target.role,
       title: 'A visit report was re-routed to you',
-      body: `"${visit.qualificationTitle}" (${visit.visitType}) was re-routed to ${target.name} by ${params.actorName}: ${params.note}`,
+      body: `"${visitSubject(visit)}" (${visit.visitType}) was re-routed to ${target.name} by ${params.actorName}: ${params.note}`,
     });
     return updated;
   }
@@ -366,14 +380,30 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     recordId: visit.id,
   });
 
-  const updated: SiteVisit = { ...visit, reportWorkflow: nextWorkflow };
+  // QCTO feedback 2.12: Site Visits is no longer on the external side, so the QP has no screen
+  // to acknowledge the outcome on. [DEFAULT — to be confirmed with QCTO] sharing the outcome
+  // completes the visit straight away; 'outcome-shared' -> 'closed' (the old
+  // qp-acknowledge-outcome step) is applied here, with its own audit entry.
+  const sharedAndClosed = params.actionId === 'share-visit-outcome';
+  const updated: SiteVisit = { ...visit, reportWorkflow: sharedAndClosed ? { ...nextWorkflow, stageId: 'closed' } : nextWorkflow };
   saveAll(replace(all, updated));
 
+  if (sharedAndClosed) {
+    appendAuditEntry({
+      recordType: 'site-visit-report',
+      recordId: visit.id,
+      actorRole: params.actorRole,
+      actorId: params.actorId,
+      actorName: params.actorName,
+      action: 'Visit completed — outcome shared, no QP acknowledgement needed (QCTO feedback 2.12)',
+    });
+  }
+
   if (params.actionId === 'report-submit') {
-    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'Site visit report submitted', body: `"${visit.qualificationTitle}" (${visit.visitType}) is awaiting your review.` });
+    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'Site visit report submitted', body: `"${visitSubject(visit)}" (${visit.visitType}) is awaiting your review.` });
   }
   if (params.actionId === 'report-approve') {
-    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved', body: `Your report for "${visit.qualificationTitle}" was approved.` });
+    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved', body: `Your report for "${visitSubject(visit)}" was approved.` });
   }
   if (params.actionId === 'report-send-back') {
     addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report sent back for clarification', body: params.note ?? '' });
@@ -385,13 +415,15 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     // Fix 4 Part 2 correction (G-23/G-26): every visit type shares the outcome with the QP
     // named on the visit, not only Post-EISA Monitoring. PM-07's extra QA/Accreditation/SDP
     // hand-off stays specific to Post-EISA Monitoring — the register only names those extra
-    // recipients for that visit type.
-    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `The outcome for "${visit.qualificationTitle}" (${visit.qpName}) is ready to review.` });
+    // recipients for that visit type. QCTO feedback 2.7: an RPL/ARPL visit has no QP to notify.
+    if (visitHasQp(visit.visitType) && visit.qpId) {
+      addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${visitSubject(visit)}" (${visit.qpName}).` });
+    }
     if (visit.visitType === 'post-eisa-monitoring') {
       // PM-07: QA and Accreditation have no role in this build's Role union to notify directly —
       // simulated as an audit entry alongside the real in-app notifications to QP and SDP.
       if (visit.sdpName) {
-        addNotification({ recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visit.qualificationTitle}" (${visit.sdpName}) has been shared.` });
+        addNotification({ recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${visitSubject(visit)}" (${visit.sdpName}) has been shared.` });
       }
       appendAuditEntry({
         recordType: 'site-visit-report',
@@ -404,7 +436,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     }
   }
   if (params.actionId === 'qp-acknowledge-outcome') {
-    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'QP acknowledged the visit outcome', body: `"${visit.qualificationTitle}" — the QP has acknowledged the shared outcome.` });
+    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'QP acknowledged the visit outcome', body: `"${visitSubject(visit)}" — the QP has acknowledged the shared outcome.` });
   }
 
   return updated;
@@ -427,6 +459,24 @@ export async function saveFreeTextNotes(id: string, freeTextNotes: Record<string
 export async function saveCompletionDetails(id: string, completedBy: string, completedDate: string): Promise<SiteVisit> {
   const all = loadAll();
   const updated = { ...getOrThrow(all, id), completedBy, completedDate };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// QCTO feedback 1.12: evidence can only be added while the report is editable — the same
+// stage in which the Execution & Report form is open to the ASD.
+export async function uploadEvidence(
+  id: string,
+  file: { fileName: string; fileSize: number; category: VisitEvidenceCategory },
+  uploadedBy: string,
+): Promise<SiteVisit> {
+  const all = loadAll();
+  const visit = getOrThrow(all, id);
+  if (visit.planningWorkflow.stageId !== 'booked' || visit.reportWorkflow.stageId !== 'awaiting-execution') {
+    throw new Error('Evidence can only be uploaded while the report is being completed.');
+  }
+  const uploaded: VisitEvidenceFile = { ...file, uploadedAt: new Date().toISOString(), uploadedBy };
+  const updated: SiteVisit = { ...visit, evidence: [...evidenceOf(visit), uploaded] };
   saveAll(replace(all, updated));
   return updated;
 }

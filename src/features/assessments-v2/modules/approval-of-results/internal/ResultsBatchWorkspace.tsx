@@ -164,8 +164,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         {belowThreshold && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
             <p className="text-sm text-amber-800">
-              Below the {POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}% competency threshold (PM-06 — trigger and threshold
-              unconfirmed with QCTO).
+              Below the {POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}% competency threshold.
             </p>
             {batch.workflow.stageId === 'approved' && !batch.pemVisitId && (
               <Button size="sm" disabled={createPemVisit.isPending} onClick={() => createPemVisit.mutate({ batchId: batch.id, actorId, actorName })}>
@@ -179,7 +178,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Marking &amp; Moderation Monitoring Status (CR-052)</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Marking &amp; Moderation Monitoring Status</p>
         </div>
         <div className="p-4">
           {mmVisits.length === 0 ? (
@@ -198,7 +197,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
                     {/* Row 38 (G-26): show the report itself, not just its status, once it's
                         been approved — gated by the same visibility rule checked above. */}
                     {!canSeeReportDetails ? (
-                      <p className="text-xs text-gray-400">Report details are restricted for your role (CR-054 — still open with QCTO).</p>
+                      <p className="text-xs text-gray-400">Report details are restricted for your role.</p>
                     ) : !reportIsApproved(v) ? (
                       <p className="text-xs text-gray-400">Report not yet approved.</p>
                     ) : (

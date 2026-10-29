@@ -8,12 +8,13 @@ import { createMonitoringItem } from '../../mock/api/siteVisitsStore';
 import { readStore, writeStore } from '../../mock/api/storage';
 import type { Role } from '../../types';
 import { listPublishedSittings } from '../eisa-calendar/api';
+import { calcRegistrationClosingDate, isRegistrationClosed } from '../eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX } from './config';
 import { REGISTRATION_WORKFLOW } from './workflow';
 import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SorStatus, SupportingDocument } from './types';
 
-const KEY = 'eisaRegistration:records';
+export const KEY = 'eisaRegistration:records';
 
 function loadAll(): EisaRegistrationRecord[] {
   return readStore<EisaRegistrationRecord[]>(KEY, []);
@@ -73,6 +74,11 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
   const sittings = await listPublishedSittings();
   const sitting = sittings.find((s) => s.id === input.sittingId);
   if (!sitting) throw new Error('That EISA sitting is not published.');
+
+  // QCTO feedback 3.5: no new registrations once the sitting's closing date has passed.
+  if (isRegistrationClosed(sitting.date)) {
+    throw new Error(`Registration for this sitting closed on ${calcRegistrationClosingDate(sitting.date)}.`);
+  }
 
   const compliant = await getSdpComplianceStatus(input.sdpName);
   if (!compliant) {

@@ -8,6 +8,9 @@ export interface EisaSitting {
   // CR-027: null when a QCTO official added this date directly; set when it came from a QP's
   // proposed batch (CR-028/CR-029).
   batchId: string | null;
+  // QCTO feedback 2.3: optional so sittings stored before it was added still load — screens
+  // fall back to a directory lookup by name (sittingDetails.ts).
+  qualificationId?: string | null;
   qualificationTitle: string;
   qpId: string;
   qpName: string;
@@ -33,6 +36,7 @@ export interface BatchRejectionHistoryEntry {
 // reviewed together, since the required count only makes sense as a set.
 export interface EisaSittingBatch {
   id: string;
+  qualificationId?: string | null;
   qualificationTitle: string;
   qpId: string;
   qpName: string;
@@ -48,16 +52,20 @@ export interface EisaSittingBatch {
   submittedAt: string;
 }
 
+// QCTO feedback 1.8: every qualification with accredited SDPs, approved QASA or not.
 export interface EligibleQualification {
+  qualificationId: string;
   qualificationTitle: string;
   qpId: string;
   qpName: string;
-  // CR-030: the approved EISA frequency, carried over from the QSA Addendum's evaluation
-  // report. Null if, somehow, an approved addendum never had this recorded.
-  approvedEisaSittingsPerYear: number | null;
+  // CR-030: the approved QASA's approvedEisaSittingsPerYear when there is one, otherwise
+  // config.ts DEFAULT_SITTINGS_PER_YEAR.
+  sittingsPerYear: number;
+  sittingsPerYearIsDefault: boolean;
 }
 
 export interface ProposeSittingBatchInput {
+  qualificationId: string;
   qualificationTitle: string;
   qpId: string;
   qpName: string;
@@ -68,6 +76,7 @@ export interface ProposeSittingBatchInput {
 }
 
 export interface AddSittingInput {
+  qualificationId: string | null;
   qualificationTitle: string;
   qpId: string;
   qpName: string;
@@ -78,6 +87,7 @@ export interface AddSittingInput {
 }
 
 export interface EditSittingInput {
+  qualificationId: string | null;
   qualificationTitle: string;
   qpId: string;
   qpName: string;

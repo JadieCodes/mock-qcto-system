@@ -1,18 +1,14 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EmptyState, SectionCard } from '../../../shared/ui/PageSections';
 import { teamLabel } from '../../../config/teams';
-import { listApplications } from '../../qsa-addendum/api';
-import { qsaOverallStatusLabel } from '../../qsa-addendum/workflow';
 import { useInstrumentValidationRecords } from '../hooks';
 import { overallStatusLabel } from '../workflow';
 
-interface AgendaRow {
+interface StatusRow {
   id: string;
-  type: 'QSA Addendum' | 'EISA Instrument Validation';
   qualificationTitle: string;
   qpName: string;
   stageLabel: string;
@@ -20,47 +16,37 @@ interface AgendaRow {
   date: string;
 }
 
-// CR-025: "QSA agenda" is read here as the QSA Addendum queue — the same applications QCTO
-// officials already work from on the QSA Addendum screen — shown alongside instrument
-// validation status in one place, with stage, owner team, dates and filters. See the
-// "Assumptions made" note in progress.md for this reading.
+const ALL_STATUSES = 'all';
+
+// CR-025, QCTO feedback 1.6: EISA Instrument Validation records only. QASA is a separate
+// process, not an EISA instrument type, so its submissions are not listed here.
 export function StatusDashboard() {
-  const { data: qsaApplications = [] } = useQuery({
-    queryKey: ['instrument-validation', 'status-dashboard', 'qsa-applications'],
-    queryFn: listApplications,
-  });
   const { data: validationRecords = [] } = useInstrumentValidationRecords();
 
-  const [typeFilter, setTypeFilter] = useState<'all' | 'qsa' | 'validation'>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUSES);
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  const rows: AgendaRow[] = useMemo(() => {
-    const qsaRows: AgendaRow[] = qsaApplications.map((a) => ({
-      id: `qsa-${a.id}`,
-      type: 'QSA Addendum',
-      qualificationTitle: a.qualificationTitle,
-      qpName: a.qpName,
-      stageLabel: qsaOverallStatusLabel(a),
-      ownerTeam: teamLabel('qsa-evaluation'),
-      date: a.submissionDate,
-    }));
-    const validationRows: AgendaRow[] = validationRecords.map((r) => ({
-      id: `val-${r.id}`,
-      type: 'EISA Instrument Validation',
-      qualificationTitle: r.qualificationTitle,
-      qpName: r.qpName,
-      stageLabel: overallStatusLabel(r),
-      ownerTeam: teamLabel('instrument-validation'),
-      date: r.createdAt.slice(0, 10),
-    }));
-    return [...qsaRows, ...validationRows].sort((a, b) => b.date.localeCompare(a.date));
-  }, [qsaApplications, validationRecords]);
+  const rows: StatusRow[] = useMemo(
+    () =>
+      validationRecords
+        .map((r) => ({
+          id: r.id,
+          qualificationTitle: r.qualificationTitle,
+          qpName: r.qpName,
+          stageLabel: overallStatusLabel(r),
+          ownerTeam: teamLabel('instrument-validation'),
+          date: r.createdAt.slice(0, 10),
+        }))
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [validationRecords],
+  );
+
+  const statusOptions = useMemo(() => [...new Set(rows.map((row) => row.stageLabel))].sort(), [rows]);
 
   const filtered = rows.filter((row) => {
-    if (typeFilter === 'qsa' && row.type !== 'QSA Addendum') return false;
-    if (typeFilter === 'validation' && row.type !== 'EISA Instrument Validation') return false;
+    if (statusFilter !== ALL_STATUSES && row.stageLabel !== statusFilter) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       if (
@@ -78,16 +64,21 @@ export function StatusDashboard() {
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-gray-600">Shows the status of every EISA instrument validation.</p>
+
       <div className="rounded-2xl border bg-white p-4 shadow-sm grid gap-3 md:grid-cols-4">
         <Input placeholder="Search qualification, QP or stage..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-          <SelectTrigger>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger aria-label="Filter by status">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="qsa">QSA Addendum</SelectItem>
-            <SelectItem value="validation">EISA Instrument Validation</SelectItem>
+            <SelectItem value={ALL_STATUSES}>All statuses</SelectItem>
+            {statusOptions.map((status) => (
+              <SelectItem key={status} value={status}>
+                {status}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
@@ -102,7 +93,7 @@ export function StatusDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Type', 'Qualification Title', 'QP', 'Stage', 'Owner Team', 'Date'].map((h) => (
+                  {['Qualification Title', 'QP', 'Stage', 'Acting Roles', 'Date'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -112,7 +103,6 @@ export function StatusDashboard() {
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="whitespace-nowrap text-xs font-semibold text-gray-500">{row.type}</TableCell>
                     <TableCell className="max-w-[220px] truncate font-medium">{row.qualificationTitle}</TableCell>
                     <TableCell>{row.qpName}</TableCell>
                     <TableCell>{row.stageLabel}</TableCell>

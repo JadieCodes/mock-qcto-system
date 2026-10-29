@@ -1,5 +1,9 @@
 import type { ProcessStageTeam, Role } from '../../types';
 
+// QCTO feedback 2.2 (replaces approved correction 6 in 09-visibility-matrix.md): modules every
+// role on both portals can open. Only status-only views belong here.
+export const MODULES_VISIBLE_TO_ALL_ROLES: string[] = ['qasa-status'];
+
 // 09-visibility-matrix.md Table A (external portal). SDP additions beyond the existing
 // CR-018 instrument-validation hide: qsa-addendum, eisa-confirmation, site-visits,
 // approval-of-results, rpl-toolkit. QP additions: eisa-registration, fisa.
@@ -8,7 +12,10 @@ export const EXTERNAL_MODULE_HIDDEN_FOR_ROLE: Record<string, Role[]> = {
   'instrument-validation': ['SDP'], // CR-018
   'eisa-registration': ['QP'],
   'eisa-confirmation': ['SDP'],
-  'site-visits': ['SDP'],
+  // QCTO feedback 2.12 (replaces CR-047's "QP sees own visits"): visits are scheduled by QCTO,
+  // so external Site Visits is hidden and blocked for every external role. The external screens
+  // stay in modules/site-visits/external/ but are never reached.
+  'site-visits': ['SDP', 'QP'],
   'approval-of-results': ['SDP'],
   fisa: ['QP'],
   'rpl-toolkit': ['SDP'],

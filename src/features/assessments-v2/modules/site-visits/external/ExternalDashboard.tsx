@@ -7,7 +7,7 @@ import { filterByVisibilityScope } from '../../../shared/visibility/recordVisibi
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { visibilityScopeForRole } from '../config';
 import { useSiteVisits } from '../hooks';
-import { VISIT_TYPE_LABELS } from '../visitTypeLabels';
+import { qualificationDisplay, VISIT_TYPE_LABELS } from '../visitTypeLabels';
 import { VisitDetail } from './VisitDetail';
 
 // CR-047/CR-054: QPs only see their own visits and schedules, driven by the same
@@ -24,7 +24,7 @@ function QpVisitsView() {
     <div className="space-y-6">
       <PageHeader
         title="Site Visits & Monitoring"
-        description="View your own visits and their status — scheduling and execution are managed by QCTO. An RPL/ARPL monitoring item here comes automatically from your registration, not from EISA Confirmation."
+        description="View your own visits and their status — scheduling and execution are managed by QCTO."
       />
 
       <SectionCard title={`My Visits — ${person.name}`}>
@@ -46,7 +46,7 @@ function QpVisitsView() {
                 {myVisits.map((v) => (
                   <TableRow key={v.id} className="cursor-pointer hover:bg-gray-50" onClick={() => setSelectedId(v.id)}>
                     <TableCell className="whitespace-nowrap">{VISIT_TYPE_LABELS[v.visitType]}</TableCell>
-                    <TableCell className="max-w-[220px] truncate">{v.qualificationTitle}</TableCell>
+                    <TableCell className="max-w-[220px] truncate">{qualificationDisplay(v)}</TableCell>
                     <TableCell className="whitespace-nowrap">{v.visitDate}</TableCell>
                     <TableCell>
                       <SiteVisitStatusBadge visit={v} forQp />

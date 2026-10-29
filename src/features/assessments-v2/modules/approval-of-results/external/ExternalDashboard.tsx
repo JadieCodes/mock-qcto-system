@@ -26,7 +26,7 @@ function QpResultsView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Approval of Results" description="Submit your exam results batch within 21 working days of the sitting (CR-059)." />
+      <PageHeader title="Approval of Results" description="Submit your exam results batch within 21 working days of the sitting." />
 
       <SectionCard title="Awaiting Submission">
         {myAwaiting.length === 0 ? (

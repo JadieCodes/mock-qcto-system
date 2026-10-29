@@ -55,7 +55,7 @@ export function useCreateQsaAddendumApplication() {
     mutationFn: (input: NewApplicationInput) => createApplication(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LIST_KEY });
-      toast.success('QSA Addendum application submitted.');
+      toast.success('QASA submitted for evaluation.');
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Something went wrong.');

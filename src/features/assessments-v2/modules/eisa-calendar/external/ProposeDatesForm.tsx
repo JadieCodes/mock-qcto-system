@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
+import { RegistrationCloses } from '../components/RegistrationCloses';
 import { checkSittingDate } from '../dateChecks';
 import { useEligibleQualifications, useProposeSittingBatch } from '../hooks';
 
@@ -16,16 +18,18 @@ const YEAR_OPTIONS = [0, 1, 2].map((offset) => new Date().getFullYear() + offset
 // free-form (add/remove) so a QP really can submit the wrong count and see the block — the
 // row count is not pre-locked to the required frequency.
 export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { data: eligible = [] } = useEligibleQualifications();
+  const { data: allEligible = [] } = useEligibleQualifications();
   const { person } = useV2Role();
   const proposeBatch = useProposeSittingBatch();
 
-  const [qualificationTitle, setQualificationTitle] = useState('');
+  const [qualificationId, setQualificationId] = useState('');
   const [year, setYear] = useState<number>(YEAR_OPTIONS[0]);
   const [dates, setDates] = useState<string[]>(['']);
 
-  const selected = eligible.find((q) => q.qualificationTitle === qualificationTitle);
-  const requiredCount = selected?.approvedEisaSittingsPerYear ?? null;
+  // QCTO feedback 1.8: only the qualifications under this QP's ambit with accredited SDPs.
+  const eligible = filterExternalRecords(allEligible, person, { qpIdOf: (q) => q.qpId });
+  const selected = eligible.find((q) => q.qualificationId === qualificationId);
+  const requiredCount = selected?.sittingsPerYear ?? null;
 
   const filledDates = dates.filter((d) => d.trim() !== '');
   const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d) }));
@@ -35,7 +39,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
   const allDatesOk = dateChecks.every((c) => c.result.ok);
 
   const resetAll = () => {
-    setQualificationTitle('');
+    setQualificationId('');
     setYear(YEAR_OPTIONS[0]);
     setDates(['']);
   };
@@ -47,6 +51,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
     if (!selected || !canSubmit) return;
     proposeBatch.mutate(
       {
+        qualificationId: selected.qualificationId,
         qualificationTitle: selected.qualificationTitle,
         qpId: selected.qpId,
         qpName: selected.qpName,
@@ -75,33 +80,34 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Propose EISA Sitting Dates</DialogTitle>
-          <DialogDescription>Only qualifications with an Approved QSA Addendum can have dates proposed.</DialogDescription>
+          <DialogDescription>Propose sitting dates for a qualification with accredited SDPs.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Qualification *</Label>
-            <Select value={qualificationTitle} onValueChange={setQualificationTitle}>
+            <Select value={qualificationId} onValueChange={setQualificationId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a qualification" />
               </SelectTrigger>
               <SelectContent>
                 {eligible.map((q) => (
-                  <SelectItem key={q.qualificationTitle} value={q.qualificationTitle}>
-                    {q.qualificationTitle}
+                  <SelectItem key={q.qualificationId} value={q.qualificationId}>
+                    {q.qualificationId} — {q.qualificationTitle}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {eligible.length === 0 && (
-              <p className="text-xs text-gray-400">No qualifications with an Approved QSA Addendum yet — approve one first.</p>
+              <p className="text-xs text-gray-400">No qualifications with accredited SDPs under your ambit yet.</p>
             )}
           </div>
 
           {selected && (
             <div className="rounded-xl border bg-gray-50 px-3 py-2 text-xs text-gray-600">
               QP: <span className="font-medium">{selected.qpName}</span> · Required sittings per year:{' '}
-              <span className="font-medium">{requiredCount ?? 'not recorded yet'}</span>
+              <span className="font-medium">{selected.sittingsPerYear}</span>
+              {selected.sittingsPerYearIsDefault && <span> (default)</span>}
             </div>
           )}
 
@@ -153,6 +159,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
                         </Button>
                       )}
                     </div>
+                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" />}
                     {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
                     {check && check.ok && Number(d.slice(0, 4)) !== year && (
                       <p className="text-xs text-red-600">This date is not in {year}.</p>
@@ -166,7 +173,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-800">
-                  "{selected?.qualificationTitle}" is approved for {requiredCount} sitting(s) per year — you have entered{' '}
+                  "{selected?.qualificationTitle}" requires {requiredCount} sitting(s) per year — you have entered{' '}
                   {filledDates.length}.
                 </AlertDescription>
               </Alert>

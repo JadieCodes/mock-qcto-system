@@ -116,7 +116,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                       notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
                       signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
                       signatoryTitle: 'CEO',
-                    })}
+                    }, undefined, 'rpl-toolkit')}
                   />
                 ) : (
                   <p className="text-sm text-gray-400">Not yet available — the IAC has not reached a decision.</p>

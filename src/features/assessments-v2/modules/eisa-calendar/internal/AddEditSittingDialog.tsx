@@ -8,9 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { checkSittingDate } from '../dateChecks';
 import { useEligibleQualifications } from '../hooks';
-import type { EisaSitting } from '../types';
+import { qualificationIdOf } from '../sittingDetails';
+import type { EditSittingInput, EisaSitting } from '../types';
 
 const YEAR_OPTIONS = [0, 1, 2].map((offset) => new Date().getFullYear() + offset);
+const OWN_ENTRY = '__current-qualification__';
 
 // CR-027: QCTO can add or edit a sitting directly, at any time. The automatic date checks
 // (CR-032) only produce a non-blocking warning here — QCTO is the authority, so they can
@@ -28,14 +30,14 @@ export function AddEditSittingDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sitting: EisaSitting | null;
-  onSubmit: (values: { qualificationTitle: string; qpId: string; qpName: string; year: number; date: string }) => void;
+  onSubmit: (values: EditSittingInput) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{sitting ? 'Edit Sitting' : 'Add Sitting'}</DialogTitle>
-          <DialogDescription>CR-027 — QCTO can add, edit or delete calendar sittings at any time.</DialogDescription>
+          <DialogTitle>{sitting ? 'Update Sitting' : 'Add Sitting'}</DialogTitle>
+          <DialogDescription>QCTO can add, update or delete calendar sittings at any time.</DialogDescription>
         </DialogHeader>
         {open && (
           <AddEditSittingForm
@@ -59,9 +61,17 @@ function AddEditSittingForm({
 }: {
   sitting: EisaSitting | null;
   onCancel: () => void;
-  onSubmit: (values: { qualificationTitle: string; qpId: string; qpName: string; year: number; date: string }) => void;
+  onSubmit: (values: EditSittingInput) => void;
 }) {
   const { data: eligible = [] } = useEligibleQualifications();
+  const initialQualificationId = sitting ? qualificationIdOf(sitting) : '';
+  // A sitting whose qualification is not in the eligible list keeps its own entry so an
+  // update does not silently change its qualification.
+  const keepsOwnEntry = !!sitting && !eligible.some((q) => q.qualificationId === initialQualificationId);
+  // Derived until the user picks, so it stays right once the eligible list finishes loading.
+  const [pickedValue, setSelectValue] = useState<string | null>(null);
+  const selectValue = pickedValue ?? (sitting ? (keepsOwnEntry ? OWN_ENTRY : initialQualificationId) : '');
+  const [qualificationId, setQualificationId] = useState<string | null>(sitting?.qualificationId ?? null);
   const [qualificationTitle, setQualificationTitle] = useState(sitting?.qualificationTitle ?? '');
   const [qpId, setQpId] = useState(sitting?.qpId ?? '');
   const [qpName, setQpName] = useState(sitting?.qpName ?? '');
@@ -77,28 +87,33 @@ function AddEditSittingForm({
         <div className="space-y-2">
           <Label>Qualification</Label>
           <Select
-            value={qualificationTitle}
+            value={selectValue}
             onValueChange={(value) => {
-              setQualificationTitle(value);
-              const match = eligible.find((q) => q.qualificationTitle === value);
+              setSelectValue(value);
+              if (value === OWN_ENTRY && sitting) {
+                setQualificationId(sitting.qualificationId ?? null);
+                setQualificationTitle(sitting.qualificationTitle);
+                return;
+              }
+              const match = eligible.find((q) => q.qualificationId === value);
               if (match) {
+                setQualificationId(match.qualificationId);
+                setQualificationTitle(match.qualificationTitle);
                 setQpName(match.qpName);
                 setQpId(match.qpId);
               }
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select a qualification with an approved QSA Addendum" />
+              <SelectValue placeholder="Select a qualification with accredited SDPs" />
             </SelectTrigger>
             <SelectContent>
               {eligible.map((q) => (
-                <SelectItem key={q.qualificationTitle} value={q.qualificationTitle}>
-                  {q.qualificationTitle}
+                <SelectItem key={q.qualificationId} value={q.qualificationId}>
+                  {q.qualificationId} — {q.qualificationTitle}
                 </SelectItem>
               ))}
-              {sitting && !eligible.some((q) => q.qualificationTitle === sitting.qualificationTitle) && (
-                <SelectItem value={sitting.qualificationTitle}>{sitting.qualificationTitle}</SelectItem>
-              )}
+              {sitting && keepsOwnEntry && <SelectItem value={OWN_ENTRY}>{sitting.qualificationTitle}</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -147,9 +162,9 @@ function AddEditSittingForm({
         <Button
           type="button"
           disabled={!ready}
-          onClick={() => onSubmit({ qualificationTitle: qualificationTitle.trim(), qpId, qpName: qpName.trim(), year, date })}
+          onClick={() => onSubmit({ qualificationId, qualificationTitle: qualificationTitle.trim(), qpId, qpName: qpName.trim(), year, date })}
         >
-          {sitting ? 'Save Changes' : 'Add Sitting'}
+          {sitting ? 'Update Sitting' : 'Add Sitting'}
         </Button>
       </DialogFooter>
     </>

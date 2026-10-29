@@ -85,7 +85,7 @@ Do NOT recreate the old combined role "Deputy & Assistant Director" (it caused t
 
 ## Business rules that must hold everywhere
 
-- The **CEO only signs the outcome letter**. The CEO never ticks evaluation checklists and nothing routes DD → CEO directly (CR-007, 008).
+- The **CEO only signs the outcome letter** (called the "feedback letter" on QASA screens, QCTO feedback 1.4; RPL Toolkit keeps "outcome letter"). The CEO never ticks evaluation checklists and nothing routes DD → CEO directly (CR-007, 008).
 - The **acknowledgement letter stops at DD level**.
 - Corrections route **DD → ASD → QP**. The DD never returns work straight to the QP (CR-012).
 - The SAQA **gate check only decides where documents come from** (auto-pulled vs uploaded). It never decides EISA vs FISA (CR-004). **FISA is a fully separate process** (CR-026).
@@ -101,7 +101,7 @@ Do NOT recreate the old combined role "Deputy & Assistant Director" (it caused t
 | Use | Never use |
 |---|---|
 | QP | AQP |
-| QSA Addendum | QAS Addendum / QASA (unless the developer says the official label is QAS) |
+| QAS Addendum (QASA) for the module's main menu entry and page title; QASA everywhere else (QCTO feedback 3.1) | QSA, QSA Addendum (code identifiers and folder names such as `qsa-addendum` stay as they are) |
 | EISA Instrument Validation | EISA Validation, Validation of EISA |
 | FISA Instrument Validation / FISA Validation Report | Validation of FISA, "EISA Validation Report" on a FISA screen |
 | EISA Confirmation | EISA Notification (for the learner-list step) |

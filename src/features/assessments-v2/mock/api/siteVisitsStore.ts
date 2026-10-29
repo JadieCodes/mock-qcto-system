@@ -20,7 +20,7 @@ export interface RplArplMonitoringItem {
   createdAt: string;
 }
 
-const KEY = 'siteVisits:monitoringItems';
+export const KEY = 'siteVisits:monitoringItems';
 
 function loadAll(): RplArplMonitoringItem[] {
   return readStore<RplArplMonitoringItem[]>(KEY, []);

@@ -35,7 +35,7 @@ export const ROLE_DESCRIPTORS: RoleDescriptor[] = [
   { role: 'IAC', portal: 'internal', label: 'IAC', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
   { role: 'CEO', portal: 'internal', label: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit'] },
   { role: 'Sub Domain Admin', portal: 'internal', label: 'Sub Domain Admin', teams: ['site-visits'] },
-  { role: 'Director & Team', portal: 'internal', label: 'Director & Team', teams: ['rpl-toolkit'] },
+  { role: 'Director & Team', portal: 'internal', label: 'Director Office', teams: ['rpl-toolkit'] },
   { role: 'Qualifications Development', portal: 'internal', label: 'Qualifications Development', teams: ['fisa'] },
 ];
 

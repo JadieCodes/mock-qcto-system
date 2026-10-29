@@ -2,7 +2,7 @@
 // placeholders pending QCTO confirmation — change here only, nowhere else, when confirmed.
 export const LABELS = {
   qualityPartner: 'QP',
-  qsaAddendum: 'QSA Addendum',
+  qsaAddendum: 'QAS Addendum (QASA)',
   eisaInstrumentValidation: 'EISA Instrument Validation',
   fisaInstrumentValidation: 'FISA Instrument Validation',
   fisaValidationReport: 'FISA Validation Report',

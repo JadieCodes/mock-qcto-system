@@ -26,9 +26,6 @@ export function Dashboard({ portal }: { portal: Portal }) {
         <p className="text-lg font-bold text-gray-900">
           {person.name} <span className="font-medium text-gray-500">— {descriptor?.label ?? role}</span>
         </p>
-        {descriptor && descriptor.teams.length > 0 && (
-          <p className="text-xs text-gray-500 mt-1.5">Teams: {descriptor.teams.join(', ')}</p>
-        )}
       </div>
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-gray-50/80 border-b">
