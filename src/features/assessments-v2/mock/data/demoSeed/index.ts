@@ -1,7 +1,8 @@
 // Demo seed (QCTO feedback Batch C) — so every module opens with records at every stage after
 // "Reset demo data". Records per module are listed at the top of each file:
 //   qasa.ts                  13 QASA submissions (phase C1; the 13th added in Batch E)
-//   eisaCalendar.ts          3 QP batches, 24 sittings — 7 from the batches, 17 added by the ASD (phases C1, C2)
+//   eisaCalendar.ts          3 QP batches, 24 sittings — 7 from the batches, 17 added by the ASD (phases C1, C2);
+//                            3 postponement/cancellation requests (QCTO feedback 2.4)
 //   instrumentValidation.ts  4 EISA Instrument Validations (phase C1)
 //   eisaRegistration.ts      20 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
 //   eisaConfirmation.ts      12 EISA Confirmations — 1 ready to confirm, 11 confirmed (phase C2)
@@ -18,6 +19,7 @@
 // Registration and the low-competency results batch (it sets that batch's pemVisitId).
 import { KEY as RESULTS_KEY } from '../../../modules/approval-of-results/api';
 import { BATCHES_KEY, SITTINGS_KEY } from '../../../modules/eisa-calendar/api';
+import { CHANGE_REQUESTS_KEY } from '../../../modules/eisa-calendar/changeRequests';
 import { KEY as CONFIRMATION_KEY } from '../../../modules/eisa-confirmation/api';
 import { KEY as REGISTRATION_KEY } from '../../../modules/eisa-registration/api';
 import { VALIDATION_KEY as FISA_VALIDATION_KEY } from '../../../modules/fisa/api';
@@ -54,6 +56,7 @@ export function seedDemoData(): void {
   writeStore(QASA_KEY, qasa);
   writeStore(BATCHES_KEY, calendar.batches);
   writeStore(SITTINGS_KEY, calendar.sittings);
+  writeStore(CHANGE_REQUESTS_KEY, calendar.requests);
   writeStore(INSTRUMENT_VALIDATION_KEY, validations);
   writeStore(REGISTRATION_KEY, registrations);
   writeStore(CONFIRMATION_KEY, confirmations);

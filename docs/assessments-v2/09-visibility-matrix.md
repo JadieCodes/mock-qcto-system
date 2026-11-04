@@ -180,3 +180,17 @@ QCTO: "ASD" and "Assistant Director" are the same role, and the DD allocates wor
 - **Stages taken over by the ASD (same stages, same order, stage ids unchanged):** Learner EISA Registration review (`ad-review`), EISA Confirmation generation, Site Visits planning (`ad-planning`), Approval of Results first review (`ad-review`).
 - **Allocation goes to the Deputy Director:** FISA Instrument Validation (`awaiting-allocation`, `FISA_VALIDATION_ALLOCATOR_ROLE`) and RPL Toolkit (`ad-allocation`, `RPL_ALLOCATOR_ROLE`). The DD only allocates; the FISA outcome still goes straight from the ASD to the SDP (PM-01).
 - **No approval step lost:** in no workflow did an Assistant Director approval feed straight into an ASD approval. Every different-person check compares person ids (`requiresDifferentActor`, `hasActedInRoles`) and is unchanged.
+
+### QCTO feedback 2.4 — EISA Calendar permissions and requests (answered 29 Oct 2026, built 4 Nov 2026)
+
+This replaces the EISA Calendar cells in Table A (QP) and Table B (ASD, Deputy Director, Director, CEO), and the "EISA Calendar stays ASD-only" assumption (Section 5, item 8).
+
+- **QP (external):** proposes dates, edits their own unpublished proposals, corrects and resubmits a rejected batch. Cannot publish, postpone or cancel. Can raise a **postponement or cancellation request** on their own published sittings, and sees the status of their own requests under "My requests" (filtered by `qpId`). Month/List View still show the whole published calendar.
+- **ASD:** reviews, approves, rejects and publishes proposals; adds special sittings; updates or deletes **unpublished** sittings only. No longer postpones or cancels. Sees the Requests list (view only).
+- **Deputy Director:** now **See unit** on the EISA Calendar. Recommends every request (first step) and can raise one on any published sitting.
+- **Director:** now **See unit** on the EISA Calendar. Decides postponement requests; recommends cancellation requests (second step).
+- **CEO:** now **See unit** on the EISA Calendar. Decides cancellation requests (last step).
+- **Granted in one place:** `INTERNAL_MODULE_ROLE_OVERRIDE['eisa-calendar'] = ['ASD', 'Deputy Director', 'Director', 'CEO']` in `src/features/assessments-v2/shared/visibility/config.ts`, read by `isModuleVisible()`.
+- **Different person:** nobody acts twice on the same request — the person who raises or recommends it can never decide it (person ids, `changeRequests.ts` `hasActedOnRequest()`).
+- **Section 2 addition — EISA sitting change request:** owner = the QP or DD who raised it; unit `eisa-calendar`; approvers: postponement DD → Director; cancellation DD → Director → CEO; belongs to the sitting's QP by `qpId`.
+- **SDP:** unchanged (published, postponed and cancelled sittings, view only; notified when a sitting is postponed or cancelled).

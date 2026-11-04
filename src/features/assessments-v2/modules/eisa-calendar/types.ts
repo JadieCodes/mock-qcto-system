@@ -1,4 +1,5 @@
 import type { WorkflowRecordState } from '../../shared/workflow/types';
+import type { Role } from '../../types';
 
 // CR-031: status covers the full lifecycle of one sitting date.
 export type EisaSittingStatus = 'proposed' | 'approved' | 'rejected' | 'published' | 'postponed' | 'cancelled';
@@ -42,6 +43,9 @@ export interface EisaSittingBatch {
   qpName: string;
   year: number;
   requiredCount: number;
+  // QCTO feedback 2.4: an "On demand" qualification has no minimum number of dates. Optional so
+  // batches stored before it was added still load.
+  onDemand?: boolean;
   dates: string[];
   state: WorkflowRecordState; // stageId: 'qcto-review' | 'approved' | 'rejected' | 'published'
   rejectionReason: string | null;
@@ -62,6 +66,11 @@ export interface EligibleQualification {
   // config.ts DEFAULT_SITTINGS_PER_YEAR.
   sittingsPerYear: number;
   sittingsPerYearIsDefault: boolean;
+  // QCTO feedback 2.4: the approved QASA says "On demand" — no minimum number of dates.
+  onDemand: boolean;
+  // QCTO feedback 3.4: pre-filled in the bulk upload template from the QASA, when there is one.
+  nqfLevel: string | null;
+  credits: string | null;
 }
 
 export interface ProposeSittingBatchInput {
@@ -93,6 +102,65 @@ export interface EditSittingInput {
   qpName: string;
   year: number;
   date: string;
+}
+
+// QCTO feedback 2.4: a postponement or cancellation of a published sitting is a request that
+// goes up a recommend/decide chain, never a direct action.
+export type ChangeRequestKind = 'postponement' | 'cancellation';
+
+// UI-only upload, as every upload in v2: the file's details are kept, never its contents.
+export interface FormalLetterFile {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedAt: string;
+}
+
+export interface ChangeRequestRecommendation {
+  role: Role;
+  personId: string;
+  personName: string;
+  comment: string | null;
+  at: string;
+}
+
+export interface EisaSittingChangeRequest {
+  id: string;
+  kind: ChangeRequestKind;
+  sittingId: string;
+  sittingDate: string;
+  qualificationId: string | null;
+  qualificationTitle: string;
+  qpId: string;
+  qpName: string;
+  // Postponement only.
+  proposedNewDate: string | null;
+  reason: string;
+  letter: FormalLetterFile;
+  raisedByRole: Role;
+  raisedBy: string;
+  raisedById: string;
+  raisedAt: string;
+  // stageId: see workflow.ts POSTPONEMENT_REQUEST_WORKFLOW / CANCELLATION_REQUEST_WORKFLOW.
+  state: WorkflowRecordState;
+  recommendations: ChangeRequestRecommendation[];
+  decision: 'approved' | 'declined' | null;
+  decisionComment: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+
+export interface RaiseChangeRequestInput {
+  kind: ChangeRequestKind;
+  sittingId: string;
+  proposedNewDate: string | null;
+  reason: string;
+  letter: FormalLetterFile;
+  actorRole: Role;
+  actorId: string;
+  actorName: string;
+  // Set for a QP, who may only raise a request on their own sitting.
+  actorQpId?: string;
 }
 
 export interface DateCheckResult {

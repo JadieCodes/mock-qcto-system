@@ -32,7 +32,9 @@ export function writeStore<T>(key: string, value: T): void {
 // new stage; QASA assessment components and the Certification hand-off (3.3). 'A7' = the
 // "Assistant Director" role merged into the ASD (3.11): seed records, audit entries and
 // notifications say "ASD", and the DD allocates FISA instruments and RPL Toolkits.
-export const SEED_VERSION = 'A7';
+// 'A8' = Batch F (2.4): EISA Calendar postponement/cancellation requests — one at the DD, one at
+// the Director, one approved (S6's postponement).
+export const SEED_VERSION = 'A8';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

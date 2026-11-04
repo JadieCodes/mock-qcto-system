@@ -5,7 +5,7 @@ import type { ProcessStageTeam } from '../types';
 export const PROCESS_STAGE_TEAMS: { id: ProcessStageTeam; label: string }[] = [
   { id: 'qsa-evaluation', label: 'ASD, DD, IAC, CEO' },
   { id: 'instrument-validation', label: 'ASD' },
-  { id: 'eisa-calendar', label: 'ASD' },
+  { id: 'eisa-calendar', label: 'ASD, DD, Director, CEO' },
   { id: 'registration', label: 'ASD' },
   { id: 'site-visits', label: 'ASD, DD, Domain Director, Sub Domain Admin' },
   { id: 'approval-of-results', label: 'ASD, DD, Director, CD' },

@@ -1,6 +1,12 @@
 import type { WorkflowDefinition } from '../../shared/workflow/types';
-import { CALENDAR_REVIEWER_ROLE } from './config';
-import type { EisaSittingBatch, EisaSittingStatus } from './types';
+import {
+  CALENDAR_REVIEWER_ROLE,
+  CANCELLATION_DECIDER_ROLE,
+  CANCELLATION_SECOND_RECOMMENDER_ROLE,
+  POSTPONEMENT_DECIDER_ROLE,
+  REQUEST_RECOMMENDER_ROLE,
+} from './config';
+import type { ChangeRequestKind, EisaSittingBatch, EisaSittingChangeRequest, EisaSittingStatus } from './types';
 
 // CR-028: QP proposes dates -> QCTO approves or rejects (with reason) -> QCTO publishes to the
 // calendar. Kept as three distinct actions, not one combined "approve & publish" step, so QCTO
@@ -24,10 +30,13 @@ export const BATCH_WORKFLOW: WorkflowDefinition = {
 };
 
 // CR-034: only QCTO can postpone or cancel a published date, and a reason is mandatory.
+// QCTO feedback 2.4: nobody does this directly any more — it is applied when a postponement
+// request (Director decides) or a cancellation request (CEO decides) is approved, by the
+// person who decided it.
 export const SITTING_LIFECYCLE_WORKFLOW: WorkflowDefinition = {
   id: 'eisa-calendar-sitting',
   stages: [
-    { id: 'published', label: 'Published', allowedRoles: [CALENDAR_REVIEWER_ROLE] },
+    { id: 'published', label: 'Published', allowedRoles: [POSTPONEMENT_DECIDER_ROLE, CANCELLATION_DECIDER_ROLE] },
     { id: 'postponed', label: 'Postponed', allowedRoles: [] },
     { id: 'cancelled', label: 'Cancelled', allowedRoles: [] },
   ],
@@ -36,6 +45,60 @@ export const SITTING_LIFECYCLE_WORKFLOW: WorkflowDefinition = {
     { id: 'sitting-cancel', label: 'Cancel', fromStage: 'published', toStage: 'cancelled', kind: 'reject', requiresNote: true },
   ],
 };
+
+// QCTO feedback 2.4: requests raised by the QP (or the DD) on a published sitting. Each step
+// must be a different person from the one before it (requiresDifferentActor); changeRequests.ts
+// also refuses anyone who already acted on the same request at an earlier step.
+export const POSTPONEMENT_REQUEST_WORKFLOW: WorkflowDefinition = {
+  id: 'eisa-calendar-postponement-request',
+  stages: [
+    { id: 'dd-recommendation', label: 'With the DD for recommendation', allowedRoles: [REQUEST_RECOMMENDER_ROLE] },
+    { id: 'director-decision', label: 'With the Director for decision', allowedRoles: [POSTPONEMENT_DECIDER_ROLE] },
+    { id: 'approved', label: 'Approved', allowedRoles: [] },
+    { id: 'declined', label: 'Declined', allowedRoles: [] },
+  ],
+  actions: [
+    { id: 'request-recommend', label: 'Recommend', fromStage: 'dd-recommendation', toStage: 'director-decision', kind: 'advance', requiresDifferentActor: true },
+    { id: 'request-approve', label: 'Approve postponement', fromStage: 'director-decision', toStage: 'approved', kind: 'complete', requiresDifferentActor: true },
+    { id: 'request-decline', label: 'Decline postponement', fromStage: 'director-decision', toStage: 'declined', kind: 'reject', requiresDifferentActor: true, requiresNote: true },
+  ],
+};
+
+export const CANCELLATION_REQUEST_WORKFLOW: WorkflowDefinition = {
+  id: 'eisa-calendar-cancellation-request',
+  stages: [
+    { id: 'dd-recommendation', label: 'With the DD for recommendation', allowedRoles: [REQUEST_RECOMMENDER_ROLE] },
+    { id: 'director-recommendation', label: 'With the Director for recommendation', allowedRoles: [CANCELLATION_SECOND_RECOMMENDER_ROLE] },
+    { id: 'ceo-decision', label: 'With the CEO for decision', allowedRoles: [CANCELLATION_DECIDER_ROLE] },
+    { id: 'approved', label: 'Approved', allowedRoles: [] },
+    { id: 'declined', label: 'Declined', allowedRoles: [] },
+  ],
+  actions: [
+    { id: 'request-recommend', label: 'Recommend', fromStage: 'dd-recommendation', toStage: 'director-recommendation', kind: 'advance', requiresDifferentActor: true },
+    { id: 'request-recommend', label: 'Recommend', fromStage: 'director-recommendation', toStage: 'ceo-decision', kind: 'advance', requiresDifferentActor: true },
+    { id: 'request-approve', label: 'Approve cancellation', fromStage: 'ceo-decision', toStage: 'approved', kind: 'complete', requiresDifferentActor: true },
+    { id: 'request-decline', label: 'Decline cancellation', fromStage: 'ceo-decision', toStage: 'declined', kind: 'reject', requiresDifferentActor: true, requiresNote: true },
+  ],
+};
+
+export type ChangeRequestActionId = 'request-recommend' | 'request-approve' | 'request-decline';
+
+export function changeRequestWorkflow(kind: ChangeRequestKind): WorkflowDefinition {
+  return kind === 'postponement' ? POSTPONEMENT_REQUEST_WORKFLOW : CANCELLATION_REQUEST_WORKFLOW;
+}
+
+export function changeRequestStageLabel(request: EisaSittingChangeRequest): string {
+  return changeRequestWorkflow(request.kind).stages.find((s) => s.id === request.state.stageId)?.label ?? request.state.stageId;
+}
+
+export function isChangeRequestOpen(request: EisaSittingChangeRequest): boolean {
+  return request.state.stageId !== 'approved' && request.state.stageId !== 'declined';
+}
+
+// The stage where the request is decided (Approve / Decline) rather than recommended.
+export function isDecisionStage(request: EisaSittingChangeRequest): boolean {
+  return request.state.stageId === 'director-decision' || request.state.stageId === 'ceo-decision';
+}
 
 // Lets the shared EisaSittingStatus badge double up as the batch's status display — every
 // BATCH_WORKFLOW stage id matches a status value except "qcto-review", which reads as "proposed".

@@ -17,9 +17,10 @@
 //  S3  Plumbing           today - 30   Published (past)
 //  S4  Electrical Trades  today + 35   Published — registration closed
 //  S5  Welding            today + 55   Published — registration closed
-//  S6  Plumbing           today + 65   Postponed (reason, proposed new date, audit entry, notifications)
-//  S7  Electrical Trades  today + 80   Cancelled (reason, audit entry, notifications)
-//  S8  Welding            today + 125  Published — registration open
+//  S6  Plumbing           today + 65   Postponed through request R1 (approved by the Director)
+//  S7  Electrical Trades  today + 80   Cancelled (reason, audit entry, notifications — recorded before
+//                                      QCTO feedback 2.4, so it has no request)
+//  S8  Welding            today + 125  Published — registration open; request R2 open at the DD
 // Added in phase C2, so Confirmation and Approval of Results have enough past sittings (one
 // results batch per sitting) and Lerato Training Institute has an open Plumbing sitting:
 //  S9  Electrical Trades  today - 60   Published (past)
@@ -30,16 +31,33 @@
 //  S14 Welding            today - 150  Published (past)
 //  S15 Electrical Trades  today - 170  Published (past)
 //  S16 Plumbing           today - 50   Published (past)
-//  S17 Plumbing           today + 150  Published — registration open
+//  S17 Plumbing           today + 150  Published — registration open; request R3 open at the Director
 // B1's three dates are published with registration open.
+//
+// Postponement and cancellation requests (QCTO feedback 2.4, changeRequests.ts), each with a
+// formal letter:
+//  R1  S6   Postponement  Johan van der Merwe   DD recommended, Director approved (decided)
+//  R2  S8   Postponement  Precious Mahlangu     waiting for the DD's recommendation
+//  R3  S17  Cancellation  Johan van der Merwe   DD recommended, waiting for the Director's recommendation
 //
 // Batch sittings-per-year counts come from the approved QASA (qasa.ts: Electrical Trades 3,
 // Plumbing 2, Welding 2), the same rule as eisa-calendar/api.ts listEligibleQualifications().
 import { findQualification } from '../../api/accreditation';
-import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR } from '../../../modules/eisa-calendar/config';
+import { CHANGE_REQUEST_RECORD_TYPE } from '../../../modules/eisa-calendar/changeRequests';
+import {
+  CALENDAR_REVIEWER_ROLE,
+  DEFAULT_SITTINGS_PER_YEAR,
+  POSTPONEMENT_DECIDER_ROLE,
+  REQUEST_RECOMMENDER_ROLE,
+} from '../../../modules/eisa-calendar/config';
 import { checkSittingDate } from '../../../modules/eisa-calendar/dateChecks';
-import { BATCH_WORKFLOW, SITTING_LIFECYCLE_WORKFLOW } from '../../../modules/eisa-calendar/workflow';
-import type { EisaSitting, EisaSittingBatch } from '../../../modules/eisa-calendar/types';
+import {
+  BATCH_WORKFLOW,
+  CANCELLATION_REQUEST_WORKFLOW,
+  POSTPONEMENT_REQUEST_WORKFLOW,
+  SITTING_LIFECYCLE_WORKFLOW,
+} from '../../../modules/eisa-calendar/workflow';
+import type { ChangeRequestKind, EisaSitting, EisaSittingBatch, EisaSittingChangeRequest } from '../../../modules/eisa-calendar/types';
 import { isApprovalLetterFinal } from '../../../modules/qsa-addendum/workflow';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import {
@@ -58,9 +76,13 @@ import {
 
 const BATCH_ID_GROUP = 3;
 const SITTING_ID_GROUP = 4;
+const REQUEST_ID_GROUP = 12;
 
 const SIPHO = 'sipho-ndlovu';
 const THANDEKA = 'thandeka-zulu';
+const GRACE = 'grace-mokoena';
+const PETER = 'peter-botha';
+const ZANELE = 'zanele-mthembu';
 
 interface CalendarQualification {
   qualificationId: string;
@@ -121,6 +143,7 @@ function batchDates(year: number, count: number, shift: number): string[] {
 export interface CalendarSeed {
   batches: EisaSittingBatch[];
   sittings: EisaSitting[];
+  requests: EisaSittingChangeRequest[];
 }
 
 export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): CalendarSeed {
@@ -228,69 +251,162 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
     return { sitting, clock, asd };
   }
 
-  // performSittingLifecycleAction(): workflow audit entry, then SDP and QP notifications.
-  function lifecycle(
-    entry: ReturnType<typeof addDirect>,
-    actionId: 'sitting-postpone' | 'sitting-cancel',
-    daysAgo: number,
-    reason: string,
-    proposedNewDate: string | null,
-  ): EisaSitting {
-    const { sitting, clock, asd } = entry;
+  const requests: EisaSittingChangeRequest[] = [];
+
+  // changeRequests.ts raiseChangeRequest(): audit entry, then DD and QP notifications.
+  function raiseRequest(n: number, kind: ChangeRequestKind, sitting: EisaSitting, daysAgo: number, reason: string, proposedNewDate: string | null) {
+    const clock = createClock();
+    const qp = seedPerson(sitting.qpId);
+    const raisedAt = clock.at(daysAgo, 10);
+    const request: EisaSittingChangeRequest = {
+      id: seedId(REQUEST_ID_GROUP, n),
+      kind,
+      sittingId: sitting.id,
+      sittingDate: sitting.date,
+      qualificationId: sitting.qualificationId ?? null,
+      qualificationTitle: sitting.qualificationTitle,
+      qpId: sitting.qpId,
+      qpName: sitting.qpName,
+      proposedNewDate,
+      reason,
+      letter: {
+        fileName: `${kind === 'postponement' ? 'Postponement' : 'Cancellation'} request - ${sitting.qualificationTitle}.pdf`,
+        fileSize: 180000 + n * 7300,
+        fileType: 'application/pdf',
+        uploadedAt: raisedAt,
+      },
+      raisedByRole: 'QP',
+      raisedBy: qp.name,
+      raisedById: qp.id,
+      raisedAt,
+      state: { stageId: 'dd-recommendation', submittedBy: qp.name, submittedById: qp.id },
+      recommendations: [],
+      decision: null,
+      decisionComment: null,
+      decidedBy: null,
+      decidedAt: null,
+    };
+    const dateNote = proposedNewDate ? ` Proposed new date: ${proposedNewDate}.` : '';
+    audit(log, {
+      recordType: CHANGE_REQUEST_RECORD_TYPE,
+      recordId: request.id,
+      actor: qp,
+      action: `Raised a ${kind} request (${sitting.qualificationTitle}, ${sitting.date})`,
+      note: `${reason}${dateNote} Formal letter: ${request.letter.fileName}`,
+      timestamp: raisedAt,
+    });
+    notify(log, raisedAt, {
+      recipientRole: REQUEST_RECOMMENDER_ROLE,
+      title: `EISA sitting ${kind} request`,
+      body: `A ${kind} request for "${sitting.qualificationTitle}" on ${sitting.date} is waiting for your recommendation.`,
+    });
+    notify(log, raisedAt, {
+      recipientRole: 'QP',
+      title: `EISA sitting ${kind} request raised`,
+      body: `Your ${kind} request for "${sitting.qualificationTitle}" on ${sitting.date} has been received and is with the DD.`,
+    });
+    return { request, clock };
+  }
+
+  // changeRequests.ts performChangeRequestAction('request-recommend').
+  function recommend(entry: ReturnType<typeof raiseRequest>, actorId: string, daysAgo: number, comment: string) {
+    const { request, clock } = entry;
+    const actor = seedPerson(actorId);
+    const at = clock.at(daysAgo, 11);
+    const definition = request.kind === 'postponement' ? POSTPONEMENT_REQUEST_WORKFLOW : CANCELLATION_REQUEST_WORKFLOW;
+    const next = step(log, { definition, state: request.state, actionId: 'request-recommend', actor, at, recordType: CHANGE_REQUEST_RECORD_TYPE, recordId: request.id, note: comment });
+    const nextStage = definition.stages.find((s) => s.id === next.stageId);
+    const subject = `"${request.qualificationTitle}" on ${request.sittingDate}`;
+    if (nextStage?.allowedRoles[0]) {
+      notify(log, at, {
+        recipientRole: nextStage.allowedRoles[0],
+        title: `EISA sitting ${request.kind} request`,
+        body: `A ${request.kind} request for ${subject} was recommended by the DD and is waiting for you.`,
+      });
+    }
+    notify(log, at, {
+      recipientRole: 'QP',
+      title: `EISA sitting ${request.kind} request recommended`,
+      body: `The ${request.kind} request for ${subject} was recommended. It is now ${nextStage?.label.toLowerCase() ?? 'with the next official'}.`,
+    });
+    const recommended: EisaSittingChangeRequest = {
+      ...request,
+      state: next,
+      recommendations: [...request.recommendations, { role: actor.role, personId: actor.id, personName: actor.name, comment, at }],
+    };
+    return { request: recommended, clock };
+  }
+
+  // The Director approves a postponement: the request is decided, then the sitting is postponed
+  // by the same person (api.ts applyApprovedSittingChange) with the usual SDP and QP notices.
+  function approvePostponement(entry: ReturnType<typeof raiseRequest>, sitting: EisaSitting, actorId: string, daysAgo: number) {
+    const { request, clock } = entry;
+    const actor = seedPerson(actorId);
+    if (actor.role !== POSTPONEMENT_DECIDER_ROLE) throw new Error('Demo seed: a postponement is decided by the Director.');
     const at = clock.at(daysAgo, 14);
+    const decided = step(log, { definition: POSTPONEMENT_REQUEST_WORKFLOW, state: request.state, actionId: 'request-approve', actor, at, recordType: CHANGE_REQUEST_RECORD_TYPE, recordId: request.id });
+    const newDate = request.proposedNewDate;
     const next = step(log, {
       definition: SITTING_LIFECYCLE_WORKFLOW,
       state: { stageId: sitting.status },
-      actionId,
-      actor: asd,
+      actionId: 'sitting-postpone',
+      actor,
       at,
       recordType: 'eisa-calendar-sitting',
       recordId: sitting.id,
-      note: proposedNewDate ? `${reason} (Proposed new date: ${proposedNewDate})` : reason,
+      note: `${request.reason} (Proposed new date: ${newDate})`,
     });
-    const verb = actionId === 'sitting-postpone' ? 'postponed' : 'cancelled';
-    const dateNote = proposedNewDate ? ` A new date of ${proposedNewDate} has been proposed.` : '';
-    notify(log, at, {
-      recipientRole: 'SDP',
-      title: `EISA sitting ${verb}`,
-      body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${reason}${dateNote}`,
-    });
+    // Registrations are seeded after the calendar, and none is made against a postponed sitting.
+    const notice = `has been postponed: ${request.reason} The new date is ${newDate}. No learners are registered for this sitting yet.`;
+    notify(log, at, { recipientRole: 'SDP', title: 'EISA sitting postponed', body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} ${notice}` });
+    notify(log, at, { recipientRole: 'QP', title: 'EISA sitting postponed', body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} ${notice}` });
     notify(log, at, {
       recipientRole: 'QP',
-      title: `EISA sitting ${verb}`,
-      body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${reason}${dateNote}`,
+      title: 'EISA sitting postponement request approved',
+      body: `The postponement request for "${sitting.qualificationTitle}" on ${sitting.date} was approved.`,
     });
     return {
-      ...sitting,
-      status: next.stageId as EisaSitting['status'],
-      postponementReason: actionId === 'sitting-postpone' ? reason : null,
-      proposedNewDate,
-      cancellationReason: actionId === 'sitting-cancel' ? reason : null,
+      request: { ...request, state: decided, decision: 'approved' as const, decisionComment: null, decidedBy: actor.name, decidedAt: at },
+      sitting: { ...sitting, status: next.stageId as EisaSitting['status'], postponementReason: request.reason, proposedNewDate: newDate },
     };
   }
 
-  sittings.push(
+  // S7 was cancelled by the ASD before QCTO feedback 2.4 moved cancellations to the request
+  // flow — the record and its audit entry are kept as they were.
+  function directCancel(entry: ReturnType<typeof addDirect>, daysAgo: number, reason: string): EisaSitting {
+    const { sitting, clock, asd } = entry;
+    const at = clock.at(daysAgo, 14);
+    audit(log, { recordType: 'eisa-calendar-sitting', recordId: sitting.id, actor: asd, action: 'Cancel', note: reason, timestamp: at });
+    notify(log, at, {
+      recipientRole: 'SDP',
+      title: 'EISA sitting cancelled',
+      body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been cancelled: ${reason}`,
+    });
+    notify(log, at, {
+      recipientRole: 'QP',
+      title: 'EISA sitting cancelled',
+      body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been cancelled: ${reason}`,
+    });
+    return { ...sitting, status: 'cancelled', cancellationReason: reason };
+  }
+
+  // Same call order as before 2.4, so every sitting keeps its seed id.
+  const s1to5 = [
     addDirect(electrical, -15, SIPHO, 200).sitting,
     addDirect(welding, -45, THANDEKA, 210).sitting,
     addDirect(plumbing, -30, SIPHO, 205).sitting,
     addDirect(electrical, 35, SIPHO, 190).sitting,
     addDirect(welding, 55, THANDEKA, 185).sitting,
-    lifecycle(
-      addDirect(plumbing, 65, SIPHO, 180),
-      'sitting-postpone',
-      6,
-      'The assessment centre is closed for maintenance that week. The QP has agreed to move the sitting.',
-      workingDateFromToday(110),
-    ),
-    lifecycle(
-      addDirect(electrical, 80, SIPHO, 175),
-      'sitting-cancel',
-      3,
-      'Too few learners are expected for this sitting. The QP asked to combine it with the next published sitting.',
-      null,
-    ),
-    addDirect(welding, 125, THANDEKA, 30).sitting,
-    // Phase C2 — each added about 200 days before it was held, like S1–S3.
+  ];
+  const s6 = addDirect(plumbing, 65, SIPHO, 180).sitting;
+  const s7 = directCancel(
+    addDirect(electrical, 80, SIPHO, 175),
+    3,
+    'Too few learners are expected for this sitting. The QP asked to combine it with the next published sitting.',
+  );
+  const s8 = addDirect(welding, 125, THANDEKA, 30).sitting;
+  // Phase C2 — each added about 200 days before it was held, like S1–S3.
+  const s9to16 = [
     addDirect(electrical, -60, SIPHO, 260).sitting,
     addDirect(plumbing, -75, SIPHO, 275).sitting,
     addDirect(welding, -90, THANDEKA, 290).sitting,
@@ -299,16 +415,69 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
     addDirect(welding, -150, THANDEKA, 350).sitting,
     addDirect(electrical, -170, SIPHO, 370).sitting,
     addDirect(plumbing, -50, SIPHO, 250).sitting,
-    addDirect(plumbing, 150, SIPHO, 25).sitting,
+  ];
+  const s17 = addDirect(plumbing, 150, SIPHO, 25).sitting;
+
+  // R1 — decided: DD recommended, Director approved, S6 postponed.
+  const r1 = approvePostponement(
+    recommend(
+      raiseRequest(
+        1,
+        'postponement',
+        s6,
+        14,
+        'The assessment centre is closed for maintenance that week. The QP has agreed to move the sitting.',
+        workingDateFromToday(110),
+      ),
+      GRACE,
+      10,
+      'Supported. The centre confirmed the maintenance dates in writing.',
+    ),
+    s6,
+    ZANELE,
+    6,
   );
+  // R2 — waiting for the DD.
+  const r2 = raiseRequest(
+    2,
+    'postponement',
+    s8,
+    2,
+    'Two of the three assessors for this sitting are booked for a national moderation panel on that date.',
+    workingDateFromToday(160),
+  );
+  // R3 — DD recommended; waiting for the Director's recommendation (the CEO decides after that).
+  const r3 = recommend(
+    raiseRequest(
+      3,
+      'cancellation',
+      s17,
+      5,
+      'The assessment venue for this date is no longer available, and no other accredited venue in the region can host the sitting.',
+      null,
+    ),
+    PETER,
+    3,
+    'Supported. The venue confirmed the withdrawal in writing; the learners can register for the next sitting.',
+  );
+  requests.push(r1.request, r2.request, r3.request);
+
+  sittings.push(...s1to5, r1.sitting, s7, s8, ...s9to16, s17);
 
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,
   // and every future one has a date after today.
   const today = todayIso();
   if (sittings.some((s) => s.batchId && s.date <= today)) throw new Error('Demo seed: a batch date is not in the future.');
+  // QCTO feedback 2.4: every postponement request's new date passes the checks a real one does.
+  for (const r of requests) {
+    if (!r.proposedNewDate) continue;
+    const check = checkSittingDate(r.proposedNewDate);
+    if (!check.ok || r.proposedNewDate <= r.sittingDate) throw new Error(`Demo seed: request new date ${r.proposedNewDate} — ${check.reasons.join(' ')}`);
+  }
 
   return {
     batches: batches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
     sittings: sittings.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    requests: requests.sort((a, b) => b.raisedAt.localeCompare(a.raisedAt)),
   };
 }

@@ -3,7 +3,7 @@ import { addNotification } from '../../shared/notifications/store';
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { performAction } from '../../shared/workflow/engine';
 import { listQualificationsWithAccreditedSdps } from '../../mock/api/accreditation';
-import { listApprovedQsaAddenda } from '../qsa-addendum/api';
+import { listApplications, listApprovedQsaAddenda } from '../qsa-addendum/api';
 import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listRegisteredSittingIds } from '../eisa-registration/api';
 import type { Role } from '../../types';
 import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR } from './config';
@@ -39,24 +39,87 @@ function saveSittings(sittings: EisaSitting[]): void {
 // QASA (evaluationReport.approvedEisaSittingsPerYear) when one exists for that QP and
 // qualification; otherwise DEFAULT_SITTINGS_PER_YEAR.
 export async function listEligibleQualifications(): Promise<EligibleQualification[]> {
-  const [qualifications, approved] = await Promise.all([listQualificationsWithAccreditedSdps(), listApprovedQsaAddenda()]);
+  const [qualifications, approved, allQasa] = await Promise.all([
+    listQualificationsWithAccreditedSdps(),
+    listApprovedQsaAddenda(),
+    listApplications(),
+  ]);
   return qualifications.map((q) => {
+    const anyQasa = allQasa.find((a) => a.qpId === q.qpId && a.qualificationTitle.trim().toLowerCase() === q.qualificationName.toLowerCase());
     const qasa = approved.find(
       (a) =>
         a.qpId === q.qpId &&
         a.qualificationTitle.trim().toLowerCase() === q.qualificationName.toLowerCase() &&
-        a.evaluationReport.approvedEisaSittingsPerYear != null,
+        (a.evaluationReport.approvedEisaSittingsPerYear != null || a.evaluationReport.eisaSittingsOnDemand === true),
     );
+    const onDemand = qasa?.evaluationReport.eisaSittingsOnDemand === true;
     const fromQasa = qasa?.evaluationReport.approvedEisaSittingsPerYear ?? null;
     return {
       qualificationId: q.qualificationId,
       qualificationTitle: q.qualificationName,
       qpId: q.qpId,
       qpName: q.qpName,
-      sittingsPerYear: fromQasa ?? DEFAULT_SITTINGS_PER_YEAR,
-      sittingsPerYearIsDefault: fromQasa == null,
+      sittingsPerYear: onDemand ? 0 : (fromQasa ?? DEFAULT_SITTINGS_PER_YEAR),
+      sittingsPerYearIsDefault: !onDemand && fromQasa == null,
+      onDemand,
+      nqfLevel: (qasa ?? anyQasa)?.nqfLevel || null,
+      credits: (qasa ?? anyQasa)?.credits || null,
     };
   });
+}
+
+// QCTO feedback 2.4: the required sittings per year are a minimum on the propose form (extra
+// rows are special sittings); an "On demand" qualification only needs one date.
+export function minimumDateCount(requiredCount: number, onDemand: boolean | undefined): number {
+  return onDemand ? 1 : Math.max(requiredCount, 1);
+}
+
+export function requiredCountText(requiredCount: number, onDemand: boolean | undefined): string {
+  return onDemand ? 'On demand' : String(requiredCount);
+}
+
+// CR-030/CR-032: the checks every set of proposed dates must pass before it reaches QCTO.
+function assertValidBatchDates(dates: string[], year: number, title: string, requiredCount: number, onDemand: boolean | undefined): void {
+  const minimum = minimumDateCount(requiredCount, onDemand);
+  if (dates.length < minimum) {
+    throw new Error(
+      onDemand
+        ? `"${title}" needs at least one date.`
+        : `"${title}" requires ${requiredCount} sitting(s) per year — you submitted ${dates.length}.`,
+    );
+  }
+  if (new Set(dates).size !== dates.length) {
+    throw new Error('Duplicate dates are not allowed in the same submission.');
+  }
+  for (const date of dates) {
+    if (Number(date.slice(0, 4)) !== year) {
+      throw new Error(`${date} is not in ${year}.`);
+    }
+    const check = checkSittingDate(date);
+    if (!check.ok) {
+      throw new Error(`${date}: ${check.reasons.join(' ')}`);
+    }
+  }
+}
+
+function proposedSittingRows(batch: EisaSittingBatch, createdBy: string): EisaSitting[] {
+  return batch.dates.map((date) => ({
+    id: crypto.randomUUID(),
+    batchId: batch.id,
+    qualificationId: batch.qualificationId ?? null,
+    qualificationTitle: batch.qualificationTitle,
+    qpId: batch.qpId,
+    qpName: batch.qpName,
+    year: batch.year,
+    date,
+    status: 'proposed',
+    rejectionReason: null,
+    postponementReason: null,
+    proposedNewDate: null,
+    cancellationReason: null,
+    createdBy,
+    createdAt: new Date().toISOString(),
+  }));
 }
 
 export async function listBatches(): Promise<EisaSittingBatch[]> {
@@ -80,27 +143,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     throw new Error('This qualification has no accredited SDPs under this QP.');
   }
 
-  // CR-030: block if the submitted count does not match the required frequency exactly.
-  if (input.dates.length !== match.sittingsPerYear) {
-    throw new Error(
-      `"${input.qualificationTitle}" requires ${match.sittingsPerYear} sitting(s) per year — you submitted ${input.dates.length}.`,
-    );
-  }
-
-  if (new Set(input.dates).size !== input.dates.length) {
-    throw new Error('Duplicate dates are not allowed in the same submission.');
-  }
-
-  // CR-032: automatic rejection of weekends, public holidays and dates inside the lead time.
-  for (const date of input.dates) {
-    if (Number(date.slice(0, 4)) !== input.year) {
-      throw new Error(`${date} is not in ${input.year}.`);
-    }
-    const check = checkSittingDate(date);
-    if (!check.ok) {
-      throw new Error(`${date}: ${check.reasons.join(' ')}`);
-    }
-  }
+  assertValidBatchDates(input.dates, input.year, input.qualificationTitle, match.sittingsPerYear, match.onDemand);
 
   const batch: EisaSittingBatch = {
     id: crypto.randomUUID(),
@@ -110,6 +153,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     qpName: input.qpName,
     year: input.year,
     requiredCount: match.sittingsPerYear,
+    onDemand: match.onDemand,
     dates: [...input.dates].sort(),
     state: { stageId: 'qcto-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     rejectionReason: null,
@@ -118,27 +162,28 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     submittedAt: new Date().toISOString(),
   };
 
-  const sittings: EisaSitting[] = batch.dates.map((date) => ({
-    id: crypto.randomUUID(),
-    batchId: batch.id,
-    qualificationId: match.qualificationId,
-    qualificationTitle: input.qualificationTitle,
-    qpId: input.qpId,
-    qpName: input.qpName,
-    year: input.year,
-    date,
-    status: 'proposed',
-    rejectionReason: null,
-    postponementReason: null,
-    proposedNewDate: null,
-    cancellationReason: null,
-    createdBy: input.submittedBy,
-    createdAt: new Date().toISOString(),
-  }));
-
   saveBatches([batch, ...loadBatches()]);
-  saveSittings([...sittings, ...loadSittings()]);
+  saveSittings([...proposedSittingRows(batch, input.submittedBy), ...loadSittings()]);
   return batch;
+}
+
+// QCTO feedback 3.4: a bulk upload becomes one normal proposal batch per qualification and year.
+// Every batch is checked before any is written, so a bad file never leaves half its dates
+// behind. Unlike the single-date form, the count must match the sittings per year exactly.
+export async function proposeBulkSittingBatches(inputs: ProposeSittingBatchInput[]): Promise<EisaSittingBatch[]> {
+  if (inputs.length === 0) throw new Error('The file has no dates to submit.');
+  const eligible = await listEligibleQualifications();
+  for (const input of inputs) {
+    const match = eligible.find((q) => q.qualificationId === input.qualificationId && q.qpId === input.qpId);
+    if (!match) throw new Error(`Qualification ${input.qualificationId} has no accredited SDPs under this QP.`);
+    if (!match.onDemand && input.dates.length !== match.sittingsPerYear) {
+      throw new Error(`"${match.qualificationTitle}" (${input.year}) requires ${match.sittingsPerYear} date(s) — the file has ${input.dates.length}.`);
+    }
+    assertValidBatchDates(input.dates, input.year, match.qualificationTitle, match.sittingsPerYear, match.onDemand);
+  }
+  const created: EisaSittingBatch[] = [];
+  for (const input of inputs) created.push(await proposeSittingBatch(input));
+  return created;
 }
 
 interface BatchActionParams {
@@ -231,21 +276,7 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
   const batch = batches.find((b) => b.id === params.batchId);
   if (!batch) throw new Error('EISA sitting batch not found.');
 
-  if (params.dates.length !== batch.requiredCount) {
-    throw new Error(`"${batch.qualificationTitle}" requires ${batch.requiredCount} sitting(s) per year — you submitted ${params.dates.length}.`);
-  }
-  if (new Set(params.dates).size !== params.dates.length) {
-    throw new Error('Duplicate dates are not allowed in the same submission.');
-  }
-  for (const date of params.dates) {
-    if (Number(date.slice(0, 4)) !== batch.year) {
-      throw new Error(`${date} is not in ${batch.year}.`);
-    }
-    const check = checkSittingDate(date);
-    if (!check.ok) {
-      throw new Error(`${date}: ${check.reasons.join(' ')}`);
-    }
-  }
+  assertValidBatchDates(params.dates, batch.year, batch.qualificationTitle, batch.requiredCount, batch.onDemand);
 
   const nextState = performAction({
     definition: BATCH_WORKFLOW,
@@ -264,29 +295,67 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
   // Fresh sitting rows for the corrected dates — same shape as a brand-new proposal. The
   // batch's own rejectionHistory (not touched here) is what keeps the earlier reason visible.
   const otherSittings = loadSittings().filter((s) => s.batchId !== batch.id);
-  const newSittings: EisaSitting[] = updatedBatch.dates.map((date) => ({
-    id: crypto.randomUUID(),
-    batchId: batch.id,
-    qualificationId: batch.qualificationId ?? null,
-    qualificationTitle: batch.qualificationTitle,
-    qpId: batch.qpId,
-    qpName: batch.qpName,
-    year: batch.year,
-    date,
-    status: 'proposed',
-    rejectionReason: null,
-    postponementReason: null,
-    proposedNewDate: null,
-    cancellationReason: null,
-    createdBy: params.actorName,
-    createdAt: new Date().toISOString(),
-  }));
-  saveSittings([...newSittings, ...otherSittings]);
+  saveSittings([...proposedSittingRows(updatedBatch, params.actorName), ...otherSittings]);
 
   addNotification({
     recipientRole: CALENDAR_REVIEWER_ROLE,
     title: 'EISA sitting dates resubmitted',
     body: `"${batch.qualificationTitle}" (${batch.year}) dates were corrected and resubmitted for review.`,
+  });
+
+  return updatedBatch;
+}
+
+// QCTO feedback 2.4: the QP may edit their own proposal until it is published. Editing an
+// approved batch sends it back for review, since the ASD approved different dates. Not a
+// BATCH_WORKFLOW action: those stages belong to the ASD, so the edit is audited here directly.
+export const QP_EDITABLE_BATCH_STAGES = ['qcto-review', 'approved'];
+
+interface EditBatchParams {
+  batchId: string;
+  dates: string[];
+  actorRole: Role;
+  actorId: string;
+  actorName: string;
+  actorQpId: string | undefined;
+}
+
+export async function editBatchDates(params: EditBatchParams): Promise<EisaSittingBatch> {
+  const batches = loadBatches();
+  const batch = batches.find((b) => b.id === params.batchId);
+  if (!batch) throw new Error('EISA sitting batch not found.');
+  if (params.actorRole !== 'QP' || params.actorQpId !== batch.qpId) {
+    throw new Error('Only the QP who proposed these dates can edit them.');
+  }
+  if (!QP_EDITABLE_BATCH_STAGES.includes(batch.state.stageId)) {
+    throw new Error('These dates can no longer be edited.');
+  }
+
+  assertValidBatchDates(params.dates, batch.year, batch.qualificationTitle, batch.requiredCount, batch.onDemand);
+
+  const wasApproved = batch.state.stageId === 'approved';
+  const updatedBatch: EisaSittingBatch = {
+    ...batch,
+    dates: [...params.dates].sort(),
+    state: { stageId: 'qcto-review', submittedBy: params.actorName, submittedById: params.actorId },
+  };
+  saveBatches(batches.map((b) => (b.id === batch.id ? updatedBatch : b)));
+  const otherSittings = loadSittings().filter((s) => s.batchId !== batch.id);
+  saveSittings([...proposedSittingRows(updatedBatch, params.actorName), ...otherSittings]);
+
+  appendAuditEntry({
+    recordType: 'eisa-calendar-batch',
+    recordId: batch.id,
+    actorRole: params.actorRole,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    action: wasApproved ? 'Edited the approved dates — back for review' : 'Edited the proposed dates',
+    note: `${batch.dates.join(', ')} → ${updatedBatch.dates.join(', ')}`,
+  });
+  addNotification({
+    recipientRole: CALENDAR_REVIEWER_ROLE,
+    title: 'EISA sitting dates edited',
+    body: `The QP edited the proposed dates for "${batch.qualificationTitle}" (${batch.year}). Please review them again.`,
   });
 
   return updatedBatch;
@@ -330,10 +399,21 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
   return sitting;
 }
 
+// QCTO feedback 2.4: the ASD edits (or deletes) only unpublished sittings. A published sitting
+// changes only through an approved postponement or cancellation request (changeRequests.ts).
+export const UNPUBLISHED_SITTING_STATUSES: EisaSitting['status'][] = ['proposed', 'approved', 'rejected'];
+
+function assertUnpublished(sitting: EisaSitting, verb: string): void {
+  if (!UNPUBLISHED_SITTING_STATUSES.includes(sitting.status)) {
+    throw new Error(`A ${sitting.status} sitting cannot be ${verb}. Raise a postponement or cancellation request instead.`);
+  }
+}
+
 export async function editSitting(id: string, patch: EditSittingInput, actorId: string, actorName: string): Promise<EisaSitting> {
   const sittings = loadSittings();
   const existing = sittings.find((s) => s.id === id);
   if (!existing) throw new Error('Sitting not found.');
+  assertUnpublished(existing, 'updated');
 
   const updated: EisaSitting = { ...existing, ...patch };
   saveSittings(sittings.map((s) => (s.id === id ? updated : s)));
@@ -365,12 +445,11 @@ export async function deleteSitting(id: string, actorId: string, actorName: stri
   const sittings = loadSittings();
   const existing = sittings.find((s) => s.id === id);
   if (!existing) throw new Error('Sitting not found.');
+  assertUnpublished(existing, 'deleted');
 
   const registrations = await listRegistrationsForSitting(id);
   if (registrations.length > 0) {
-    throw new Error(
-      `This sitting already has ${registrations.length} registration(s) against it and cannot be deleted. Postpone or cancel it instead.`,
-    );
+    throw new Error(`This sitting already has ${registrations.length} registration(s) against it and cannot be deleted.`);
   }
 
   saveSittings(sittings.filter((s) => s.id !== id));
@@ -391,20 +470,23 @@ interface SittingLifecycleParams {
   actorId: string;
   actorName: string;
   reason: string;
-  // Row 22/23 (D-11): optional, postpone-only — no negotiation, just a proposed replacement
-  // date carried in the SDP/QP notification and the audit trail note.
+  // Row 22/23 (D-11): postpone-only — the new date carried in the SDP/QP notification and the
+  // audit trail note.
   proposedNewDate?: string | null;
 }
 
-// CR-034: cancellation/postponement — QCTO-initiated only, reason required, notifies the
-// affected SDPs (and the QP), full audit trail via the shared workflow engine.
-export async function performSittingLifecycleAction(params: SittingLifecycleParams): Promise<EisaSitting> {
+// CR-034: cancellation/postponement — reason required, notifies the affected SDPs (and the
+// QP), full audit trail via the shared workflow engine. QCTO feedback 2.4: only called by
+// changeRequests.ts when a request is approved; no screen calls it directly. A postponement
+// notice lists the learners already registered — they stay on the original sitting.
+export async function applyApprovedSittingChange(params: SittingLifecycleParams): Promise<EisaSitting> {
   const sittings = loadSittings();
   const sitting = sittings.find((s) => s.id === params.sittingId);
   if (!sitting) throw new Error('Sitting not found.');
 
   const proposedNewDate = params.actionId === 'sitting-postpone' ? (params.proposedNewDate ?? null) : null;
   const auditNote = proposedNewDate ? `${params.reason} (Proposed new date: ${proposedNewDate})` : params.reason;
+  const learnerNote = params.actionId === 'sitting-postpone' ? registeredLearnersNote(await registeredLearnerNames(sitting.id)) : '';
 
   const nextState = performAction({
     definition: SITTING_LIFECYCLE_WORKFLOW,
@@ -428,17 +510,27 @@ export async function performSittingLifecycleAction(params: SittingLifecyclePara
   saveSittings(sittings.map((s) => (s.id === sitting.id ? updated : s)));
 
   const verb = params.actionId === 'sitting-postpone' ? 'postponed' : 'cancelled';
-  const dateNote = proposedNewDate ? ` A new date of ${proposedNewDate} has been proposed.` : '';
+  const dateNote = proposedNewDate ? ` The new date is ${proposedNewDate}.` : '';
   addNotification({
     recipientRole: 'SDP',
     title: `EISA sitting ${verb}`,
-    body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}${dateNote}`,
+    body: `The EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}${dateNote}${learnerNote}`,
   });
   addNotification({
     recipientRole: 'QP',
     title: `EISA sitting ${verb}`,
-    body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}${dateNote}`,
+    body: `Your EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date} has been ${verb}: ${params.reason}${dateNote}${learnerNote}`,
   });
 
   return updated;
+}
+
+export async function registeredLearnerNames(sittingId: string): Promise<string[]> {
+  const registrations = await listRegistrationsForSitting(sittingId);
+  return registrations.flatMap((r) => r.learners.map((l) => `${l.fullName} (${r.sdpName})`));
+}
+
+export function registeredLearnersNote(names: string[]): string {
+  if (names.length === 0) return ' No learners are registered for this sitting yet.';
+  return ` Learners already registered (they stay registered for this sitting and are not moved): ${names.join('; ')}.`;
 }

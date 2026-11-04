@@ -42,4 +42,6 @@ export const INTERNAL_MODULE_ROLE_OVERRIDE: Partial<Record<string, Role[]>> = {
   // QCTO feedback 3.8: the FISA Standards status list is for the Qualifications Development
   // domain only. Every role's access to the FISA module itself is unchanged.
   'fisa-status': ['Qualifications Development'],
+  // QCTO feedback 2.4: the DD, Director and CEO act on postponement and cancellation requests.
+  'eisa-calendar': ['ASD', 'Deputy Director', 'Director', 'CEO'],
 };

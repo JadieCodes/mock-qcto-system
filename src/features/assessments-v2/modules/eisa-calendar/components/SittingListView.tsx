@@ -3,28 +3,37 @@ import { Button } from '@/components/ui/button';
 import { calcRegistrationClosingDate } from '../registrationClosing';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import { EisaSittingStatusBadge } from './StatusBadge';
+import { UNPUBLISHED_SITTING_STATUSES } from '../api';
 import type { EisaSitting } from '../types';
 
-// CR-033: list view of the visual calendar. Management actions (CR-027, CR-034) are only
-// wired up for the internal portal — external views pass no handlers and get a read-only list.
+const isUnpublished = (s: EisaSitting) => UNPUBLISHED_SITTING_STATUSES.includes(s.status);
+
+// CR-033: list view of the visual calendar. Management actions (CR-027) are only wired up for
+// the internal portal. QCTO feedback 2.4: nobody postpones or cancels directly — the QP (own
+// sittings) and the DD raise a request instead; the ASD updates or deletes unpublished sittings only.
 export function SittingListView({
   sittings,
-  onPostpone,
-  onCancel,
+  onRequestPostponement,
+  onRequestCancellation,
+  canRequest,
+  openRequestSittingIds,
   onEdit,
   onDelete,
   sittingIdsWithRegistrations,
 }: {
   sittings: EisaSitting[];
-  onPostpone?: (sitting: EisaSitting) => void;
-  onCancel?: (sitting: EisaSitting) => void;
+  onRequestPostponement?: (sitting: EisaSitting) => void;
+  onRequestCancellation?: (sitting: EisaSitting) => void;
+  // Narrows who may raise a request on a given row (the QP only on their own sittings).
+  canRequest?: (sitting: EisaSitting) => boolean;
+  openRequestSittingIds?: Set<string>;
   onEdit?: (sitting: EisaSitting) => void;
   onDelete?: (sitting: EisaSitting) => void;
   // Row 22/23 (D-17): sittings in this set already have registrations against them — Delete
-  // is blocked for those; Postpone/Cancel are offered instead.
+  // is blocked for those.
   sittingIdsWithRegistrations?: Set<string>;
 }) {
-  const canManage = !!(onPostpone || onCancel || onEdit || onDelete);
+  const canManage = !!(onRequestPostponement || onRequestCancellation || onEdit || onDelete);
   const sorted = [...sittings].sort((a, b) => a.date.localeCompare(b.date));
 
   if (sorted.length === 0) {
@@ -65,38 +74,41 @@ export function SittingListView({
                   {s.status === 'postponed' && s.postponementReason && (
                     <p className="mt-1 text-xs text-purple-600">
                       {s.postponementReason}
-                      {s.proposedNewDate && <span className="block">Proposed new date: {s.proposedNewDate}</span>}
+                      {s.proposedNewDate && <span className="block">New date: {s.proposedNewDate}</span>}
                     </p>
                   )}
                   {s.status === 'cancelled' && s.cancellationReason && <p className="mt-1 text-xs text-gray-500">{s.cancellationReason}</p>}
                 </TableCell>
                 {canManage && (
                   <TableCell className="whitespace-nowrap space-x-1">
-                    {s.status === 'published' && onPostpone && (
-                      <Button size="sm" variant="outline" onClick={() => onPostpone(s)}>
-                        Postpone
-                      </Button>
+                    {s.status === 'published' && openRequestSittingIds?.has(s.id) && (
+                      <span className="text-xs text-amber-700">Request open</span>
                     )}
-                    {s.status === 'published' && onCancel && (
-                      <Button size="sm" variant="destructive" onClick={() => onCancel(s)}>
-                        Cancel
-                      </Button>
+                    {s.status === 'published' && !openRequestSittingIds?.has(s.id) && (canRequest?.(s) ?? true) && (
+                      <>
+                        {onRequestPostponement && (
+                          <Button size="sm" variant="outline" onClick={() => onRequestPostponement(s)}>
+                            Request postponement
+                          </Button>
+                        )}
+                        {onRequestCancellation && (
+                          <Button size="sm" variant="outline" onClick={() => onRequestCancellation(s)}>
+                            Request cancellation
+                          </Button>
+                        )}
+                      </>
                     )}
-                    {onEdit && (
+                    {isUnpublished(s) && onEdit && (
                       <Button size="sm" variant="ghost" onClick={() => onEdit(s)}>
                         Update
                       </Button>
                     )}
-                    {onDelete && sittingIdsWithRegistrations?.has(s.id) ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled
-                        title="This sitting already has registrations — use Postpone or Cancel instead."
-                      >
+                    {isUnpublished(s) && onDelete && sittingIdsWithRegistrations?.has(s.id) ? (
+                      <Button size="sm" variant="ghost" disabled title="This sitting already has registrations and cannot be deleted.">
                         Delete
                       </Button>
                     ) : (
+                      isUnpublished(s) &&
                       onDelete && (
                         <Button size="sm" variant="ghost" onClick={() => onDelete(s)}>
                           Delete

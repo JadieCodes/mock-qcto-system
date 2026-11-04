@@ -9,14 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { RegistrationCloses } from '../components/RegistrationCloses';
+import { minimumDateCount, requiredCountText } from '../api';
 import { checkSittingDate } from '../dateChecks';
 import { useEligibleQualifications, useProposeSittingBatch } from '../hooks';
 
 const YEAR_OPTIONS = [0, 1, 2].map((offset) => new Date().getFullYear() + offset);
 
-// CR-029/CR-030/CR-032: the QP's in-system date-submission form. The number of date rows is
-// free-form (add/remove) so a QP really can submit the wrong count and see the block — the
-// row count is not pre-locked to the required frequency.
+// CR-029/CR-030/CR-032: the QP's in-system date-submission form. QCTO feedback 2.4: choosing a
+// qualification pre-fills one row per required sitting (from the approved QASA); those rows
+// cannot be removed, but more can be added. An "On demand" qualification needs one date.
 export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { data: allEligible = [] } = useEligibleQualifications();
   const { person } = useV2Role();
@@ -30,12 +31,23 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
   const eligible = filterExternalRecords(allEligible, person, { qpIdOf: (q) => q.qpId });
   const selected = eligible.find((q) => q.qualificationId === qualificationId);
   const requiredCount = selected?.sittingsPerYear ?? null;
+  const minimum = selected ? minimumDateCount(selected.sittingsPerYear, selected.onDemand) : 1;
+
+  const onSelectQualification = (id: string) => {
+    setQualificationId(id);
+    const q = eligible.find((e) => e.qualificationId === id);
+    const rows = q ? minimumDateCount(q.sittingsPerYear, q.onDemand) : 1;
+    setDates((prev) => {
+      const filled = prev.filter((d) => d.trim() !== '');
+      return [...filled, ...Array<string>(Math.max(rows - filled.length, 0)).fill('')];
+    });
+  };
 
   const filledDates = dates.filter((d) => d.trim() !== '');
   const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d) }));
   const yearMismatch = filledDates.filter((d) => Number(d.slice(0, 4)) !== year);
   const duplicates = filledDates.length !== new Set(filledDates).size;
-  const countMatches = requiredCount != null && filledDates.length === requiredCount;
+  const countMatches = requiredCount != null && filledDates.length >= minimum;
   const allDatesOk = dateChecks.every((c) => c.result.ok);
 
   const resetAll = () => {
@@ -86,7 +98,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Qualification *</Label>
-            <Select value={qualificationId} onValueChange={setQualificationId}>
+            <Select value={qualificationId} onValueChange={onSelectQualification}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a qualification" />
               </SelectTrigger>
@@ -106,7 +118,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
           {selected && (
             <div className="rounded-xl border bg-gray-50 px-3 py-2 text-xs text-gray-600">
               QP: <span className="font-medium">{selected.qpName}</span> · Required sittings per year:{' '}
-              <span className="font-medium">{selected.sittingsPerYear}</span>
+              <span className="font-medium">{requiredCountText(selected.sittingsPerYear, selected.onDemand)}</span>
               {selected.sittingsPerYearIsDefault && <span> (default)</span>}
             </div>
           )}
@@ -148,7 +160,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
                           setDates((prev) => prev.map((value, i) => (i === idx ? e.target.value : value)))
                         }
                       />
-                      {dates.length > 1 && (
+                      {idx >= minimum && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -173,8 +185,9 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-800">
-                  "{selected?.qualificationTitle}" requires {requiredCount} sitting(s) per year — you have entered{' '}
-                  {filledDates.length}.
+                  {selected?.onDemand
+                    ? 'Enter at least one date.'
+                    : `"${selected?.qualificationTitle}" requires ${requiredCount} sitting(s) per year — you have entered ${filledDates.length}.`}
                 </AlertDescription>
               </Alert>
             )}

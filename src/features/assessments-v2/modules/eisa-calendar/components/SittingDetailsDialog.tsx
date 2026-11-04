@@ -41,7 +41,7 @@ export function SittingDetailsDialog({ sitting, onClose }: { sitting: EisaSittin
                   <dt className="text-gray-500">Postponement reason</dt>
                   <dd>
                     {sitting.postponementReason}
-                    {sitting.proposedNewDate && <span className="block text-xs text-gray-500">Proposed new date: {sitting.proposedNewDate}</span>}
+                    {sitting.proposedNewDate && <span className="block text-xs text-gray-500">New date: {sitting.proposedNewDate}</span>}
                   </dd>
                 </>
               )}

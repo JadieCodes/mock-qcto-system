@@ -37,7 +37,10 @@ export function AddEditSittingDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{sitting ? 'Update Sitting' : 'Add Sitting'}</DialogTitle>
-          <DialogDescription>QCTO can add, update or delete calendar sittings at any time.</DialogDescription>
+          <DialogDescription>
+            Add a special sitting, or update an unpublished one. A published sitting changes only through a postponement or
+            cancellation request.
+          </DialogDescription>
         </DialogHeader>
         {open && (
           <AddEditSittingForm
