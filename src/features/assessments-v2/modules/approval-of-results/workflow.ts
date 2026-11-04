@@ -1,5 +1,6 @@
 import { addWorkingDays, toIsoDate, workingDaysBetween } from '../../shared/dates/workingDays';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
+import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import {
   RESULTS_AD_ROLE,
   RESULTS_CHIEF_DIRECTOR_ROLE,
@@ -94,10 +95,15 @@ export function competentCountOf(batch: ResultsBatch): number {
 }
 
 // CR-059: the batch competency rate, shown to QCTO and checked against the Post-EISA
-// Monitoring threshold (PM-06).
+// Monitoring threshold (QCTO feedback 2.8).
 export function competencyRatePercent(batch: ResultsBatch): number {
   if (batch.learnerCount === 0) return 0;
   return Math.round((competentCountOf(batch) / batch.learnerCount) * 1000) / 10;
+}
+
+// QCTO feedback 2.8: the one comparison against the threshold, used by the api, the screen and the seed.
+export function isBelowPostEisaThreshold(batch: ResultsBatch): boolean {
+  return competencyRatePercent(batch) < POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT;
 }
 
 export function submissionDeadlineFor(sittingDate: string): string {

@@ -9,10 +9,10 @@
 //  #     Type                  QP / subject                         Visit date    Stage
 //  SV1   EISA Readiness        Nomvula Dlamini                      today + 30    Plan submitted — waiting for the Deputy Director
 //  SV2   Marking & Moderation  Electrical Trades sitting today + 35 today + 35    Recommended — waiting for the Domain Director
-//  SV3   Post-EISA Monitoring  Electrical Trades sitting today - 170 today + 21   Approved plan — waiting for Sub Domain Admin booking.
-//                              (Nomvula Dlamini, 50% batch)                       Created from the low-competency results batch
-//                                                                                 (createPemVisitForBatch), so that batch no longer
-//                                                                                 offers "Create Post-EISA Monitoring Visit".
+//  SV3   Post-EISA Monitoring  Welding sitting today - 150          no date yet   To be scheduled — created automatically when the
+//                              (Precious Mahlangu, 40% batch)                     Chief Director approved the batch below the 45%
+//                                                                                 threshold (QCTO feedback 2.8); the planner picks
+//                                                                                 the date.
 //  SV4   RPL/ARPL Monitoring   Thabo Technical College (SDP, no QP) today + 20    Booked — awaiting execution (auto-created from
 //                              Electrical Trades (registration G6)                the RPL/ARPL-flagged registration)
 //  SV5   Marking & Moderation  Electrical Trades sitting today - 15 today - 15    Booked — report in draft (first section done,
@@ -26,8 +26,8 @@
 //  SV11  Marking & Moderation  Plumbing sitting today - 75          today - 75    Closed — outcome shared, QP notified
 //  SV12  Marking & Moderation  Welding sitting today + 55           today + 55    Plan sent back to the Assistant Director (reason given)
 //
-// The Welding low-competency batch (Precious Mahlangu, 40%) is left without a visit, so its
-// "Create Post-EISA Monitoring Visit" button still shows. SV5, SV7 and SV11 are linked to sittings
+// The Electrical Trades batch at 50% (Nomvula Dlamini) is above the 45% threshold, so it has no
+// Post-EISA Monitoring visit. SV5, SV7 and SV11 are linked to sittings
 // that have a results batch or are awaiting one, so Approval of Results shows their Marking &
 // Moderation status.
 //
@@ -48,12 +48,13 @@ import { buildMarkingModerationVisitSections } from '../siteVisitFormSections';
 import { isChecklistComplete, type ChecklistSection } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
 import type { ResultsBatch } from '../../../modules/approval-of-results/types';
-import { competencyRatePercent } from '../../../modules/approval-of-results/workflow';
+import { competencyRatePercent, isBelowPostEisaThreshold } from '../../../modules/approval-of-results/workflow';
 import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import type { EisaRegistrationRecord } from '../../../modules/eisa-registration/types';
 import {
   BOOKING_ROLE,
   DEFAULT_NOTICE_LEAD_TIME_DAYS,
+  MISSING_VISIT_DATE_MESSAGE,
   PLAN_APPROVER_ROLE,
   PLAN_RECOMMENDER_ROLE,
   PLANNER_ROLE,
@@ -82,6 +83,7 @@ const KARABO = 'karabo-sithole';
 const KATLEGO = 'katlego-mahlangu';
 const SIPHO = 'sipho-ndlovu';
 const THANDEKA = 'thandeka-zulu';
+const FRANCOIS = 'francois-le-roux';
 const NOMVULA = 'qp-nomvula-dlamini';
 const JOHAN = 'qp-johan-van-der-merwe';
 const PRECIOUS = 'qp-precious-mahlangu';
@@ -190,6 +192,7 @@ export function seedSiteVisits(
       },
       submitPlan(atDaysAgo, planNote) {
         if (!plannerId) throw new Error('Demo seed: this visit skips planning.');
+        if (!visit.visitDate) throw new Error(`Demo seed: ${MISSING_VISIT_DATE_MESSAGE}`);
         visit = { ...visit, planNote };
         return api.plan('plan-submit', plannerId, atDaysAgo);
       },
@@ -365,25 +368,26 @@ export function seedSiteVisits(
     return builder(visit, clock, planner.id);
   }
 
-  // approval-of-results/api.ts createPemVisitForBatch(): the "Create Post-EISA Monitoring Visit"
-  // button. That function is async and stamps a random id and today's time, so the seed builds
-  // the same record (createVisit's fields, the "results approved" flag set, pemVisitId on the
-  // batch) with a seed id and a past time. It writes no audit entry or notification.
-  function pemVisitForBatch(batchId: string, actorId: string, createdDaysAgo: number): VisitSeedBuilder {
+  // approval-of-results/api.ts ensurePemVisitForBatch(), run automatically by the Chief
+  // Director's final approval (QCTO feedback 2.8). That function is async and stamps a random id
+  // and today's time, so the seed builds the same record (createVisit's fields with no date, the
+  // "results approved" flag set, pemVisitId on the batch, an audit entry on the visit and on the
+  // batch, and the planner's notification) with a seed id, at the moment of final approval.
+  function autoPemVisitForBatch(batchId: string, chiefDirectorId: string): VisitSeedBuilder {
     const batch = updatedResults.find((b) => b.id === batchId);
     if (!batch) throw new Error(`Demo seed: results batch ${batchId} missing — Post-EISA Monitoring needs the Approval of Results seed.`);
-    if (batch.workflow.stageId !== 'approved') throw new Error('Demo seed: only an approved results batch can trigger a Post-EISA Monitoring visit.');
+    if (batch.workflow.stageId !== 'approved' || !batch.recommendation) throw new Error('Demo seed: only an approved results batch can trigger a Post-EISA Monitoring visit.');
     if (batch.pemVisitId) throw new Error('Demo seed: a Post-EISA Monitoring visit has already been created for this batch.');
-    if (competencyRatePercent(batch) >= POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT) {
-      throw new Error('Demo seed: a Post-EISA Monitoring visit can only be offered when the batch competency rate is below the threshold.');
+    if (!isBelowPostEisaThreshold(batch)) {
+      throw new Error(`Demo seed: a Post-EISA Monitoring visit is only created below ${POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}%.`);
     }
-    const actor = seedPerson(actorId);
-    if (!['Assistant Director', 'Deputy Director', 'Director', 'Chief Director'].includes(actor.role)) {
-      throw new Error(`Demo seed: ${actor.name} cannot see Approval of Results.`);
+    const actor = seedPerson(chiefDirectorId);
+    if (actor.role !== 'Chief Director' || actor.name !== batch.recommendation.recommendedBy) {
+      throw new Error('Demo seed: the visit is created by the Chief Director who gave final approval.');
     }
     const clock = createClock();
-    const createdAt = clock.at(createdDaysAgo, 9);
-    if (batch.recommendation && createdAt < batch.recommendation.recommendedAt) throw new Error('Demo seed: the visit was created before the batch was approved.');
+    const createdAt = batch.recommendation.recommendedAt;
+    const rate = competencyRatePercent(batch);
     const visit: SiteVisit = {
       id: seedId(VISIT_ID_GROUP, ++n),
       visitType: 'post-eisa-monitoring',
@@ -393,7 +397,7 @@ export function seedSiteVisits(
       sdpId: null,
       sdpName: null,
       sittingId: batch.sittingId,
-      visitDate: batch.sittingDate,
+      visitDate: '',
       venue: '',
       notificationFlag: 'notified',
       noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
@@ -416,8 +420,22 @@ export function seedSiteVisits(
       createdAt,
     };
     updatedResults = updatedResults.map((b) => (b.id === batch.id ? { ...b, pemVisitId: visit.id } : b));
-    // The planning chain starts with the Assistant Director, as for any other visit.
-    return builder(visit, clock, actor.role === PLANNER_ROLE ? actor.id : null);
+    audit(log, {
+      recordType: 'site-visit-planning',
+      recordId: visit.id,
+      actor,
+      action: `Created automatically: results batch approved with a ${rate}% competency rate (below ${POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}%). To be scheduled.`,
+      timestamp: createdAt,
+    });
+    notify(log, createdAt, {
+      recipientRole: PLANNER_ROLE,
+      title: 'Post-EISA Monitoring visit to be scheduled',
+      body: `"${batch.qualificationTitle}" (${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
+    });
+    audit(log, { recordType: 'results-batch', recordId: batch.id, actor, action: 'Post-EISA Monitoring visit created — waiting for a date', timestamp: createdAt });
+    // The planning chain starts with the Assistant Director (whoever picks the date), so the
+    // seed itself never submits this plan.
+    return builder(visit, clock, null);
   }
 
   // api.ts buildAutoCreatedVisit(): the RPL/ARPL visit syncAutoCreatedVisits() makes from a
@@ -475,14 +493,9 @@ export function seedSiteVisits(
     .plan('plan-recommend', GRACE, 7)
     .done();
 
-  // SV3 — Post-EISA Monitoring from the Electrical Trades 50% batch (sitting today - 170):
-  // created from Approval of Results, dated and placed by the planner, waiting for booking.
-  pemVisitForBatch(RESULTS_SEED_IDS.lowCompetencyElectrical, LINDIWE, 16)
-    .updateDetails({ visitDate: workingDateFromToday(21), venue: 'Thabo Technical College, Pretoria' })
-    .submitPlan(15, 'Only 2 of 4 learners were found competent (50%). Interview the facilitators and learners and review the training records.')
-    .plan('plan-recommend', GRACE, 12)
-    .plan('plan-approve', MICHAEL, 9)
-    .done();
+  // SV3 — Post-EISA Monitoring from the Welding 40% batch (sitting today - 150): created
+  // automatically by the Chief Director's final approval, no date yet ("To be scheduled").
+  autoPemVisitForBatch(RESULTS_SEED_IDS.belowThresholdWelding, FRANCOIS).done();
 
   // SV4 — RPL/ARPL monitoring at Thabo Technical College, from its Electrical Trades
   // registration (G6): booked, awaiting execution. Dated by the officials, not by the sitting.
@@ -582,6 +595,11 @@ export function seedSiteVisits(
     .submitPlan(9, 'Monitor the marking session and verify a sample of marked and moderated scripts.')
     .plan('plan-dd-send-back', PETER, 6, 'The venue is still "To be confirmed". Add the marking centre the QP has booked and resubmit.')
     .done();
+
+  // QCTO feedback 2.8: final approval below the threshold always creates the visit, so the seed
+  // may not leave an approved batch below it without one.
+  const missingPemVisit = updatedResults.find((b) => b.workflow.stageId === 'approved' && isBelowPostEisaThreshold(b) && !b.pemVisitId);
+  if (missingPemVisit) throw new Error(`Demo seed: approved batch ${missingPemVisit.id} is below the threshold but has no Post-EISA Monitoring visit.`);
 
   // Newest first, the order createVisit() leaves the list in.
   return { visits: visits.sort((a, b) => b.createdAt.localeCompare(a.createdAt)), results: updatedResults };

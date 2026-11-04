@@ -25,8 +25,9 @@ export function writeStore<T>(key: string, value: T): void {
 // Visits, FISA Instrument Validation, RPL Toolkit (plus two RPL/ARPL-flagged registrations).
 // 'D' = Site Visits evidence files (QCTO feedback 1.12) and the QASA "feedback letter" wording.
 // 'A3' = RPL/ARPL visits at the SDP with no QP or sitting (2.7); sharing an outcome completes
-// the visit (2.12).
-export const SEED_VERSION = 'A3';
+// the visit (2.12). 'A4' = RPL toolkit file (3.13); Post-EISA Monitoring at 45% with the
+// automatic visit on the 40% Welding batch and none on the 50% Electrical batch (2.8).
+export const SEED_VERSION = 'A4';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

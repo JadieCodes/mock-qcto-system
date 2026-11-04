@@ -15,8 +15,9 @@
 //  A6   Welding            today - 90   Precious Mahlangu    100%   With the Director
 //  A7   Electrical Trades  today - 105  Nomvula Dlamini      75%    With the Chief Director (final approval pending)
 //  A8   Plumbing           today - 130  Johan van der Merwe  80%    Approved — recommended to Certification
-//  A9   Welding            today - 150  Precious Mahlangu    40%    Approved, below the 60% threshold, no Post-EISA visit yet
-//  A10  Electrical Trades  today - 170  Nomvula Dlamini      50%    Approved, below the 60% threshold, no Post-EISA visit yet
+//  A9   Welding            today - 150  Precious Mahlangu    40%    Approved, below the 45% threshold — its Post-EISA Monitoring
+//                                                                   visit was created automatically at final approval (siteVisits.ts SV3)
+//  A10  Electrical Trades  today - 170  Nomvula Dlamini      50%    Approved, above the 45% threshold — no Post-EISA Monitoring visit
 //  A11  Plumbing           today - 50   Johan van der Merwe  66.7%  Declined by the Deputy Director with a reason — QP can resubmit
 //
 // Officials: Assistant Director Lindiwe Khumalo (Electrical Trades, Welding) / Riaan Pretorius
@@ -33,11 +34,11 @@ import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step,
 
 const RESULTS_ID_GROUP = 7;
 
-// The two approved batches below the Post-EISA Monitoring threshold (phase C3 links one of
-// them to a Post-EISA Monitoring visit).
+// QCTO feedback 2.8: one approved batch below the Post-EISA Monitoring threshold (siteVisits.ts
+// seeds its automatic visit) and one above it (no visit).
 export const RESULTS_SEED_IDS = {
-  lowCompetencyWelding: seedId(RESULTS_ID_GROUP, 9),
-  lowCompetencyElectrical: seedId(RESULTS_ID_GROUP, 10),
+  belowThresholdWelding: seedId(RESULTS_ID_GROUP, 9),
+  aboveThresholdElectrical: seedId(RESULTS_ID_GROUP, 10),
 } as const;
 
 const LINDIWE = 'lindiwe-khumalo';

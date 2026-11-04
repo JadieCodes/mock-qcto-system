@@ -38,6 +38,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'site-visits': MapPin,
   'approval-of-results': BarChart3,
   fisa: BookOpen,
+  'fisa-status': ListChecks,
   'rpl-toolkit': Award,
 };
 

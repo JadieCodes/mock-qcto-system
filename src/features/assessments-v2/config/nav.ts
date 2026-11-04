@@ -24,6 +24,8 @@ export const INTERNAL_NAV: NavItem[] = [
   { path: 'approval-of-results', label: 'Approval of Results' },
   // CR-026: fully independent of the EISA/QSA Addendum flow — never triggered by the SAQA gate check.
   { path: 'fisa', label: 'FISA' },
+  // QCTO feedback 3.8: status only, Qualifications Development only (shared/visibility/config.ts).
+  { path: 'fisa-status', label: 'FISA Standards Status' },
   // PM-09: not in the change request register yet — built behind a feature flag pending a raised CR.
   { path: 'rpl-toolkit', label: 'RPL Toolkit' },
 ];

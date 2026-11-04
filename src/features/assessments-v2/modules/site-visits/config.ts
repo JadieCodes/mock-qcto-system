@@ -18,11 +18,13 @@ export const REPORT_APPROVER_ROLE: Role = 'Deputy Director';
 // one constant to change, same pattern as the EISA Calendar's lead-time open question.
 export const DEFAULT_NOTICE_LEAD_TIME_DAYS = 5;
 
-// PM-06 open item: the "low competency rate" trigger and its threshold are not in the change
-// request register. Post-EISA Monitoring is created manually by an official for now (there is
-// no Phase 6 results-batch data yet to check this against) — kept here so the real automatic
-// trigger is a one-constant change once Phase 6 exists and QCTO confirms the number.
-export const POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT = 60;
+// QCTO feedback 2.8 (confirmed 29 Oct 2026, closes PM-06): a results batch approved with a
+// competency rate below this creates a Post-EISA Monitoring visit automatically. The ONE place
+// the number lives — every screen, helper and seed check reads it from here.
+export const POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT = 45;
+
+// QCTO feedback 2.8: the auto-created visit has no date; QCTO picks it before the plan moves on.
+export const MISSING_VISIT_DATE_MESSAGE = 'Pick a visit date before submitting the plan.';
 
 // CR-058 open item: "Submit Approved Results" is being renamed/redesigned, but the real name
 // is still to be agreed with QCTO. Placeholder label, per the developer's instruction.

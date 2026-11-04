@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChecklistSection } from '../../shared/checklist/types';
+import type { Role } from '../../types';
 import {
   createPemVisitForBatch,
   getBatch,
@@ -84,13 +85,25 @@ export function useUploadEvidenceDocument() {
 }
 
 export function useResultsAction() {
-  return useResultsBatchMutation(performResultsAction);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: performResultsAction,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(detailKey(updated.id), updated);
+      queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      queryClient.invalidateQueries({ queryKey: AWAITING_KEY });
+      // QCTO feedback 2.8: final approval may have created a Post-EISA Monitoring visit.
+      if (updated.pemVisitId) queryClient.invalidateQueries({ queryKey: ['site-visits', 'visits'] });
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
 }
 
 export function useCreatePemVisitForBatch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { batchId: string; actorId: string; actorName: string }) => createPemVisitForBatch(args.batchId, args.actorId, args.actorName),
+    mutationFn: (args: { batchId: string; actorRole: Role; actorId: string; actorName: string }) =>
+      createPemVisitForBatch(args.batchId, args.actorRole, args.actorId, args.actorName),
     onSuccess: (updated) => {
       queryClient.setQueryData(detailKey(updated.id), updated);
       queryClient.invalidateQueries({ queryKey: LIST_KEY });

@@ -141,7 +141,8 @@ export type SiteVisitStatusTone = 'amber' | 'blue' | 'emerald' | 'red';
 export function planningStatusLabel(visit: SiteVisit): string {
   switch (visit.planningWorkflow.stageId) {
     case 'ad-planning':
-      return 'Planning';
+      // QCTO feedback 2.8: an auto-created Post-EISA Monitoring visit waits here for its date.
+      return visit.visitDate ? 'Planning' : 'To be scheduled';
     case 'dd-recommend':
       return 'Awaiting DD recommendation';
     case 'domain-director-approval':

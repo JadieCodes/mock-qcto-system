@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,7 +13,9 @@ import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
+import { isModuleVisible } from '../../../shared/visibility/moduleAccess';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT, visibilityScopeForRole } from '../../site-visits/config';
+import { useSiteVisit } from '../../site-visits/hooks';
 import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
@@ -26,7 +29,7 @@ import {
   useSaveEvidenceEvaluationNotes,
   useUploadEvidenceDocument,
 } from '../hooks';
-import { competencyRatePercent, competentCountOf, RESULTS_WORKFLOW } from '../workflow';
+import { competencyRatePercent, competentCountOf, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
 import type { ResultsBatch } from '../types';
 import type { Role } from '../../../types';
 
@@ -101,19 +104,71 @@ function ActionBar({
   );
 }
 
+// QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit
+// automatically (approval-of-results/api.ts). The button is only a fallback for an approved
+// batch that has no visit yet.
+function PemVisitBanner({ batch }: { batch: ResultsBatch }) {
+  const { role, person } = useV2Role();
+  const createPemVisit = useCreatePemVisitForBatch();
+  const { data: visit } = useSiteVisit(batch.pemVisitId);
+  const rateText = `Competency rate ${competencyRatePercent(batch)}% is below the ${POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}% threshold.`;
+  const canOpenSiteVisits = isModuleVisible('internal', 'site-visits', role);
+
+  if (batch.workflow.stageId !== 'approved') {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+        <p className="text-sm text-amber-800">
+          {rateText} A Post-EISA Monitoring visit will be created automatically when the batch gets final approval.
+        </p>
+      </div>
+    );
+  }
+
+  if (!batch.pemVisitId) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
+        <p className="text-sm text-amber-800">{rateText} No Post-EISA Monitoring visit exists for this batch yet.</p>
+        <Button
+          size="sm"
+          disabled={createPemVisit.isPending}
+          onClick={() => createPemVisit.mutate({ batchId: batch.id, actorRole: role, actorId: person.id, actorName: person.name })}
+        >
+          Create Post-EISA Monitoring Visit
+        </Button>
+      </div>
+    );
+  }
+
+  const scheduled = !!visit?.visitDate;
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
+      <p className="text-sm text-amber-800">
+        {rateText}{' '}
+        {scheduled
+          ? `A Post-EISA Monitoring visit has been created and is scheduled for ${visit.visitDate} (${overallStatusLabel(visit)}).`
+          : 'A Post-EISA Monitoring visit has been created and is waiting for a date.'}
+      </p>
+      {canOpenSiteVisits ? (
+        <Link to={`../site-visits?visit=${batch.pemVisitId}`} className="text-sm font-medium text-blue-700 underline underline-offset-2">
+          Open the visit in Site Visits &amp; Monitoring
+        </Link>
+      ) : (
+        <p className="text-xs text-amber-700">The Assistant Director picks the date in Site Visits &amp; Monitoring.</p>
+      )}
+    </div>
+  );
+}
+
 function DetailsTab({ batch }: { batch: ResultsBatch }) {
   const { data: mmVisits = [] } = useMarkingModerationStatus(batch.sittingId);
-  const createPemVisit = useCreatePemVisitForBatch();
-  const { role, person } = useV2Role();
-  const actorId = person.id;
-  const actorName = person.name;
+  const { role } = useV2Role();
   // Rows 36/38: who can see the report itself (not just the status) is driven by the same
   // CR-054 REPORT_VISIBILITY_RULES table the Site Visits hub reads from, not a separate rule
   // invented for this screen.
   const canSeeReportDetails = visibilityScopeForRole(role) === 'all';
 
   const rate = competencyRatePercent(batch);
-  const belowThreshold = rate < POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT;
+  const belowThreshold = isBelowPostEisaThreshold(batch);
 
   return (
     <div className="space-y-4">
@@ -161,19 +216,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
             ))}
           </ul>
         </details>
-        {belowThreshold && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
-            <p className="text-sm text-amber-800">
-              Below the {POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}% competency threshold.
-            </p>
-            {batch.workflow.stageId === 'approved' && !batch.pemVisitId && (
-              <Button size="sm" disabled={createPemVisit.isPending} onClick={() => createPemVisit.mutate({ batchId: batch.id, actorId, actorName })}>
-                Create Post-EISA Monitoring Visit
-              </Button>
-            )}
-            {batch.pemVisitId && <p className="text-xs text-emerald-700 font-medium">A Post-EISA Monitoring visit has been created.</p>}
-          </div>
-        )}
+        {belowThreshold && <PemVisitBanner batch={batch} />}
       </div>
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">

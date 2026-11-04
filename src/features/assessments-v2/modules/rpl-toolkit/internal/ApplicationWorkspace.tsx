@@ -17,6 +17,8 @@ import { ValidationSummary, FieldError } from '../../../shared/validation/Valida
 import type { ValidationIssue } from '../../../shared/validation/types';
 import { ActionBar } from '../components/ActionBar';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
+import { ToolkitFilesList } from '../components/ToolkitFilesList';
+import { toolkitFilesOf } from '../toolkitFiles';
 import {
   useRplEvaluationAction,
   useRplOutcomeAction,
@@ -120,6 +122,12 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{application.description}</p>
           </div>
         )}
+
+        {/* QCTO feedback 3.13: the files the QP uploaded, for the evaluators. */}
+        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-1.5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RPL Toolkit Files</p>
+          <ToolkitFilesList files={toolkitFilesOf(application)} />
+        </div>
 
         {canAllocate && (
           <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">

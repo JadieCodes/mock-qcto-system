@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -83,7 +84,13 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
 export function InternalDashboard() {
   const { role, person } = useV2Role();
   const { data: allVisits = [] } = useSiteVisits();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // QCTO feedback 2.8: Approval of Results links straight to a visit with ?visit=<id>.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('visit'));
+  const closeVisit = () => {
+    setSelectedId(null);
+    if (searchParams.has('visit')) setSearchParams({}, { replace: true });
+  };
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [scope, setScope] = useState<ListScope>('mine');
   const visits = filterByScope(allVisits, scope, person.id, myItemIds, (v) => isUnassignedActionable(v, role, person.id));
@@ -159,7 +166,7 @@ export function InternalDashboard() {
       </Tabs>
 
       <NewVisitDialog open={isFormOpen} onOpenChange={setIsFormOpen} />
-      <VisitWorkspace visitId={selectedId} onClose={() => setSelectedId(null)} />
+      <VisitWorkspace visitId={selectedId} onClose={closeVisit} />
     </div>
   );
 }

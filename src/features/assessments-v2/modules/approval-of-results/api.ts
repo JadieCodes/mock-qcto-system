@@ -8,9 +8,9 @@ import type { Role } from '../../types';
 import { listRecords as listConfirmationRecords } from '../eisa-confirmation/api';
 import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
 import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
-import { DEFAULT_NOTICE_LEAD_TIME_DAYS, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
+import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
-import { competencyRatePercent, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
+import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
 import type { EvidenceDocument, LearnerResult, NewResultsBatchInput, ResultsBatch } from './types';
 
 export const KEY = 'approvalOfResults:batches';
@@ -284,6 +284,11 @@ export async function performResultsAction(params: ResultsActionParams): Promise
   }
 
   saveAll(replace(all, updated));
+
+  // QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit.
+  if (params.actionId === 'chief-director-approve') {
+    return ensurePemVisitForBatch(updated.id, { role: params.actorRole, id: params.actorId, name: params.actorName }, 'automatic');
+  }
   return updated;
 }
 
@@ -294,42 +299,85 @@ export async function listMarkingModerationVisitsForSitting(sittingId: string): 
   return visits.filter((v) => v.visitType === 'marking-moderation' && v.sittingId === sittingId);
 }
 
-// PM-06: offered once the batch is approved and its competency rate is below the threshold
-// shared with Post-EISA Monitoring's own placeholder (site-visits/config.ts — still
-// unconfirmed with QCTO). Also closes the CR-057 loop: the created visit's "results approved"
-// flag is set immediately, since it genuinely is coming from an approved batch rather than a
-// manual toggle.
-export async function createPemVisitForBatch(batchId: string, actorId: string, actorName: string): Promise<ResultsBatch> {
-  const all = loadAll();
-  const batch = getOrThrow(all, batchId);
+interface PemActor {
+  role: Role;
+  id: string;
+  name: string;
+}
+
+// QCTO feedback 2.8: an approved batch below the threshold gets exactly one Post-EISA
+// Monitoring visit. Safe to call any number of times: it does nothing once the batch has a
+// visit, and it links (never duplicates) a Post-EISA visit that already exists for the sitting.
+// The visit starts "To be scheduled" with no date — the planner picks it in Site Visits. Also
+// closes the CR-057 loop: the visit's "results approved" flag is set at once.
+async function ensurePemVisitForBatch(batchId: string, actor: PemActor, how: 'automatic' | 'manual'): Promise<ResultsBatch> {
+  const batch = getOrThrow(loadAll(), batchId);
+  if (batch.workflow.stageId !== 'approved' || !isBelowPostEisaThreshold(batch) || batch.pemVisitId) return batch;
+
+  const rate = competencyRatePercent(batch);
+  const existing = (await listVisits()).find((v) => v.visitType === 'post-eisa-monitoring' && v.sittingId === batch.sittingId);
+  let visitId = existing?.id;
+  if (!visitId) {
+    const visit = await createVisit({
+      visitType: 'post-eisa-monitoring',
+      qpId: batch.qpId,
+      qpName: batch.qpName,
+      qualificationTitle: batch.qualificationTitle,
+      sdpId: null,
+      sdpName: null,
+      sittingId: batch.sittingId,
+      visitDate: '',
+      venue: '',
+      notificationFlag: 'notified',
+      noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
+      createdBy: actor.name,
+      createdById: actor.id,
+    });
+    await setResultsApprovedForSitting(visit.id, true);
+    visitId = visit.id;
+    appendAuditEntry({
+      recordType: 'site-visit-planning',
+      recordId: visit.id,
+      actorRole: actor.role,
+      actorId: actor.id,
+      actorName: actor.name,
+      action:
+        how === 'automatic'
+          ? `Created automatically: results batch approved with a ${rate}% competency rate (below ${POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}%). To be scheduled.`
+          : `Created from the results batch (${rate}% competency rate, below ${POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}%). To be scheduled.`,
+    });
+    addNotification({
+      recipientRole: PLANNER_ROLE,
+      title: 'Post-EISA Monitoring visit to be scheduled',
+      body: `"${batch.qualificationTitle}" (${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
+    });
+  }
+
+  const updated: ResultsBatch = { ...batch, pemVisitId: visitId };
+  saveAll(replace(loadAll(), updated));
+  appendAuditEntry({
+    recordType: 'results-batch',
+    recordId: batch.id,
+    actorRole: actor.role,
+    actorId: actor.id,
+    actorName: actor.name,
+    action: existing ? 'Linked to the existing Post-EISA Monitoring visit for this sitting' : 'Post-EISA Monitoring visit created — waiting for a date',
+  });
+  return updated;
+}
+
+// QCTO feedback 2.8: the manual button is only a fallback, for an approved batch below the
+// threshold that has no visit yet (for example one approved before the automatic trigger).
+export async function createPemVisitForBatch(batchId: string, actorRole: Role, actorId: string, actorName: string): Promise<ResultsBatch> {
+  const batch = getOrThrow(loadAll(), batchId);
   if (batch.workflow.stageId !== 'approved') {
     throw new Error('Only an approved results batch can trigger a Post-EISA Monitoring visit.');
   }
   if (batch.pemVisitId) {
     throw new Error('A Post-EISA Monitoring visit has already been created for this batch.');
   }
-  if (competencyRatePercent(batch) >= POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT) {
-    throw new Error('A Post-EISA Monitoring visit can only be offered when the batch competency rate is below the threshold.');
+  if (!isBelowPostEisaThreshold(batch)) {
+    throw new Error(`A Post-EISA Monitoring visit is only needed when the competency rate is below ${POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT}%.`);
   }
-
-  const visit = await createVisit({
-    visitType: 'post-eisa-monitoring',
-    qpId: batch.qpId,
-    qpName: batch.qpName,
-    qualificationTitle: batch.qualificationTitle,
-    sdpId: null,
-    sdpName: null,
-    sittingId: batch.sittingId,
-    visitDate: batch.sittingDate,
-    venue: '',
-    notificationFlag: 'notified',
-    noticeLeadTimeDays: DEFAULT_NOTICE_LEAD_TIME_DAYS,
-    createdBy: actorName,
-    createdById: actorId,
-  });
-  await setResultsApprovedForSitting(visit.id, true);
-
-  const updated: ResultsBatch = { ...batch, pemVisitId: visit.id };
-  saveAll(replace(all, updated));
-  return updated;
+  return ensurePemVisitForBatch(batchId, { role: actorRole, id: actorId, name: actorName }, 'manual');
 }

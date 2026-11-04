@@ -17,6 +17,7 @@ import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api'
 import {
   BOOKING_ROLE,
   DEFAULT_NOTICE_LEAD_TIME_DAYS,
+  MISSING_VISIT_DATE_MESSAGE,
   PLAN_APPROVER_ROLE,
   PLAN_RECOMMENDER_ROLE,
   PLANNER_ROLE,
@@ -246,6 +247,8 @@ const PLANNING_NEXT_OWNER: Partial<Record<PlanningActionId, Role>> = {
 export async function performPlanningAction(params: PlanningActionParams): Promise<SiteVisit> {
   const all = loadAll();
   const visit = getOrThrow(all, params.visitId);
+  // QCTO feedback 2.8: an auto-created Post-EISA Monitoring visit has no date until the planner picks one.
+  if (params.actionId === 'plan-submit' && !visit.visitDate) throw new Error(MISSING_VISIT_DATE_MESSAGE);
 
   const nextWorkflow = performAction({
     definition: PLANNING_WORKFLOW,

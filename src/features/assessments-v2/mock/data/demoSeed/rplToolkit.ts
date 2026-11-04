@@ -7,7 +7,7 @@
 //  #    QP                   Toolkit                               Stage
 //  R1   Johan van der Merwe  Plumbing RPL Toolkit (new)            Just submitted — awaiting Assistant Director allocation
 //  R2   Nomvula Dlamini      Electrical Trades RPL Toolkit (v2)    Updated toolkit (supersedes R8) — awaiting allocation for 5 days
-//  R3   Precious Mahlangu    Welding RPL Toolkit                   ASD evaluation (Thandeka Zulu; first checklist section done)
+//  R3   Precious Mahlangu    Welding RPL Toolkit                   ASD evaluation (Thandeka Zulu; first checklist section done; one uploaded toolkit file)
 //  R4   Johan van der Merwe  Drainlayer RPL Toolkit                Returned to the QP for corrections (by Sipho Ndlovu)
 //  R5   Precious Mahlangu    Boilermaker RPL Toolkit               With the Deputy Director (Peter Botha's team)
 //  R6   Nomvula Dlamini      Electrical Line Mechanic RPL Toolkit  Director Office moderation (moderation checklist half done)
@@ -69,7 +69,12 @@ interface NewToolkit {
   updatesToolkitId?: string;
   description: string;
   createdDaysAgo: number;
+  // QCTO feedback 3.13: file names the QP uploaded with the submission.
+  fileNames?: string[];
 }
+
+const TOOLKIT_FILE_SIZE = 2_097_152;
+const TOOLKIT_FILE_TYPE = 'application/pdf';
 
 export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
   const records: RplToolkitApplication[] = [];
@@ -110,6 +115,9 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
       iacEndorsementNote: '',
       version,
       updatesToolkitId,
+      ...(input.fileNames
+        ? { toolkitFiles: input.fileNames.map((fileName) => ({ fileName, fileSize: TOOLKIT_FILE_SIZE, fileType: TOOLKIT_FILE_TYPE, uploadedAt: createdAt })) }
+        : {}),
       createdBy: qp.name,
       createdAt,
     };
@@ -309,7 +317,13 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
     .done();
 
   // R3 — Precious: ASD evaluation under way.
-  create({ qpId: PRECIOUS, toolkitTitle: 'Welding RPL Toolkit', description: 'RPL toolkit for the Welding occupational qualification.', createdDaysAgo: 20 })
+  create({
+    qpId: PRECIOUS,
+    toolkitTitle: 'Welding RPL Toolkit',
+    description: 'RPL toolkit for the Welding occupational qualification.',
+    createdDaysAgo: 20,
+    fileNames: ['Welding_RPL_Toolkit_v1.pdf'],
+  })
     .allocate(RIAAN, THANDEKA, 17)
     .evaluate(THANDEKA, { sectionCount: 1 })
     .done();

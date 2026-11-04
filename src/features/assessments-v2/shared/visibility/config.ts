@@ -39,4 +39,7 @@ export const INTERNAL_MODULE_TEAM: Partial<Record<string, ProcessStageTeam>> = {
 // owner, per the matrix's Section 1/Section 5 assumption. Still an open question for QCTO.
 export const INTERNAL_MODULE_ROLE_OVERRIDE: Partial<Record<string, Role[]>> = {
   'eisa-confirmation': ['Assistant Director'],
+  // QCTO feedback 3.8: the FISA Standards status list is for the Qualifications Development
+  // domain only. Every role's access to the FISA module itself is unchanged.
+  'fisa-status': ['Qualifications Development'],
 };

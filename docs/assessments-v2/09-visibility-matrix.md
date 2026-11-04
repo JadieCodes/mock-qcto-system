@@ -139,6 +139,13 @@ QCTO: "The information regarding the QASA status and approved instruments needs 
 - **What it never shows:** documents, checklists, evaluations, letters, comments/notes other than validation conditions, audit trail, or any link or button into a QASA or validation record. The view's api (`modules/qasa-status/api.ts`) returns only those columns.
 - **Unchanged:** every role's access to every other module, including QASA itself. SDPs still cannot open the QASA or EISA Instrument Validation modules or records (Table A). The ASD's own "Status Dashboard" tab inside EISA Instrument Validation stays as it was (an ASD working list of every validation, in progress or not).
 
+### QCTO feedback 3.8 — FISA Standards status for Qualifications Development (4 Nov 2026)
+
+- **Who:** the Qualifications Development role only (internal). Granted in one place: `INTERNAL_MODULE_ROLE_OVERRIDE['fisa-status'] = ['Qualifications Development']` in `src/features/assessments-v2/shared/visibility/config.ts`, read by `isModuleVisible()`.
+- **Where:** its own internal menu item, "FISA Standards Status" (path `fisa-status`), right after FISA.
+- **What it shows (read-only):** every FISA Standard, with its Skills Programme, current stage and status. No documents, checklists, evaluation reports, notes, audit trail, actions, or links into a record.
+- **Unchanged:** every role's access to the FISA module itself (Table B), including Qualifications Development's own FISA access.
+
 ### QCTO feedback 2.12 — external Site Visits removed (28 Oct 2026, replaces the QP-sees-own-visits rule)
 
 QCTO: "Visits are scheduled by QCTO. This section should not be here." This replaces CR-047's original rule ("QPs see only their own relevant visits") and the QP cell for **Site Visits & Monitoring** in Table A, which read *"See own, view only — plus acknowledge outcome on Post-EISA Monitoring reports (`outcome-shared` stage)"*. The QP cell is now **None**, the same as the SDP cell (correction 1).

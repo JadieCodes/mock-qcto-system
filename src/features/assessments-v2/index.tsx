@@ -11,6 +11,7 @@ import { FisaExternal, FisaInternal } from './modules/fisa';
 import { InstrumentValidationExternal, InstrumentValidationInternal } from './modules/instrument-validation';
 import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum';
 import { QasaStatusView } from './modules/qasa-status';
+import { FisaStatusView } from './modules/fisa-status';
 import { RplToolkitExternal, RplToolkitInternal } from './modules/rpl-toolkit';
 import { SiteVisitsExternal, SiteVisitsInternal } from './modules/site-visits';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
@@ -52,6 +53,8 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'approval-of-results') return portal === 'internal' ? <ApprovalOfResultsInternal /> : <ApprovalOfResultsExternal />;
   // CR-026: fully independent of the EISA/QSA Addendum flow — never gated by the SAQA check.
   if (item.path === 'fisa') return portal === 'internal' ? <FisaInternal /> : <FisaExternal />;
+  // QCTO feedback 3.8: internal only (not on the external nav).
+  if (item.path === 'fisa-status') return <FisaStatusView />;
   // PM-09: not in the change request register yet — the route itself is blocked (not just the
   // nav link) the moment the feature flag is off, same defence-in-depth as CR-018's RoleBlocked.
   if (item.path === 'rpl-toolkit') {

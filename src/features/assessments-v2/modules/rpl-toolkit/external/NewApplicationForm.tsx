@@ -9,8 +9,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ToolkitFilesList } from '../components/ToolkitFilesList';
 import { useApprovedRplToolkitsForQp, useCreateRplToolkitApplication } from '../hooks';
-import type { NewRplToolkitInput, RplToolkitType } from '../types';
+import { toToolkitFile } from '../toolkitFiles';
+import type { NewRplToolkitInput, RplToolkitFile, RplToolkitType } from '../types';
 
 interface FormValues {
   toolkitTitle: string;
@@ -36,6 +38,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
   });
   const [toolkitType, setToolkitType] = useState<RplToolkitType>('new');
   const [updatesToolkitId, setUpdatesToolkitId] = useState('');
+  const [toolkitFiles, setToolkitFiles] = useState<RplToolkitFile[]>([]);
   const createApplication = useCreateRplToolkitApplication();
   const qpId = person.qpId ?? person.id;
   const { data: approvedToolkits = [] } = useApprovedRplToolkitsForQp(qpId);
@@ -44,6 +47,13 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
     reset();
     setToolkitType('new');
     setUpdatesToolkitId('');
+    setToolkitFiles([]);
+  };
+
+  const onPickFiles = (input: HTMLInputElement) => {
+    const picked = [...(input.files ?? [])].map(toToolkitFile);
+    input.value = '';
+    setToolkitFiles((prev) => [...prev, ...picked]);
   };
 
   const canSubmitType = toolkitType === 'new' || !!updatesToolkitId;
@@ -56,6 +66,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
       qpName: person.name,
       toolkitType,
       ...(toolkitType === 'updated' ? { updatesToolkitId } : {}),
+      toolkitFiles,
     };
     createApplication.mutate(input, {
       onSuccess: () => {
@@ -146,6 +157,12 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
           <div className="space-y-2">
             <Label htmlFor="rpl-notes">Notes / Comments</Label>
             <Textarea id="rpl-notes" rows={2} {...register('notes')} placeholder="Enter any additional notes..." />
+          </div>
+          {/* QCTO feedback 3.13: UI-only upload, the same pattern as the Site Visits evidence (Batch D). */}
+          <div className="space-y-1.5">
+            <Label htmlFor="rpl-toolkit-files">RPL Toolkit Files (optional)</Label>
+            <ToolkitFilesList files={toolkitFiles} />
+            <input id="rpl-toolkit-files" type="file" multiple className="text-sm" onChange={(e) => onPickFiles(e.currentTarget)} />
           </div>
 
           <DialogFooter>

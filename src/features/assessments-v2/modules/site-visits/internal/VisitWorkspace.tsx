@@ -18,7 +18,16 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
 import { hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE } from '../evidence';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
-import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from '../config';
+import {
+  BOOKING_ROLE,
+  MISSING_VISIT_DATE_MESSAGE,
+  PLAN_APPROVER_ROLE,
+  PLAN_RECOMMENDER_ROLE,
+  PLANNER_ROLE,
+  REPORT_APPROVER_ROLE,
+  REPORT_SUBMITTER_ROLE,
+  SHARE_VISIT_OUTCOME_LABEL,
+} from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasQp, visitHasSdp, visitSiteKindLabel, visitSiteName, visitSubject } from '../visitTypeLabels';
@@ -275,13 +284,16 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
           disabled={!(role === PLANNER_ROLE && stage === 'ad-planning')}
         />
         {role === PLANNER_ROLE && stage === 'ad-planning' && (
-          <Button
-            size="sm"
-            disabled={planningAction.isPending}
-            onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-submit', actorRole: role, actorId, actorName, planNote })}
-          >
-            Submit Plan
-          </Button>
+          <>
+            {!visit.visitDate && <p className="text-xs text-amber-700">{MISSING_VISIT_DATE_MESSAGE} Set it on the Details tab.</p>}
+            <Button
+              size="sm"
+              disabled={planningAction.isPending || !visit.visitDate}
+              onClick={() => planningAction.mutate({ visitId: visit.id, actionId: 'plan-submit', actorRole: role, actorId, actorName, planNote })}
+            >
+              Submit Plan
+            </Button>
+          </>
         )}
       </div>
 

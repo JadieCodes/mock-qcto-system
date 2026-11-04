@@ -15,6 +15,15 @@ export interface RplEvaluationReport {
   recommendation: RplRecommendation;
 }
 
+// QCTO feedback 3.13: a toolkit file the QP uploaded with the submission. UI-only, as every
+// upload in v2: the file's details are kept, never its contents.
+export interface RplToolkitFile {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedAt: string;
+}
+
 export interface RplToolkitApplication {
   id: string;
   qpId: string;
@@ -49,6 +58,10 @@ export interface RplToolkitApplication {
   version: number;
   updatesToolkitId: string | null;
 
+  // QCTO feedback 3.13: optional so records stored before Batch H still load — read it through
+  // toolkitFiles.ts toolkitFilesOf(), which treats a missing value as an empty list.
+  toolkitFiles?: RplToolkitFile[];
+
   createdBy: string;
   createdAt: string;
 }
@@ -64,4 +77,6 @@ export interface NewRplToolkitInput {
   // Required when toolkitType is 'updated' (Row 48) — the QP's existing approved toolkit this
   // submission is a new version of.
   updatesToolkitId?: string;
+  // QCTO feedback 3.13: optional — a submission without files is still valid.
+  toolkitFiles?: RplToolkitFile[];
 }
