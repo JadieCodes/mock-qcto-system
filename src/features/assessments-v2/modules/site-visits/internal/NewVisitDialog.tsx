@@ -4,14 +4,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { SDP_DIRECTORY } from '../../../mock/data/sdpDirectory';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS } from '../config';
 import { useCreateVisit, useSchedulableSittings, useSdpsForSitting } from '../hooks';
-import { isPerQualificationVisit, VISIT_TYPE_OPTIONS, visitHasQp, visitHasSdp, visitHasSiteSelection, visitHasSittingLink } from '../visitTypeLabels';
-import type { NotificationFlag, VisitType } from '../types';
+import { DEFAULT_VISIT_DOMAIN, VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS } from '../visitDomains';
+import {
+  isPerQualificationVisit,
+  VISIT_TYPE_OPTIONS,
+  visitHasPurpose,
+  visitHasQp,
+  visitHasSdp,
+  visitHasSiteSelection,
+  visitHasSittingLink,
+  visitIsMeeting,
+} from '../visitTypeLabels';
+import type { NotificationFlag, VisitDomain, VisitType } from '../types';
 
 const NO_SITTING = '__none__';
 
@@ -44,6 +55,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [siteKind, setSiteKind] = useState<SiteKind>('sdp');
   const [siteSdpId, setSiteSdpId] = useState('');
   const [assessmentCentreName, setAssessmentCentreName] = useState('');
+  const [domain, setDomain] = useState<VisitDomain>(DEFAULT_VISIT_DOMAIN);
+  const [meetingTitle, setMeetingTitle] = useState('');
+  const [purpose, setPurpose] = useState('');
 
   const { data: linkedSdps = [] } = useSdpsForSitting(sittingId === NO_SITTING ? null : sittingId);
 
@@ -59,6 +73,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     setSiteKind('sdp');
     setSiteSdpId('');
     setAssessmentCentreName('');
+    setDomain(DEFAULT_VISIT_DOMAIN);
+    setMeetingTitle('');
+    setPurpose('');
   };
 
   const onSittingChange = (value: string) => {
@@ -76,6 +93,8 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const hasQp = visitHasQp(visitType);
   const hasSittingLink = visitHasSittingLink(visitType);
   const hasSiteSelection = visitHasSiteSelection(visitType);
+  const isMeeting = visitIsMeeting(visitType);
+  const hasPurpose = visitHasPurpose(visitType);
   // Post-EISA Monitoring: the SDP is read from the linked sitting, never picked (G-06).
   const showsSittingSdp = visitHasSdp(visitType) && !hasSiteSelection;
 
@@ -99,8 +118,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const selectedQp = QP_DIRECTORY.find((q) => q.qpId === qpId);
   const selectedSiteSdp = SDP_DIRECTORY.find((s) => s.sdpId === siteSdpId);
   const siteChosen = siteKind === 'sdp' ? !!selectedSiteSdp : !!assessmentCentreName.trim();
+  const partyChosen = isMeeting ? !!meetingTitle.trim() : hasQp ? !!selectedQp : siteChosen;
   const canSubmit =
-    (hasQp ? !!selectedQp : siteChosen) && (!perQualification || qualificationTitle.trim()) && visitDate && venue.trim();
+    partyChosen && (!perQualification || qualificationTitle.trim()) && (!hasPurpose || purpose.trim()) && visitDate && venue.trim();
 
   const onSubmit = () => {
     if (!canSubmit) return;
@@ -109,6 +129,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     createVisit.mutate(
       {
         visitType,
+        domain,
+        meetingTitle: isMeeting ? meetingTitle.trim() : undefined,
+        purpose: hasPurpose ? purpose.trim() : undefined,
         qpId: hasQp ? (selectedQp?.qpId ?? '') : '',
         qpName: hasQp ? (selectedQp?.name ?? '') : '',
         qualificationTitle: perQualification ? qualificationTitle.trim() : '',
@@ -160,6 +183,29 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <Label>Domain</Label>
+            <Select value={domain} onValueChange={(v) => setDomain(v as VisitDomain)}>
+              <SelectTrigger aria-label="Domain">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VISIT_DOMAIN_OPTIONS.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {VISIT_DOMAIN_LABELS[d]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isMeeting && (
+            <div className="space-y-2">
+              <Label htmlFor="meeting-title">Meeting title *</Label>
+              <Input id="meeting-title" value={meetingTitle} onChange={(e) => setMeetingTitle(e.target.value)} />
+            </div>
+          )}
 
           {hasSittingLink && (
             <div className="space-y-2">
@@ -261,6 +307,13 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               ) : (
                 <p className="text-sm text-gray-700">{linkedSdps.map((s) => s.sdpName).join(', ')}</p>
               )}
+            </div>
+          )}
+
+          {hasPurpose && (
+            <div className="space-y-2">
+              <Label htmlFor="visit-purpose">Purpose *</Label>
+              <Textarea id="visit-purpose" rows={3} value={purpose} onChange={(e) => setPurpose(e.target.value)} />
             </div>
           )}
 

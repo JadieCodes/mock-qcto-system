@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
@@ -15,11 +17,14 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
-import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitPartyName } from '../visitTypeLabels';
+import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
+import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitIsMeeting, visitPartyName, visitSubject } from '../visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
-import type { SiteVisit } from '../types';
+import type { SiteVisit, VisitDomain } from '../types';
+
+const ALL_DOMAINS = 'all';
 
 function myItemIds(v: SiteVisit): (string | null | undefined)[] {
   return [v.planningWorkflow.submittedById, v.reportWorkflow.submittedById, v.reroutedToId];
@@ -51,7 +56,7 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
       <Table>
         <TableHeader>
           <TableRow>
-            {['Type', 'Qualification', 'QP / SDP or Centre', 'Visit Date', 'Status', ''].map((h) => (
+            {['Type', 'Domain', 'Qualification', 'QP / SDP or Centre', 'Visit Date', 'Status', ''].map((h) => (
               <TableHead key={h} className="whitespace-nowrap">
                 {h}
               </TableHead>
@@ -62,7 +67,8 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
           {visits.map((v) => (
             <TableRow key={v.id} className="cursor-pointer hover:bg-gray-50" onClick={() => onSelect(v.id)}>
               <TableCell className="whitespace-nowrap">{VISIT_TYPE_LABELS[v.visitType]}</TableCell>
-              <TableCell className="max-w-[200px] truncate">{qualificationDisplay(v)}</TableCell>
+              <TableCell className="whitespace-nowrap">{VISIT_DOMAIN_LABELS[visitDomainOf(v)]}</TableCell>
+              <TableCell className="max-w-[200px] truncate">{visitIsMeeting(v.visitType) ? visitSubject(v) : qualificationDisplay(v)}</TableCell>
               <TableCell className="max-w-[160px] truncate">{visitPartyName(v)}</TableCell>
               <TableCell className="whitespace-nowrap">{v.visitDate || 'To be scheduled'}</TableCell>
               <TableCell>
@@ -93,7 +99,9 @@ export function InternalDashboard() {
   };
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [scope, setScope] = useState<ListScope>('mine');
+  const [domainFilter, setDomainFilter] = useState<VisitDomain | typeof ALL_DOMAINS>(ALL_DOMAINS);
   const visits = filterByScope(allVisits, scope, person.id, myItemIds, (v) => isUnassignedActionable(v, role, person.id));
+  const listedVisits = domainFilter === ALL_DOMAINS ? visits : visits.filter((v) => visitDomainOf(v) === domainFilter);
 
   const pendingPlanning = visits.filter((v) => PLANNING_PENDING_STAGES.has(v.planningWorkflow.stageId));
   // CR-045: "Reports Received" replaces "Results Received"; there is no "Schedules Received" metric.
@@ -104,7 +112,7 @@ export function InternalDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Site Visits & Monitoring"
-        description="A standalone hub for EISA Readiness, Marking & Moderation, RPL/ARPL Monitoring and Post-EISA Monitoring visits."
+        description="Plan, conduct and report on site visits and meetings, for every visit type and domain."
         actions={
           <>
             <ScopeToggle scope={scope} onChange={setScope} />
@@ -143,9 +151,27 @@ export function InternalDashboard() {
           </SectionCard>
         </TabsContent>
 
-        <TabsContent value="visits" className="pt-4">
+        <TabsContent value="visits" className="pt-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="visit-domain-filter" className="text-sm text-gray-600 whitespace-nowrap">
+              Domain
+            </Label>
+            <Select value={domainFilter} onValueChange={(v) => setDomainFilter(v as VisitDomain | typeof ALL_DOMAINS)}>
+              <SelectTrigger id="visit-domain-filter" className="w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_DOMAINS}>All domains</SelectItem>
+                {VISIT_DOMAIN_OPTIONS.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {VISIT_DOMAIN_LABELS[d]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Tabs defaultValue="all">
-            <TabsList>
+            <TabsList className="h-auto flex-wrap justify-start">
               <TabsTrigger value="all">All</TabsTrigger>
               {VISIT_TYPE_OPTIONS.map((o) => (
                 <TabsTrigger key={o.value} value={o.value}>
@@ -154,11 +180,11 @@ export function InternalDashboard() {
               ))}
             </TabsList>
             <TabsContent value="all" className="pt-4">
-              <VisitsTable visits={visits} onSelect={setSelectedId} />
+              <VisitsTable visits={listedVisits} onSelect={setSelectedId} />
             </TabsContent>
             {VISIT_TYPE_OPTIONS.map((o) => (
               <TabsContent key={o.value} value={o.value} className="pt-4">
-                <VisitsTable visits={visits.filter((v) => v.visitType === o.value)} onSelect={setSelectedId} />
+                <VisitsTable visits={listedVisits.filter((v) => v.visitType === o.value)} onSelect={setSelectedId} />
               </TabsContent>
             ))}
           </Tabs>

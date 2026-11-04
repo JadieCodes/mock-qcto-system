@@ -7,7 +7,7 @@
 //   eisaRegistration.ts      20 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
 //   eisaConfirmation.ts      12 EISA Confirmations — 1 ready to confirm, 11 confirmed (phase C2)
 //   approvalOfResults.ts     10 results batches at every stage, 1 sitting awaiting submission (phase C2)
-//   siteVisits.ts            12 site visits — every type, every planning and report stage (phase C3)
+//   siteVisits.ts            16 site visits — every type, every planning and report stage (phase C3, Batch G)
 //   fisaValidation.ts        5 FISA Instrument Validations against the approved FISA Standard (phase C3)
 //   rplToolkit.ts            11 RPL Toolkit submissions at every stage (phase C3)
 // FISA Standards keep their own fallback seed (mock/data/fisaStandardsSeed.ts).

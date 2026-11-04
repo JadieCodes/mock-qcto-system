@@ -27,9 +27,14 @@ export const POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT = 45;
 // QCTO feedback 2.8: the auto-created visit has no date; QCTO picks it before the plan moves on.
 export const MISSING_VISIT_DATE_MESSAGE = 'Pick a visit date before submitting the plan.';
 
-// CR-058 open item: "Submit Approved Results" is being renamed/redesigned, but the real name
-// is still to be agreed with QCTO. Placeholder label, per the developer's instruction.
-export const SHARE_VISIT_OUTCOME_LABEL = 'Share Visit Outcome';
+// The DD's last step on an approved report (workflow action 'share-visit-outcome'). It only
+// completes the visit; whether the QP sees the report is the separate per-visit
+// "Share report with stakeholder" choice (stakeholderShare.ts).
+export const COMPLETE_VISIT_LABEL = 'Complete Visit';
+
+// Shared visit outcomes: the Deputy Director, who reviews and approves the report, decides
+// whether it is shared with the QP.
+export const STAKEHOLDER_SHARE_ROLE: Role = REPORT_APPROVER_ROLE;
 
 // CR-057 placeholder: there is no Phase 6 "Approval of Results" module yet to check a real
 // results-batch status against, so this flag lives directly on the visit and is toggled by an

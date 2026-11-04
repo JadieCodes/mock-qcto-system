@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from '../../shared/workflow/types';
-import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from './config';
+import { BOOKING_ROLE, COMPLETE_VISIT_LABEL, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE } from './config';
 import type { SiteVisit } from './types';
 
 // Audit-entry action label the Planning tab looks up to show the latest send-back note.
@@ -132,10 +132,10 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
       kind: 'reroute',
       requiresNote: true,
     },
-    // CR-058: every visit type — QCTO shares the outcome, the QP then responds. (Fix 4 Part 2
-    // correction: this used to be gated to post-eisa-monitoring only in api.ts/the UI; the
-    // workflow action itself was never visit-type-specific.)
-    { id: 'share-visit-outcome', label: SHARE_VISIT_OUTCOME_LABEL, fromStage: 'approved', toStage: 'outcome-shared', kind: 'advance' },
+    // Every visit type. The id is kept so stored audit entries still match; since Batch G the
+    // action only completes the visit (api.ts moves it on to 'closed'), and sharing with the QP
+    // is the separate per-visit choice in stakeholderShare.ts.
+    { id: 'share-visit-outcome', label: COMPLETE_VISIT_LABEL, fromStage: 'approved', toStage: 'outcome-shared', kind: 'advance' },
     { id: 'qp-acknowledge-outcome', label: 'Acknowledge outcome', fromStage: 'outcome-shared', toStage: 'closed', kind: 'complete' },
   ],
 };

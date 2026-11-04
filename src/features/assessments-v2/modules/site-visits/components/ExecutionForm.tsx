@@ -19,8 +19,10 @@ import {
   useUpdateVisitDetails,
   useUploadEvidence,
 } from '../hooks';
+import { visitHasScriptVerification } from '../scriptVerification';
 import type { SiteVisit } from '../types';
-import { isPerQualificationVisit, visitHasQp, visitSiteKindLabel, visitSiteName } from '../visitTypeLabels';
+import { isPerQualificationVisit, visitHasQp, visitIsMeeting, visitSiteKindLabel, visitSiteName } from '../visitTypeLabels';
+import { ScriptVerificationSection } from './ScriptVerificationSection';
 
 // CR-049: the full set of qualifications known to the QP directory — used to restrict the QP
 // choice below to QPs linked to the chosen qualification. If a visit's existing qualification
@@ -71,6 +73,9 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
     const qp = QP_DIRECTORY.find((q) => q.qpId === qpId);
     updateVisitDetails.mutate({ id: visit.id, patch: { qpId, qpName: qp?.name ?? visit.qpName } });
   };
+
+  // QCTO feedback 2.5: a special meeting has neither a QP nor a site; its title is on Details.
+  if (visitIsMeeting(visit.visitType)) return null;
 
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
@@ -197,7 +202,11 @@ export function ExecutionForm({ visit, readonly }: { visit: SiteVisit; readonly:
     <div className="space-y-6">
       <QpAndQualificationSelectors visit={visit} readonly={readonly} />
 
-      <Checklist sections={visit.checklist} readonly={readonly} onChange={(sections) => saveChecklist.mutate({ id: visit.id, sections })} />
+      {visit.checklist.length > 0 && (
+        <Checklist sections={visit.checklist} readonly={readonly} onChange={(sections) => saveChecklist.mutate({ id: visit.id, sections })} />
+      )}
+
+      {visitHasScriptVerification(visit.visitType) && <ScriptVerificationSection visit={visit} readonly={readonly} />}
 
       <div className="space-y-4">
         {freeTextFields.map((field) => (

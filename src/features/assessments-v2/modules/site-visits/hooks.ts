@@ -5,6 +5,7 @@ import {
   createVisit,
   getVisit,
   listSchedulableSittings,
+  listSharedVisitOutcomesForQp,
   listSdpsForSitting,
   listVisits,
   performPlanningAction,
@@ -14,11 +15,13 @@ import {
   saveFacilitatorAnswers,
   saveFreeTextNotes,
   saveLearnerAnswers,
+  saveScriptVerification,
   setResultsApprovedForSitting,
+  setStakeholderShare,
   updateVisitDetails,
   uploadEvidence,
 } from './api';
-import type { SiteVisit } from './types';
+import type { ScriptVerification, SiteVisit } from './types';
 
 const LIST_KEY = ['site-visits', 'visits'] as const;
 const detailKey = (id: string) => ['site-visits', 'visits', id] as const;
@@ -107,6 +110,22 @@ export function useUploadEvidence() {
   return useSiteVisitMutation((args: { id: string; file: Parameters<typeof uploadEvidence>[1]; uploadedBy: string }) =>
     uploadEvidence(args.id, args.file, args.uploadedBy),
   );
+}
+
+export function useSaveScriptVerification() {
+  return useSiteVisitMutation((args: { id: string; scriptVerification: ScriptVerification }) => saveScriptVerification(args.id, args.scriptVerification));
+}
+
+export function useSetStakeholderShare() {
+  return useSiteVisitMutation(setStakeholderShare);
+}
+
+export function useSharedVisitOutcomes(qpId: string | undefined) {
+  return useQuery({
+    queryKey: ['site-visits', 'shared-outcomes', qpId ?? 'none'],
+    queryFn: () => listSharedVisitOutcomesForQp(qpId ?? ''),
+    enabled: !!qpId,
+  });
 }
 
 export function useSetResultsApprovedForSitting() {

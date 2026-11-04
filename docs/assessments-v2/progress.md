@@ -564,6 +564,7 @@ Found during Phase 0 discovery — files outside `src/pages/assessment` that imp
 - **Row 40 — the "due soon"/PM-06 threshold number is unconfirmed, but the mechanism is now real.** Per-learner results (Fix 4 Part 2) make the competency rate and the Post-EISA Monitoring suggestion depend on genuine per-learner data instead of a hand-typed count that could never produce a low rate — the 60% threshold itself (`POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT`) is still the same unconfirmed placeholder from Phase 5/6.
 - **Row 44 — learner source = QA enrolment, confirm with QCTO.** FISA Registration's "already enrolled in Skills Programme" learner list is the same simulated `mock/data/enrolledLearners.ts` EISA Registration reads — there is no Skills-Programme-specific enrolment list in this build. Confirm whether Skills Programme enrolment should be a genuinely separate QA-domain list once that backend exists.
 - **Row 46 — confirm the order: Director & Team moderation → IAC endorsement → CEO signature.** Built as the stated default (the order the workflow already had from Phase 7) with a moderation checklist and an IAC endorsement note added on top. Confirm this is the correct order, and whether the IAC's "endorsement" should instead be its own checklist rather than one free-text note.
+- **QCTO feedback 2.5 — who may plan and run visits outside Assessment?** (added 4 Nov 2026, Batch G) A visit now has a Domain (Assessment, Accreditation and Quality Assurance, Qualifications Development, Certification), but QCTO has not decided which roles outside Assessment may plan or run visits. Until then the Domain is a label and list filter only: every domain uses the Assessment planning and report chain, and no role's access changed.
 
 ## Backend-dependent items (stub only)
 
@@ -1103,6 +1104,57 @@ QCTO (29 Oct 2026): "ASD" and "Assistant Director" are the same role; the DD all
 - A date already on the calendar for the same qualification counts as a duplicate.
 - The public holiday list (`config/holidays.ts`) covers 2026–2027; dates in later years are checked for weekends and lead time only, until the list is extended.
 
+## QCTO feedback — Batch G (answers of 29 Oct 2026)
+
+All in `src/features/assessments-v2/modules/site-visits/` unless another path is given.
+
+### 3.7 — Script verification on Marking & Moderation: done (4 Nov 2026)
+
+**Screen:** a "Script Verification" section on the Execution & Report tab of a Marking & Moderation visit (`components/ScriptVerificationSection.tsx`, shown from `components/ExecutionForm.tsx`). A sample table with one row per verified script: script / learner reference, component, marked outcome, moderated finding (Agree / Disagree) and a comment. "Add script" adds a row and the bin icon removes one. The sample size is the number of rows and is counted automatically. Below the table, the overall result: Verified, Verified with findings or Not verified. The section is read-only once the report is submitted.
+
+**Rule:** Submit Report needs at least one script row, every row complete (reference, component, marked outcome and finding; the comment is optional), and an overall result (`scriptVerification.ts` `getScriptVerificationIssues()`). It is enforced on screen (the missing items show in the "Complete these before you can submit" list, `internal/VisitWorkspace.tsx`) and in `api.ts` `performReportAction('report-submit')`.
+
+**Data:** one optional `scriptVerification` field on `SiteVisit` (`types.ts`), read through `scriptVerificationOf()`, so visits stored before Batch G still load and still show; they get an empty section. Saved by `api.ts` `saveScriptVerification()`, only while the report is awaiting execution. QPs only: the SDP option was already removed (3.6).
+
+**Assumptions (docs only, not on screen):**
+- Script verification is part of the one Marking & Moderation visit: the existing checklist and the new script verification are two sections of the same visit and report, not a separate visit type.
+- A row counts once it has a reference, component, marked outcome and finding; the comment is optional.
+- The marked outcome is free text (a mark or a competency outcome), since components are marked differently.
+
+### 2.5 — More visit types, usable across domains: done (4 Nov 2026)
+
+**New visit types** (`types.ts` `VisitType`, labels in `visitTypeLabels.ts`): "Marking guideline discussion", "Instrument validation visit" and "QASA development visit" (each with a QP chosen from the QP directory, no SDP, no qualification and no sitting link), and "Other / special meeting" (no QP: a free-text meeting title instead). Each new type has a plan of date, QP or title, purpose and venue (`internal/NewVisitDialog.tsx`; purpose is required, `api.ts` `createVisit()`), the same planning chain (ASD → DD → Domain Director → Sub Domain Admin), and an Execution & Report step with the Batch D uploads (visit report required, attendance registers, other evidence), a notes field ("Meeting notes" for a special meeting) and Completed By / Completion Date.
+
+**Reused form sections:** the Marking guideline discussion visit reuses the guideline lines 1.4–1.8 of the Marking & Moderation checklist (`mock/data/siteVisitFormSections.ts` `buildMarkingGuidelineDiscussionSections()`). The other three new types have no checklist: their record is the notes and the uploaded report (`api.ts` `buildChecklistForType()`).
+
+**Domain:** an optional `domain` on every visit, one of Assessment, Accreditation and Quality Assurance, Qualifications Development or Certification (`visitDomains.ts`), default Assessment (missing = Assessment, so stored visits need no migration). Chosen in the New Visit dialog, editable on the Details tab while the report is open, shown as a "Domain" column in every visit list, with a "Domain" filter on the All Visits tab (`internal/InternalDashboard.tsx`). No role's access changed: the internal rules in `shared/visibility/config.ts` are unchanged.
+
+**Assumptions (docs only, not on screen):**
+- The cross-domain roles are open. QCTO has not yet decided which roles outside Assessment may plan or run visits, so the Domain field is a label and filter only; the planning and report chain is the Assessment one for every domain (see Open questions).
+- Venue stays required for the new types (a virtual meeting can say "MS Teams").
+- A special meeting has no stakeholder to share with (no QP), so it never shows "Share report with stakeholder".
+
+### Shared visit outcomes (replaces the removed QP acknowledgement step): done (4 Nov 2026)
+
+**Internal:** on a visit whose report has been submitted or approved (report stage `dd-report-review`, `approved` or `closed`), the Execution & Report tab shows "Share report with stakeholder" with No / Yes (`internal/VisitWorkspace.tsx` `StakeholderShareCard`). Default No. Only the Deputy Director chooses (`config.ts` `STAKEHOLDER_SHARE_ROLE`); every other role sees "Shared with …" or "Not shared". Choosing Yes asks for the outcome summary the QP will see. Sharing notifies the QP and writes an audit entry; choosing No again writes an audit entry (`api.ts` `setStakeholderShare()`). Stored as an optional `stakeholderShare` field on `SiteVisit`; missing = not shared. Only visits with a QP can be shared (`stakeholderShare.ts` `visitCanBeShared()`).
+
+**"Share Visit Outcome" renamed "Complete Visit":** the DD's last step on an approved report (workflow action id `share-visit-outcome`, unchanged so stored audit entries still match) now only completes the visit. It no longer notifies the QP, so the per-visit choice is the only way a QP hears about a visit. The Post-EISA Monitoring hand-off to the SDP and to QA/Accreditation (PM-07) is unchanged. Its audit texts no longer carry developer notes ("Visit completed"; "Shared the Post-EISA Monitoring report with Quality Assurance and Accreditation").
+
+**External:** a new, separate QP page "Visit Outcomes" (path `visit-outcomes`, `external/VisitOutcomesPage.tsx`), read-only: visit type, visit date, outcome summary and the shared report file name(s), for visits shared with this QP only (`api.ts` `listSharedVisitOutcomesForQp()`, which returns only those columns). No acknowledgement, no scheduling, no link into a visit. Menu item on the external portal only (`config/nav.ts`), hidden and blocked for SDPs (`shared/visibility/config.ts` `EXTERNAL_MODULE_HIDDEN_FOR_ROLE['visit-outcomes'] = ['SDP']`). The external Site Visits section stays removed: `EXTERNAL_MODULE_HIDDEN_FOR_ROLE['site-visits'] = ['SDP', 'QP']` is unchanged, so its menu item is gone and its old address still shows the "not available for your role" screen to the QP.
+
+**Assumptions (docs only, not on screen):**
+- Sharing is decided per visit, by QCTO (the Deputy Director who reviews the report), default not shared.
+- The outcome summary is written by the DD when sharing, not taken from the report notes.
+- A report can be shared once submitted, before approval, as QCTO asked; the DD can take the share back (No), which removes it from the QP's page.
+
+### Seed (`SEED_VERSION = 'A9'`)
+
+`mock/data/demoSeed/siteVisits.ts` now has 16 visits: SV13 Marking guideline discussion (with the Domain Director), SV14 Instrument validation visit (report approved, shared with the QP), SV15 QASA development visit (Qualifications Development domain, completed and shared), SV16 Other / special meeting "Certification hand-off working session" (Certification domain, booked, no QP). SV7 (4 scripts, Verified with findings) and SV11 (2 scripts, Verified) have a filled script verification: the seed applies the same Submit Report rule as the api, so every submitted Marking & Moderation visit needs one. The QP Nomvula Dlamini (the default QP) sees two shared outcomes (SV14, SV15) on Visit Outcomes; every other visit is not shared. The seed builder gained `verifyScripts()` and `shareWithStakeholder()`, mirroring the api.
+
+**Checked:** 7-weekday seed check (Mon 2 to Sun 8 Nov 2026, 00:30 and 23:30 UTC, 14 runs, all pass): 16 visits, one of each new type at four different stages, the meeting has no QP and is Certification, older visits are Assessment; every submitted Marking & Moderation visit has a complete script verification; Nomvula sees exactly two shared outcomes and Johan none; no site-visit audit text carries a developer note; Visit Outcomes is visible to the QP and not the SDP, external Site Visits is still blocked for the QP, and there is no internal Visit Outcomes. Behaviour: Submit Report on the draft SV5 is refused with no script rows, with an incomplete row and with no overall result, then passes; the section cannot be changed after submit; on SV7 the ASD cannot share, sharing without a summary is refused, sharing notifies the QP once and writes one audit entry, Complete Visit sends the QP nothing, and No removes it from the QP's list; a meeting cannot be shared; a meeting without a title and a new type without a purpose are refused; a new meeting defaults to Assessment with no checklist; the guideline discussion has the 5 reused lines. `npx eslint src/features/assessments-v2` and the scoped `tsc -p` check pass clean.
+
+**Open question added:** which roles outside Assessment may plan and run visits for the other domains (2.5).
+
 ## Change log
 
 - **2026-10-20** — Phase 0 foundation built: skeleton, config (roles/teams/nav/labels/flags), v2-local role switcher, workflow engine, shared checklist component, letters, audit trail, in-app notifications, mock persistence layer, backend-dependent stubs, old checklist/form wording copied into mock data, module folder skeleton, entry point with its own QueryClientProvider. Router mount (`/assessments-v2/*` in `src/App.tsx`) approved and applied.
@@ -1137,3 +1189,4 @@ QCTO (29 Oct 2026): "ASD" and "Assistant Director" are the same role; the DD all
 - **2026-11-04** — QCTO feedback Batch E, 3.11: "Assistant Director" merged into the ASD (one role id `'ASD'`, label "ASD" everywhere on screen; Lindiwe Khumalo and Riaan Pretorius are ASDs with their ids unchanged). Registration review, EISA Confirmation, Site Visits planning and the first Approval of Results review are ASD stages now; FISA Instrument Validation and RPL Toolkit allocation are done by the DD. Same stages in the same order, and no different-person check changed. Recorded as answered question Q3. `SEED_VERSION = 'A7'`. 7-weekday seed check (14 runs), `npx eslint src/features/assessments-v2` and the scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean. See "3.11 — 'ASD' and 'Assistant Director' merged into one role" above.
 - **2026-11-04** — QCTO feedback Batch F, 2.4: QP may propose, edit unpublished proposals and resubmit; no direct postpone/cancel for anyone. New postponement (DD → Director) and cancellation (DD → Director → CEO) request flow with a required formal letter, Requests / My requests lists, notifications and audit. Propose form pre-fills the required rows (On demand: no minimum). Director, DD and CEO can open the EISA Calendar. SEED_VERSION 'A8' (three requests).
 - **2026-11-04** — QCTO feedback Batch F, 3.4: QP "Upload dates from a spreadsheet" (CSV only — no spreadsheet library installed): template download, preview with per-row checks, submit as normal proposal batches. Internal bulk upload recorded as an open question.
+- **2026-11-04** — QCTO feedback Batch G: 3.7 (script verification on Marking & Moderation, required before Submit Report), 2.5 (four new visit types and an optional visit Domain with a list filter; roles unchanged) and shared visit outcomes (per-visit "Share report with stakeholder", the QP's read-only Visit Outcomes page; "Share Visit Outcome" renamed "Complete Visit" and no longer notifies the QP). `SEED_VERSION = 'A9'`. 7-weekday seed check (14 runs), `npx eslint src/features/assessments-v2` and the scoped `tsc -p` check (temporary `tsconfig.check.json`, deleted afterwards) pass clean. See "QCTO feedback — Batch G" above.

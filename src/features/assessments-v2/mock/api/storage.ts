@@ -34,7 +34,9 @@ export function writeStore<T>(key: string, value: T): void {
 // notifications say "ASD", and the DD allocates FISA instruments and RPL Toolkits.
 // 'A8' = Batch F (2.4): EISA Calendar postponement/cancellation requests — one at the DD, one at
 // the Director, one approved (S6's postponement).
-export const SEED_VERSION = 'A8';
+// 'A9' = Batch G: script verification on Marking & Moderation (3.7), four new visit types and the
+// visit Domain (2.5), and two visits shared with the QP Nomvula Dlamini (Visit Outcomes).
+export const SEED_VERSION = 'A9';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

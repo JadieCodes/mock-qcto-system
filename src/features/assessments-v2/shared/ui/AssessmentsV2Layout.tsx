@@ -36,6 +36,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'eisa-registration': ClipboardList,
   'eisa-confirmation': FileText,
   'site-visits': MapPin,
+  'visit-outcomes': MapPin,
   'approval-of-results': BarChart3,
   fisa: BookOpen,
   'fisa-status': ListChecks,

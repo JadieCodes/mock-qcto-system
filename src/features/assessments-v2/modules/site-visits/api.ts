@@ -8,7 +8,7 @@ import { listMonitoringItems, type RplArplMonitoringItem } from '../../mock/api/
 import { readStore, writeStore } from '../../mock/api/storage';
 import { buildEisaReadinessVisitSections } from '../../mock/data/eisaReadinessVisitSections';
 import { buildPostEisaMonitoringVisitSections } from '../../mock/data/postEisaMonitoringSections';
-import { buildMarkingModerationVisitSections } from '../../mock/data/siteVisitFormSections';
+import { buildMarkingGuidelineDiscussionSections, buildMarkingModerationVisitSections } from '../../mock/data/siteVisitFormSections';
 import { buildRplArplMonitoringVisitSections } from '../../mock/data/rplArplVisitSections';
 import type { Role } from '../../types';
 import { listPublishedSittings } from '../eisa-calendar/api';
@@ -23,11 +23,15 @@ import {
   PLANNER_ROLE,
   REPORT_APPROVER_ROLE,
   REPORT_SUBMITTER_ROLE,
+  STAKEHOLDER_SHARE_ROLE,
 } from './config';
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory, type VisitEvidenceFile } from './evidence';
+import { getScriptVerificationIssues } from './scriptVerification';
+import { isSharedWithStakeholder, visitCanBeShared } from './stakeholderShare';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
-import type { NewVisitInput, SiteVisit, VisitType } from './types';
-import { visitHasQp, visitHasSiteSelection, visitHasSittingLink, visitSubject } from './visitTypeLabels';
+import type { NewVisitInput, ScriptVerification, SiteVisit, VisitType } from './types';
+import { DEFAULT_VISIT_DOMAIN } from './visitDomains';
+import { visitHasPurpose, visitHasQp, visitHasSdp, visitHasSiteSelection, visitHasSittingLink, visitIsMeeting, visitSubject } from './visitTypeLabels';
 
 export const KEY = 'siteVisits:visits';
 
@@ -75,6 +79,14 @@ function buildChecklistForType(visitType: VisitType): ChecklistSection[] {
       return buildRplArplMonitoringVisitSections();
     case 'post-eisa-monitoring':
       return buildPostEisaMonitoringVisitSections();
+    // QCTO feedback 2.5: the new types reuse existing sections where one fits; the others are
+    // recorded through the notes and the uploaded report only.
+    case 'marking-guideline-discussion':
+      return buildMarkingGuidelineDiscussionSections();
+    case 'instrument-validation-visit':
+    case 'qasa-development-visit':
+    case 'other-meeting':
+      return [];
   }
 }
 
@@ -163,14 +175,21 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
   if (visitHasSiteSelection(input.visitType) && !input.sdpName?.trim() && !input.assessmentCentreName?.trim()) {
     throw new Error('Choose the SDP or enter the assessment centre where the RPL/ARPL visit takes place.');
   }
+  // QCTO feedback 2.5: a special meeting needs a title; every new type needs its purpose.
+  const isMeeting = visitIsMeeting(input.visitType);
+  if (isMeeting && !input.meetingTitle?.trim()) throw new Error('Enter the title of the meeting.');
+  if (visitHasPurpose(input.visitType) && !input.purpose?.trim()) throw new Error('Enter the purpose of the visit.');
   const visit: SiteVisit = {
     id: crypto.randomUUID(),
     visitType: input.visitType,
+    domain: input.domain ?? DEFAULT_VISIT_DOMAIN,
+    meetingTitle: isMeeting ? input.meetingTitle?.trim() : undefined,
+    purpose: visitHasPurpose(input.visitType) ? input.purpose?.trim() : undefined,
     qpId: hasQp ? input.qpId : '',
     qpName: hasQp ? input.qpName : '',
     qualificationTitle: input.qualificationTitle,
-    sdpId: input.sdpId,
-    sdpName: input.sdpName,
+    sdpId: visitHasSdp(input.visitType) ? input.sdpId : null,
+    sdpName: visitHasSdp(input.visitType) ? input.sdpName : null,
     assessmentCentreName: input.assessmentCentreName?.trim() || null,
     sittingId: visitHasSittingLink(input.visitType) ? input.sittingId : null,
     visitDate: input.visitDate,
@@ -201,7 +220,7 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
 
 export async function updateVisitDetails(
   id: string,
-  patch: Partial<Pick<SiteVisit, 'qpId' | 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate'>>,
+  patch: Partial<Pick<SiteVisit, 'qpId' | 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate' | 'domain' | 'meetingTitle' | 'purpose'>>,
 ): Promise<SiteVisit> {
   const all = loadAll();
   const updated = { ...getOrThrow(all, id), ...patch };
@@ -326,6 +345,8 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     if (!hasVisitReportFile(visit)) {
       throw new Error(MISSING_VISIT_REPORT_MESSAGE);
     }
+    const scriptIssue = getScriptVerificationIssues(visit)[0];
+    if (scriptIssue) throw new Error(scriptIssue.message);
   }
   // CR-055: re-routing is logged as an audit note only — it deliberately does NOT go through
   // the generic workflow engine. That engine always stamps the acting role's name onto
@@ -383,22 +404,21 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     recordId: visit.id,
   });
 
-  // QCTO feedback 2.12: Site Visits is no longer on the external side, so the QP has no screen
-  // to acknowledge the outcome on. [DEFAULT — to be confirmed with QCTO] sharing the outcome
-  // completes the visit straight away; 'outcome-shared' -> 'closed' (the old
-  // qp-acknowledge-outcome step) is applied here, with its own audit entry.
-  const sharedAndClosed = params.actionId === 'share-visit-outcome';
-  const updated: SiteVisit = { ...visit, reportWorkflow: sharedAndClosed ? { ...nextWorkflow, stageId: 'closed' } : nextWorkflow };
+  // QCTO feedback 2.12: there is no QP acknowledgement step any more, so completing the visit
+  // moves it straight on to 'closed', with its own audit entry. Whether the QP sees the report is
+  // the separate per-visit choice in setStakeholderShare() below.
+  const completed = params.actionId === 'share-visit-outcome';
+  const updated: SiteVisit = { ...visit, reportWorkflow: completed ? { ...nextWorkflow, stageId: 'closed' } : nextWorkflow };
   saveAll(replace(all, updated));
 
-  if (sharedAndClosed) {
+  if (completed) {
     appendAuditEntry({
       recordType: 'site-visit-report',
       recordId: visit.id,
       actorRole: params.actorRole,
       actorId: params.actorId,
       actorName: params.actorName,
-      action: 'Visit completed — outcome shared, no QP acknowledgement needed (QCTO feedback 2.12)',
+      action: 'Visit completed',
     });
   }
 
@@ -415,13 +435,9 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report rejected', body: params.note ?? '' });
   }
   if (params.actionId === 'share-visit-outcome') {
-    // Fix 4 Part 2 correction (G-23/G-26): every visit type shares the outcome with the QP
-    // named on the visit, not only Post-EISA Monitoring. PM-07's extra QA/Accreditation/SDP
-    // hand-off stays specific to Post-EISA Monitoring — the register only names those extra
-    // recipients for that visit type. QCTO feedback 2.7: an RPL/ARPL visit has no QP to notify.
-    if (visitHasQp(visit.visitType) && visit.qpId) {
-      addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${visitSubject(visit)}" (${visit.qpName}).` });
-    }
+    // PM-07's extra QA/Accreditation/SDP hand-off stays specific to Post-EISA Monitoring — the
+    // register only names those extra recipients for that visit type. The QP is no longer
+    // notified here: that only happens when the report is shared with them (setStakeholderShare).
     if (visit.visitType === 'post-eisa-monitoring') {
       // PM-07: QA and Accreditation have no role in this build's Role union to notify directly —
       // simulated as an audit entry alongside the real in-app notifications to QP and SDP.
@@ -434,7 +450,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
         actorRole: params.actorRole,
         actorId: params.actorId,
         actorName: params.actorName,
-        action: 'Shared the PEM report with Quality Assurance and Accreditation (simulated — no screen in either domain yet)',
+        action: 'Shared the Post-EISA Monitoring report with Quality Assurance and Accreditation',
       });
     }
   }
@@ -443,6 +459,70 @@ export async function performReportAction(params: ReportActionParams): Promise<S
   }
 
   return updated;
+}
+
+// Shared visit outcomes: QCTO chooses per visit whether the submitted or approved report is
+// shared with the QP named on it. Default is not shared (some visits are internal meetings).
+export async function setStakeholderShare(params: {
+  visitId: string;
+  shared: boolean;
+  outcomeSummary?: string;
+  actorRole: Role;
+  actorId: string;
+  actorName: string;
+}): Promise<SiteVisit> {
+  const all = loadAll();
+  const visit = getOrThrow(all, params.visitId);
+  if (params.actorRole !== STAKEHOLDER_SHARE_ROLE) throw new Error(`Only the ${STAKEHOLDER_SHARE_ROLE} can choose whether a report is shared.`);
+  if (!visitCanBeShared(visit)) throw new Error('This report cannot be shared yet.');
+  if (params.shared === isSharedWithStakeholder(visit)) return visit;
+  const outcomeSummary = params.outcomeSummary?.trim() ?? visit.stakeholderShare?.outcomeSummary ?? '';
+  if (params.shared && !outcomeSummary) throw new Error('Enter the outcome summary the QP will see.');
+
+  const updated: SiteVisit = {
+    ...visit,
+    stakeholderShare: { shared: params.shared, outcomeSummary, changedAt: new Date().toISOString(), changedBy: params.actorName, changedById: params.actorId },
+  };
+  saveAll(replace(all, updated));
+  appendAuditEntry({
+    recordType: 'site-visit-report',
+    recordId: visit.id,
+    actorRole: params.actorRole,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    action: params.shared ? `Report shared with the QP (${visit.qpName})` : `Report no longer shared with the QP (${visit.qpName})`,
+    note: params.shared ? outcomeSummary : undefined,
+  });
+  if (params.shared) {
+    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${visitSubject(visit)}" (${visit.qpName}). See Visit Outcomes.` });
+  }
+  return updated;
+}
+
+export interface SharedVisitOutcome {
+  id: string;
+  visitType: VisitType;
+  visitDate: string;
+  outcomeSummary: string;
+  reportFileNames: string[];
+}
+
+// The QP's read-only Visit Outcomes page: only visits shared with this QP, and only these
+// columns — no checklist, notes, audit trail or workflow state.
+export async function listSharedVisitOutcomesForQp(qpId: string): Promise<SharedVisitOutcome[]> {
+  if (!qpId) return [];
+  return loadAll()
+    .filter((v) => v.qpId === qpId && isSharedWithStakeholder(v))
+    .map((v) => ({
+      id: v.id,
+      visitType: v.visitType,
+      visitDate: v.visitDate,
+      outcomeSummary: v.stakeholderShare?.outcomeSummary ?? '',
+      reportFileNames: evidenceOf(v)
+        .filter((f) => f.category === 'report')
+        .map((f) => f.fileName),
+    }))
+    .sort((a, b) => b.visitDate.localeCompare(a.visitDate));
 }
 
 export async function saveChecklist(id: string, sections: ChecklistSection[]): Promise<SiteVisit> {
@@ -480,6 +560,18 @@ export async function uploadEvidence(
   }
   const uploaded: VisitEvidenceFile = { ...file, uploadedAt: new Date().toISOString(), uploadedBy };
   const updated: SiteVisit = { ...visit, evidence: [...evidenceOf(visit), uploaded] };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// QCTO feedback 3.7: Marking & Moderation only, editable while the report is being completed.
+export async function saveScriptVerification(id: string, scriptVerification: ScriptVerification): Promise<SiteVisit> {
+  const all = loadAll();
+  const visit = getOrThrow(all, id);
+  if (visit.reportWorkflow.stageId !== 'awaiting-execution') {
+    throw new Error('Script verification can only be changed while the report is being completed.');
+  }
+  const updated: SiteVisit = { ...visit, scriptVerification };
   saveAll(replace(all, updated));
   return updated;
 }

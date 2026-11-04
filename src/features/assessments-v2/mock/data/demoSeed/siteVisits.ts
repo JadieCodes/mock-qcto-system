@@ -25,6 +25,19 @@
 //  SV10  EISA Readiness        Johan van der Merwe                  today + 10    Plan rejected by the Domain Director (reason given)
 //  SV11  Marking & Moderation  Plumbing sitting today - 75          today - 75    Closed — outcome shared, QP notified
 //  SV12  Marking & Moderation  Welding sitting today + 55           today + 55    Plan sent back to the ASD (reason given)
+//  SV13  Marking guideline     Nomvula Dlamini                      today + 15    Recommended — waiting for the Domain Director
+//        discussion
+//  SV14  Instrument validation Nomvula Dlamini                      today - 12    Report approved — shared with the QP
+//        visit
+//  SV15  QASA development      Nomvula Dlamini (Qualifications      today - 30    Closed — shared with the QP
+//        visit                 Development domain)
+//  SV16  Other / special       "Certification hand-off working      today + 5     Booked — awaiting execution (no QP)
+//        meeting               session" (Certification domain)
+//
+// Batch G: SV7 and SV11 carry a filled script verification (QCTO feedback 3.7), which Submit
+// Report needs on a Marking & Moderation visit. Completing a visit no longer notifies the QP;
+// only a visit shared with the stakeholder does, so the QP Nomvula Dlamini sees exactly two
+// shared outcomes (SV14, SV15) on Visit Outcomes. Every other visit is not shared.
 //
 // The Electrical Trades batch at 50% (Nomvula Dlamini) is above the 45% threshold, so it has no
 // Post-EISA Monitoring visit. SV5, SV7 and SV11 are linked to sittings
@@ -44,7 +57,7 @@ import type { RplArplMonitoringItem } from '../../api/siteVisitsStore';
 import { buildEisaReadinessVisitSections } from '../eisaReadinessVisitSections';
 import { buildPostEisaMonitoringVisitSections } from '../postEisaMonitoringSections';
 import { buildRplArplMonitoringVisitSections } from '../rplArplVisitSections';
-import { buildMarkingModerationVisitSections } from '../siteVisitFormSections';
+import { buildMarkingGuidelineDiscussionSections, buildMarkingModerationVisitSections } from '../siteVisitFormSections';
 import { isChecklistComplete, type ChecklistSection } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
 import type { ResultsBatch } from '../../../modules/approval-of-results/types';
@@ -61,11 +74,22 @@ import {
   POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT,
   REPORT_APPROVER_ROLE,
   REPORT_SUBMITTER_ROLE,
+  STAKEHOLDER_SHARE_ROLE,
 } from '../../../modules/site-visits/config';
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory } from '../../../modules/site-visits/evidence';
 import { freeTextFieldsForType } from '../../../modules/site-visits/freeTextFields';
-import type { NotificationFlag, SiteVisit, VisitType } from '../../../modules/site-visits/types';
-import { isPerQualificationVisit, visitHasQp, visitHasSdp, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
+import { getScriptVerificationIssues, visitHasScriptVerification } from '../../../modules/site-visits/scriptVerification';
+import { isSharedWithStakeholder, visitCanBeShared } from '../../../modules/site-visits/stakeholderShare';
+import type {
+  NotificationFlag,
+  ScriptVerificationResult,
+  ScriptVerificationRow,
+  SiteVisit,
+  VisitDomain,
+  VisitType,
+} from '../../../modules/site-visits/types';
+import { DEFAULT_VISIT_DOMAIN } from '../../../modules/site-visits/visitDomains';
+import { isPerQualificationVisit, visitHasPurpose, visitHasQp, visitHasSdp, visitIsMeeting, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../../../modules/site-visits/workflow';
 import { RESULTS_SEED_IDS } from './approvalOfResults';
 import { sittingAt } from './eisaRegistration';
@@ -99,6 +123,12 @@ function checklistForType(visitType: VisitType): ChecklistSection[] {
       return buildRplArplMonitoringVisitSections();
     case 'post-eisa-monitoring':
       return buildPostEisaMonitoringVisitSections();
+    case 'marking-guideline-discussion':
+      return buildMarkingGuidelineDiscussionSections();
+    case 'instrument-validation-visit':
+    case 'qasa-development-visit':
+    case 'other-meeting':
+      return [];
   }
 }
 
@@ -135,6 +165,10 @@ const NOTES_BY_TYPE: Record<VisitType, Record<string, string>> = {
     bestPractice: 'Weekly practical mock assessments were introduced after the last sitting.',
     recommendedImprovements: 'Spend more time on the knowledge modules that most learners failed.',
   },
+  'marking-guideline-discussion': { notes: 'Markers and moderators worked through the final marking guidelines and agreed the standard for the open questions.' },
+  'instrument-validation-visit': { notes: 'The QP presented the instrument and memorandum. Two items were reworded on the day.' },
+  'qasa-development-visit': { notes: 'The QP and QCTO worked through the draft QASA components and weights.' },
+  'other-meeting': { notes: 'QCTO and the QP agreed the timelines and next steps.' },
 };
 
 const CHECKLIST_COMMENT = 'Observed on site — in order.';
@@ -143,7 +177,11 @@ const EVIDENCE_FILE_SIZE: Record<VisitEvidenceCategory, number> = { report: 1_04
 
 interface PlanInput {
   visitType: VisitType;
-  qpId: string;
+  // Empty for an "Other / special meeting", which has a title instead (QCTO feedback 2.5).
+  qpId?: string;
+  meetingTitle?: string;
+  purpose?: string;
+  domain?: VisitDomain;
   // Marking & Moderation and Post-EISA Monitoring link to a published sitting (CR-050), which
   // fills the QP, qualification and date; EISA Readiness has neither (QCTO feedback 2.6).
   sitting?: EisaSitting;
@@ -160,7 +198,9 @@ interface VisitSeedBuilder {
   plan: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
   execute: (asdId: string, atDaysAgo: number, complete: boolean) => VisitSeedBuilder;
   upload: (category: VisitEvidenceCategory, fileName: string, asdId: string, atDaysAgo: number) => VisitSeedBuilder;
+  verifyScripts: (rows: Omit<ScriptVerificationRow, 'id'>[], overallResult: ScriptVerificationResult) => VisitSeedBuilder;
   report: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
+  shareWithStakeholder: (actorId: string, atDaysAgo: number, outcomeSummary: string) => VisitSeedBuilder;
   done: () => void;
 }
 
@@ -244,7 +284,7 @@ export function seedSiteVisits(
         const fieldIds = freeTextFieldsForType(visit.visitType).map((f) => f.id);
         visit = {
           ...visit,
-          checklist: answerChecklist(sections, CHECKLIST_COMMENT, complete ? {} : { onlySectionIds: [sections[0].id] }),
+          checklist: answerChecklist(sections, CHECKLIST_COMMENT, complete || sections.length === 0 ? {} : { onlySectionIds: [sections[0].id] }),
           freeTextNotes: complete ? Object.fromEntries(fieldIds.map((id) => [id, notes[id] ?? ''])) : {},
           completedBy: complete ? asd.name : '',
           completedDate: complete ? visit.visitDate : '',
@@ -262,12 +302,34 @@ export function seedSiteVisits(
         visit = { ...visit, evidence: [...evidenceOf(visit), { fileName, fileSize: EVIDENCE_FILE_SIZE[category], uploadedAt, uploadedBy: asd.name, category }] };
         return api;
       },
+      // saveScriptVerification() on the Execution & Report tab (QCTO feedback 3.7) — no audit entry.
+      verifyScripts(rows, overallResult) {
+        if (!visitHasScriptVerification(visit.visitType)) throw new Error(`Demo seed: "${subject()}" has no script verification.`);
+        if (visit.reportWorkflow.stageId !== 'awaiting-execution') throw new Error(`Demo seed: script verification for "${subject()}" can only be changed while the report is being completed.`);
+        visit = { ...visit, scriptVerification: { rows: rows.map((r, i) => ({ ...r, id: `${visit.id}-script-${i + 1}` })), overallResult } };
+        return api;
+      },
+      // setStakeholderShare() with shared = true.
+      shareWithStakeholder(actorId, atDaysAgo, outcomeSummary) {
+        const actor = seedPerson(actorId);
+        if (actor.role !== STAKEHOLDER_SHARE_ROLE) throw new Error(`Demo seed: ${actor.name} cannot choose whether a report is shared.`);
+        if (!visitCanBeShared(visit)) throw new Error(`Demo seed: "${subject()}" cannot be shared yet.`);
+        if (isSharedWithStakeholder(visit)) throw new Error(`Demo seed: "${subject()}" is already shared.`);
+        if (!outcomeSummary.trim()) throw new Error('Demo seed: a shared report needs an outcome summary.');
+        const at = clock.at(atDaysAgo, 15);
+        visit = { ...visit, stakeholderShare: { shared: true, outcomeSummary, changedAt: at, changedBy: actor.name, changedById: actor.id } };
+        audit(log, { recordType: 'site-visit-report', recordId: visit.id, actor, action: `Report shared with the QP (${visit.qpName})`, note: outcomeSummary, timestamp: at });
+        notify(log, at, { recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${subject()}" (${visit.qpName}). See Visit Outcomes.` });
+        return api;
+      },
       // performReportAction() (no re-route is seeded).
       report(actionId, actorId, atDaysAgo, note) {
         if (actionId === 'report-submit') {
           if (!isChecklistComplete(visit.checklist, true)) throw new Error('Demo seed: every checklist line needs an answer and a comment before submitting the report.');
           if (!visit.completedBy.trim() || !visit.completedDate) throw new Error('Demo seed: complete "Completed By" and "Completion Date" before submitting.');
           if (!hasVisitReportFile(visit)) throw new Error(`Demo seed: ${MISSING_VISIT_REPORT_MESSAGE}`);
+          const scriptIssue = getScriptVerificationIssues(visit)[0];
+          if (scriptIssue) throw new Error(`Demo seed: ${scriptIssue.message}`);
         }
         const actor = seedPerson(actorId);
         const at = clock.at(atDaysAgo, 14);
@@ -286,18 +348,10 @@ export function seedSiteVisits(
           notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report rejected', body: note ?? '' });
         }
         if (actionId === 'share-visit-outcome') {
-          // QCTO feedback 2.12: sharing completes the visit (no QP acknowledgement); RPL/ARPL has no QP.
+          // "Complete Visit": closes the visit straight away (no QP acknowledgement) and does not
+          // notify the QP — that only happens through shareWithStakeholder().
           visit = { ...visit, reportWorkflow: { ...reportWorkflow, stageId: 'closed' } };
-          audit(log, {
-            recordType: 'site-visit-report',
-            recordId: visit.id,
-            actor,
-            action: 'Visit completed — outcome shared, no QP acknowledgement needed (QCTO feedback 2.12)',
-            timestamp: at,
-          });
-          if (visitHasQp(visit.visitType) && visit.qpId) {
-            notify(log, at, { recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${subject()}" (${visit.qpName}).` });
-          }
+          audit(log, { recordType: 'site-visit-report', recordId: visit.id, actor, action: 'Visit completed', timestamp: at });
           if (visit.visitType === 'post-eisa-monitoring') {
             if (visit.sdpName) {
               notify(log, at, { recipientRole: 'SDP', title: 'Post-EISA Monitoring outcome shared', body: `The visit outcome for "${subject()}" (${visit.sdpName}) has been shared.` });
@@ -306,7 +360,7 @@ export function seedSiteVisits(
               recordType: 'site-visit-report',
               recordId: visit.id,
               actor,
-              action: 'Shared the PEM report with Quality Assurance and Accreditation (simulated — no screen in either domain yet)',
+              action: 'Shared the Post-EISA Monitoring report with Quality Assurance and Accreditation',
               timestamp: at,
             });
           }
@@ -325,16 +379,23 @@ export function seedSiteVisits(
     const clock = createClock();
     const planner = seedPerson(input.plannerId);
     if (planner.role !== PLANNER_ROLE) throw new Error(`Demo seed: ${planner.name} is not the planner role.`);
-    const qp = seedPerson(input.qpId);
+    if (visitHasQp(input.visitType) !== !!input.qpId) throw new Error(`Demo seed: a ${input.visitType} visit ${input.qpId ? 'cannot have' : 'needs'} a QP.`);
+    const qp = input.qpId ? seedPerson(input.qpId) : null;
     const perQualification = isPerQualificationVisit(input.visitType);
     if (perQualification !== !!input.sitting) throw new Error(`Demo seed: a ${input.visitType} visit ${perQualification ? 'needs' : 'cannot have'} a sitting link here.`);
     if (input.sitting && input.sitting.qpId !== input.qpId) throw new Error('Demo seed: the sitting belongs to another QP.');
+    // createVisit(), QCTO feedback 2.5.
+    if (visitIsMeeting(input.visitType) !== !!input.meetingTitle?.trim()) throw new Error('Demo seed: only a special meeting has a title, and it needs one.');
+    if (visitHasPurpose(input.visitType) !== !!input.purpose?.trim()) throw new Error(`Demo seed: a ${input.visitType} visit ${input.purpose ? 'has no' : 'needs a'} purpose.`);
     const notificationFlag = input.notificationFlag ?? 'notified';
     const visit: SiteVisit = {
       id: seedId(VISIT_ID_GROUP, ++n),
       visitType: input.visitType,
-      qpId: input.qpId,
-      qpName: qp.name,
+      domain: input.domain ?? DEFAULT_VISIT_DOMAIN,
+      meetingTitle: input.meetingTitle,
+      purpose: input.purpose,
+      qpId: qp?.id ?? '',
+      qpName: qp?.name ?? '',
       qualificationTitle: input.sitting?.qualificationTitle ?? '',
       // A2: Readiness and Marking & Moderation have no SDP; none of the planned visits here is a
       // type that takes one from the sitting.
@@ -532,6 +593,15 @@ export function seedSiteVisits(
     .plan('plan-book', KARABO, 70)
     .execute(THANDEKA, 42, true)
     .upload('report', 'Marking_Moderation_Visit_Report_Welding.pdf', THANDEKA, 42)
+    .verifyScripts(
+      [
+        { scriptReference: 'WLD-2026-014', component: 'Knowledge (written)', markedOutcome: '68%', moderatedFinding: 'agree', comment: 'Marks and totals confirmed.' },
+        { scriptReference: 'WLD-2026-022', component: 'Knowledge (written)', markedOutcome: '51%', moderatedFinding: 'agree', comment: '' },
+        { scriptReference: 'WLD-2026-037', component: 'Practical', markedOutcome: 'Competent', moderatedFinding: 'disagree', comment: 'Two rubric criteria not evidenced; moderator changed the outcome to Not yet competent.' },
+        { scriptReference: 'WLD-2026-041', component: 'Practical', markedOutcome: 'Not yet competent', moderatedFinding: 'agree', comment: '' },
+      ],
+      'verified-with-findings',
+    )
     .report('report-submit', THANDEKA, 41)
     .report('report-approve', PETER, 38)
     .done();
@@ -585,6 +655,13 @@ export function seedSiteVisits(
     .plan('plan-book', KATLEGO, 95)
     .execute(SIPHO, 72, true)
     .upload('report', 'Marking_Moderation_Visit_Report_Plumbing.pdf', SIPHO, 72)
+    .verifyScripts(
+      [
+        { scriptReference: 'PLB-2026-003', component: 'Knowledge (written)', markedOutcome: '74%', moderatedFinding: 'agree', comment: '' },
+        { scriptReference: 'PLB-2026-011', component: 'Practical', markedOutcome: 'Competent', moderatedFinding: 'agree', comment: '' },
+      ],
+      'verified',
+    )
     .report('report-submit', SIPHO, 71)
     .report('report-approve', GRACE, 68)
     .report('share-visit-outcome', GRACE, 66)
@@ -594,6 +671,85 @@ export function seedSiteVisits(
   planVisit({ visitType: 'marking-moderation', qpId: PRECIOUS, sitting: sittingAt(sittings, 'Welding', 55), venue: 'To be confirmed', plannerId: RIAAN, createdDaysAgo: 10 })
     .submitPlan(9, 'Monitor the marking session and verify a sample of marked and moderated scripts.')
     .plan('plan-dd-send-back', PETER, 6, 'The venue is still "To be confirmed". Add the marking centre the QP has booked and resubmit.')
+    .done();
+
+  // SV13 — Marking guideline discussion with Nomvula Dlamini (today + 15): with the Domain Director.
+  planVisit({
+    visitType: 'marking-guideline-discussion',
+    qpId: NOMVULA,
+    purpose: 'Discuss the final marking guidelines for the Electrical Trades written component with the appointed markers and moderators.',
+    visitDate: workingDateFromToday(15),
+    venue: 'Virtual (MS Teams)',
+    plannerId: LINDIWE,
+    createdDaysAgo: 9,
+  })
+    .submitPlan(8, 'Attend the marking guideline discussion before marking starts.')
+    .plan('plan-recommend', GRACE, 5)
+    .done();
+
+  // SV14 — Instrument validation visit with Nomvula Dlamini (today - 12): report approved, and
+  // shared with the QP (one of her two shared outcomes).
+  planVisit({
+    visitType: 'instrument-validation-visit',
+    qpId: NOMVULA,
+    purpose: 'Validate the revised Electrical Trades practical instrument and rubric with the QP.',
+    visitDate: workingDateFromToday(-12),
+    venue: 'QP offices, Midrand',
+    plannerId: RIAAN,
+    createdDaysAgo: 40,
+  })
+    .submitPlan(39, 'On-site validation of the revised practical instrument.')
+    .plan('plan-recommend', GRACE, 37)
+    .plan('plan-approve', MICHAEL, 35)
+    .plan('plan-book', KARABO, 33)
+    .execute(SIPHO, 7, true)
+    .upload('report', 'Instrument_Validation_Visit_Report_Electrical.pdf', SIPHO, 7)
+    .report('report-submit', SIPHO, 6)
+    .report('report-approve', GRACE, 4)
+    .shareWithStakeholder(GRACE, 3, 'The practical instrument is valid. Reword items 4 and 9 of the rubric before the next sitting.')
+    .done();
+
+  // SV15 — QASA development visit with Nomvula Dlamini (today - 30), Qualifications Development
+  // domain: completed, and shared with the QP (her second shared outcome).
+  planVisit({
+    visitType: 'qasa-development-visit',
+    qpId: NOMVULA,
+    domain: 'qualifications-development',
+    purpose: 'Work through the draft QASA components and weights for the new Electrical Trades qualification.',
+    visitDate: workingDateFromToday(-30),
+    venue: 'QCTO offices, Pretoria',
+    plannerId: LINDIWE,
+    createdDaysAgo: 60,
+  })
+    .submitPlan(59, 'QASA development session with the QP and Qualifications Development.')
+    .plan('plan-recommend', PETER, 57)
+    .plan('plan-approve', NOKUTHULA, 55)
+    .plan('plan-book', KATLEGO, 52)
+    .execute(THANDEKA, 25, true)
+    .upload('report', 'QASA_Development_Visit_Report_Electrical.pdf', THANDEKA, 25)
+    .report('report-submit', THANDEKA, 24)
+    .report('report-approve', PETER, 21)
+    .shareWithStakeholder(PETER, 20, 'The QASA components and weights were agreed. Submit the QASA within 30 days.')
+    .report('share-visit-outcome', PETER, 19)
+    .done();
+
+  // SV16 — Other / special meeting (today + 5), Certification domain, no QP: booked, awaiting
+  // the meeting notes and report.
+  planVisit({
+    visitType: 'other-meeting',
+    meetingTitle: 'Certification hand-off working session',
+    purpose: 'Agree with Certification how approved results and QASA hand-offs are received and checked.',
+    domain: 'certification',
+    visitDate: workingDateFromToday(5),
+    venue: 'QCTO offices, Pretoria',
+    notificationFlag: 'unannounced',
+    plannerId: RIAAN,
+    createdDaysAgo: 14,
+  })
+    .submitPlan(13, 'Internal working session with the Certification domain.')
+    .plan('plan-recommend', PETER, 11)
+    .plan('plan-approve', MICHAEL, 9)
+    .plan('plan-book', KARABO, 7)
     .done();
 
   // QCTO feedback 2.8: final approval below the threshold always creates the visit, so the seed

@@ -170,6 +170,16 @@ QCTO: "Visits are scheduled by QCTO. This section should not be here." This repl
 - **QP acknowledgement:** the QP's "Acknowledge outcome" step lived only on the external screen. `[DEFAULT — to be confirmed with QCTO]` When the Deputy Director shares a visit outcome, the QP named on the visit (if there is one) gets an in-app notification, and the visit is completed (closed) at once, with its own audit entry. RPL/ARPL visits have no QP (QCTO feedback 2.7), so they complete with no QP notification.
 - **Unchanged:** every internal role's access to Site Visits (Table B). The internal Approval of Results screen still shows the linked Marking & Moderation status and report (CR-052). `REPORT_VISIBILITY_RULES` in `site-visits/config.ts` still has its QP row (`own-qp-visits`), but no screen a QP can open reads it any more.
 
+### Shared visit outcomes and visit domains (answered 29 Oct 2026, built 4 Nov 2026 — Batch G)
+
+This replaces the QP acknowledgement default in the 2.12 section above (the QP no longer hears about every completed visit). Table A's Site Visits & Monitoring cell stays **None** for the QP and the SDP.
+
+- **New external page "Visit Outcomes"** (path `visit-outcomes`), **QP: See own, read only** — only the visits QCTO chose to share with this QP (`qpId`): visit type, visit date, outcome summary and the shared visit report file name(s). No acknowledgement, no scheduling, no link into a visit. **SDP: None** (`EXTERNAL_MODULE_HIDDEN_FOR_ROLE['visit-outcomes'] = ['SDP']`). Not on the internal portal. It is a separate page: the external Site Visits menu item and route stay removed and blocked for the QP.
+- **Who shares (internal):** the Deputy Director (`STAKEHOLDER_SHARE_ROLE` in `modules/site-visits/config.ts`), per visit, once the report is submitted or approved; default not shared. Sharing notifies the QP and writes an audit entry. Visits without a QP (RPL/ARPL, special meetings) cannot be shared. `[ASSUMPTION]` the DD decides, since the DD reviews the report; sharing is per visit.
+- **"Complete Visit"** (formerly "Share Visit Outcome") only completes the visit and no longer notifies the QP.
+- **Visit Domain (2.5):** every visit carries a Domain (default Assessment). **No role's access changed** — Table B's Site Visits & Monitoring column stands as written. `[OPEN]` which roles outside Assessment may plan or run visits for the other domains.
+- **Section 2, Site Visit Report:** "QP sees it only once shared (`outcome-shared` stage)" now reads: the QP sees the visit type, date, outcome summary and report file, on Visit Outcomes, only while the visit is shared with them.
+
 ### QCTO feedback 3.11 — "ASD" and "Assistant Director" are one role (answered 29 Oct 2026, built 4 Nov 2026)
 
 QCTO: "ASD" and "Assistant Director" are the same role, and the DD allocates work to the ASDs. This replaces the separate ASD and Assistant Director rows in Table B (see the merged ASD row) and the Assistant Director entries in Sections 2 and 3.

@@ -21,6 +21,12 @@ export function freeTextFieldsForType(visitType: VisitType): FreeTextField[] {
       ];
     case 'eisa-readiness':
     case 'rpl-arpl-monitoring':
+    case 'marking-guideline-discussion':
+    case 'instrument-validation-visit':
+    case 'qasa-development-visit':
       return [{ id: 'notes', label: 'Notes', placeholder: 'General comments...' }];
+    // QCTO feedback 2.5: the planner records what the meeting covered, then uploads the report.
+    case 'other-meeting':
+      return [{ id: 'notes', label: 'Meeting notes', placeholder: 'What was discussed and agreed...' }];
   }
 }

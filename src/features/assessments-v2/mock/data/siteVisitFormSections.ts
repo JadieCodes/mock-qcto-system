@@ -94,6 +94,14 @@ export function buildMarkingModerationVisitSections(): ChecklistSection[] {
   ];
 }
 
+// QCTO feedback 2.5: the Marking guideline discussion visit reuses the guideline lines of the
+// Marking & Moderation form (1.4-1.8) instead of a new checklist.
+export function buildMarkingGuidelineDiscussionSections(): ChecklistSection[] {
+  const guidelineLineIds = new Set(['1.4', '1.5', '1.6', '1.7', '1.8']);
+  const planning = buildMarkingModerationVisitSections()[0];
+  return [checklistSection('1', 'Marking Guidelines Discussion', planning.items.filter((item) => guidelineLineIds.has(item.id)))];
+}
+
 // Sections 7-8 are free text, and Completion Details is a small name/date pair —
 // both copied from the same source, lines 1147-1193.
 export const SITE_VISIT_FREE_TEXT_SECTIONS = [

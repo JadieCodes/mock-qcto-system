@@ -16,6 +16,9 @@ export const EXTERNAL_MODULE_HIDDEN_FOR_ROLE: Record<string, Role[]> = {
   // so external Site Visits is hidden and blocked for every external role. The external screens
   // stay in modules/site-visits/external/ but are never reached.
   'site-visits': ['SDP', 'QP'],
+  // Shared visit outcomes: the QP's read-only list of visits shared with them. Separate from
+  // site-visits above, which stays hidden and blocked for the QP.
+  'visit-outcomes': ['SDP'],
   'approval-of-results': ['SDP'],
   fisa: ['QP'],
   'rpl-toolkit': ['SDP'],

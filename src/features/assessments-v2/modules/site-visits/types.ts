@@ -1,15 +1,59 @@
 import type { ChecklistSection } from '../../shared/checklist/types';
 import type { WorkflowRecordState } from '../../shared/workflow/types';
 
-// CR-044: one standalone hub, every visit type lives on the same record shape.
-export type VisitType = 'eisa-readiness' | 'marking-moderation' | 'rpl-arpl-monitoring' | 'post-eisa-monitoring';
+// CR-044: one standalone hub, every visit type lives on the same record shape. QCTO feedback
+// 2.5 adds the last four types.
+export type VisitType =
+  | 'eisa-readiness'
+  | 'marking-moderation'
+  | 'rpl-arpl-monitoring'
+  | 'post-eisa-monitoring'
+  | 'marking-guideline-discussion'
+  | 'instrument-validation-visit'
+  | 'qasa-development-visit'
+  | 'other-meeting';
+
+// QCTO feedback 2.5: the QCTO domain a visit belongs to. Read through visitDomains.ts visitDomainOf().
+export type VisitDomain = 'assessment' | 'accreditation-qa' | 'qualifications-development' | 'certification';
 
 // CR-051: notified visits carry a configurable lead time; unannounced visits don't.
 export type NotificationFlag = 'notified' | 'unannounced';
 
+// QCTO feedback 3.7: verification of marked and moderated scripts on a Marking & Moderation visit.
+export type ScriptModerationFinding = 'agree' | 'disagree';
+export type ScriptVerificationResult = 'verified' | 'verified-with-findings' | 'not-verified';
+
+export interface ScriptVerificationRow {
+  id: string;
+  scriptReference: string;
+  component: string;
+  markedOutcome: string;
+  moderatedFinding: ScriptModerationFinding | null;
+  comment: string;
+}
+
+export interface ScriptVerification {
+  rows: ScriptVerificationRow[];
+  overallResult: ScriptVerificationResult | null;
+}
+
+export interface StakeholderShare {
+  shared: boolean;
+  outcomeSummary: string;
+  changedAt: string;
+  changedBy: string;
+  changedById: string;
+}
+
 export interface SiteVisit {
   id: string;
   visitType: VisitType;
+  // QCTO feedback 2.5: optional so visits stored before Batch G still load (they are Assessment).
+  domain?: VisitDomain;
+  // QCTO feedback 2.5: "Other / special meeting" only — what the meeting is called.
+  meetingTitle?: string;
+  // QCTO feedback 2.5: the purpose captured with the plan for the four new visit types.
+  purpose?: string;
 
   // CR-049: QP + qualification selectors at the top of every execution form. Empty ('') for
   // RPL/ARPL monitoring, which has no QP (QCTO feedback 2.7).
@@ -67,6 +111,15 @@ export interface SiteVisit {
   // read it through evidence.ts evidenceOf(), which treats a missing value as an empty list.
   evidence?: { fileName: string; fileSize: number; uploadedAt: string; uploadedBy: string; category: 'report' | 'attendance' | 'other' }[];
 
+  // QCTO feedback 3.7: Marking & Moderation only. Optional so visits stored before Batch G still
+  // load — read it through scriptVerification.ts scriptVerificationOf().
+  scriptVerification?: ScriptVerification;
+
+  // Shared visit outcomes (replaces the QP acknowledgement step): QCTO decides per visit whether
+  // the report is shared with the QP. Missing means "not shared" — read it through
+  // stakeholderShare.ts isSharedWithStakeholder().
+  stakeholderShare?: StakeholderShare;
+
   // Set only for the RPL/ARPL visit auto-created from a Phase 4 registration (CR-042/CR-044 —
   // the only automatic trigger into this hub). Null for every officially-created visit.
   sourceRegistrationId: string | null;
@@ -79,6 +132,9 @@ export interface SiteVisit {
 
 export interface NewVisitInput {
   visitType: VisitType;
+  domain?: VisitDomain;
+  meetingTitle?: string;
+  purpose?: string;
   qpId: string;
   qpName: string;
   qualificationTitle: string;

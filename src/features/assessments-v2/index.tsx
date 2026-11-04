@@ -13,7 +13,7 @@ import { QsaAddendumExternal, QsaAddendumInternal } from './modules/qsa-addendum
 import { QasaStatusView } from './modules/qasa-status';
 import { FisaStatusView } from './modules/fisa-status';
 import { RplToolkitExternal, RplToolkitInternal } from './modules/rpl-toolkit';
-import { SiteVisitsExternal, SiteVisitsInternal } from './modules/site-visits';
+import { SiteVisitsExternal, SiteVisitsInternal, VisitOutcomesExternal } from './modules/site-visits';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
 import { ComingSoon } from './shared/ui/ComingSoon';
 import { Dashboard } from './shared/ui/Dashboard';
@@ -50,6 +50,8 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   if (item.path === 'eisa-registration') return portal === 'internal' ? <EisaRegistrationInternal /> : <EisaRegistrationExternal />;
   if (item.path === 'eisa-confirmation') return portal === 'internal' ? <EisaConfirmationInternal /> : <EisaConfirmationExternal />;
   if (item.path === 'site-visits') return portal === 'internal' ? <SiteVisitsInternal /> : <SiteVisitsExternal />;
+  // Shared visit outcomes: external only (not on the internal nav).
+  if (item.path === 'visit-outcomes') return <VisitOutcomesExternal />;
   if (item.path === 'approval-of-results') return portal === 'internal' ? <ApprovalOfResultsInternal /> : <ApprovalOfResultsExternal />;
   // CR-026: fully independent of the EISA/QSA Addendum flow — never gated by the SAQA check.
   if (item.path === 'fisa') return portal === 'internal' ? <FisaInternal /> : <FisaExternal />;

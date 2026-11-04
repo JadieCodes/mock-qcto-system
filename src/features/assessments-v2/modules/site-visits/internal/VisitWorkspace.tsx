@@ -3,6 +3,7 @@ import { CheckCircle2, Repeat2, Send, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,6 +18,7 @@ import { ValidationSummary } from '../../../shared/validation/ValidationSummary'
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
 import { hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE } from '../evidence';
+import { getScriptVerificationIssues } from '../scriptVerification';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import {
   BOOKING_ROLE,
@@ -25,13 +27,26 @@ import {
   PLAN_RECOMMENDER_ROLE,
   PLANNER_ROLE,
   REPORT_APPROVER_ROLE,
+  COMPLETE_VISIT_LABEL,
   REPORT_SUBMITTER_ROLE,
-  SHARE_VISIT_OUTCOME_LABEL,
+  STAKEHOLDER_SHARE_ROLE,
 } from '../config';
-import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
+import { usePlanningAction, useReportAction, useSetStakeholderShare, useSiteVisit, useUpdateVisitDetails } from '../hooks';
+import { isSharedWithStakeholder, SHARE_WITH_STAKEHOLDER_LABEL, visitCanBeShared } from '../stakeholderShare';
 import { PLAN_SEND_BACK_TO_PLANNER_LABEL, PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
-import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasQp, visitHasSdp, visitSiteKindLabel, visitSiteName, visitSubject } from '../visitTypeLabels';
-import type { SiteVisit } from '../types';
+import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
+import {
+  isPerQualificationVisit,
+  VISIT_TYPE_LABELS,
+  visitHasPurpose,
+  visitHasQp,
+  visitHasSdp,
+  visitIsMeeting,
+  visitSiteKindLabel,
+  visitSiteName,
+  visitSubject,
+} from '../visitTypeLabels';
+import type { SiteVisit, VisitDomain } from '../types';
 import type { Role } from '../../../types';
 
 type ReportDialogAction = 'report-send-back' | 'report-reject' | null;
@@ -125,7 +140,35 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
         <SiteVisitStatusBadge visit={visit} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        {visitHasQp(visit.visitType) ? (
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-400 uppercase">Domain</Label>
+          <Select
+            value={visitDomainOf(visit)}
+            onValueChange={(v) => updateDetails.mutate({ id: visit.id, patch: { domain: v as VisitDomain } })}
+            disabled={!canEdit}
+          >
+            <SelectTrigger aria-label="Domain">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VISIT_DOMAIN_OPTIONS.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {VISIT_DOMAIN_LABELS[d]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {visitIsMeeting(visit.visitType) ? (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-400 uppercase">Meeting title</Label>
+            <Input
+              value={visit.meetingTitle ?? ''}
+              disabled={!canEdit}
+              onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { meetingTitle: e.target.value } })}
+            />
+          </div>
+        ) : visitHasQp(visit.visitType) ? (
           <div className="space-y-1">
             <Label className="text-xs text-gray-400 uppercase">QP</Label>
             <Input value={visit.qpName} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { qpName: e.target.value } })} />
@@ -178,6 +221,17 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
           </p>
         </div>
       </div>
+      {visitHasPurpose(visit.visitType) && (
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-400 uppercase">Purpose</Label>
+          <Textarea
+            rows={3}
+            value={visit.purpose ?? ''}
+            disabled={!canEdit}
+            onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { purpose: e.target.value } })}
+          />
+        </div>
+      )}
       {visit.learnerNames.length > 0 && (
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Learners (RPL/ARPL)</Label>
@@ -393,6 +447,68 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
   );
 }
 
+// Shared visit outcomes: a per-visit Yes/No, default No. Choosing Yes asks for the outcome
+// summary the QP will see on their Visit Outcomes page.
+function StakeholderShareCard({ visit }: { visit: SiteVisit }) {
+  const { role, person } = useV2Role();
+  const setShare = useSetStakeholderShare();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const shared = isSharedWithStakeholder(visit);
+  const canDecide = role === STAKEHOLDER_SHARE_ROLE;
+  const change = visit.stakeholderShare;
+  const actor = { visitId: visit.id, actorRole: role, actorId: person.id, actorName: person.name };
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+      <p className="text-xs font-semibold text-gray-500 uppercase">{SHARE_WITH_STAKEHOLDER_LABEL}</p>
+      {canDecide ? (
+        <RadioGroup
+          value={shared ? 'yes' : 'no'}
+          onValueChange={(v) => (v === 'yes' ? setSummaryOpen(true) : setShare.mutate({ ...actor, shared: false }))}
+          className="flex gap-6"
+          disabled={setShare.isPending}
+        >
+          <div className="flex items-center gap-1.5">
+            <RadioGroupItem id={`share-no-${visit.id}`} value="no" />
+            <Label htmlFor={`share-no-${visit.id}`} className="text-sm font-normal">
+              No
+            </Label>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <RadioGroupItem id={`share-yes-${visit.id}`} value="yes" />
+            <Label htmlFor={`share-yes-${visit.id}`} className="text-sm font-normal">
+              Yes — share with {visit.qpName}
+            </Label>
+          </div>
+        </RadioGroup>
+      ) : (
+        <p className="text-sm text-gray-700">{shared ? `Shared with ${visit.qpName}.` : 'Not shared.'}</p>
+      )}
+      {change && (
+        <p className="text-xs text-gray-500">
+          {shared ? 'Shared' : 'Sharing stopped'} by {change.changedBy} on {change.changedAt.slice(0, 10)}.
+        </p>
+      )}
+      {shared && change?.outcomeSummary && (
+        <div className="space-y-1">
+          <p className="text-xs text-gray-400 uppercase">Outcome summary</p>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{change.outcomeSummary}</p>
+        </div>
+      )}
+      <ReasonDialog
+        open={summaryOpen}
+        onOpenChange={setSummaryOpen}
+        title={`Share the report with ${visit.qpName}`}
+        description="The QP will see the visit type, date, this summary and the visit report."
+        fieldLabel="Outcome summary *"
+        placeholder="Summarise the outcome of the visit..."
+        confirmLabel="Share"
+        onConfirm={(outcomeSummary) => setShare.mutate({ ...actor, shared: true, outcomeSummary })}
+      />
+    </div>
+  );
+}
+
 function ReportTab({ visit }: { visit: SiteVisit }) {
   const { role, person } = useV2Role();
   const actorId = person.id;
@@ -413,8 +529,14 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
   const checklistComplete = isChecklistComplete(visit.checklist, true);
   // QCTO feedback 1.12: at least one "Visit report" file before the report can be submitted.
   const reportFileUploaded = hasVisitReportFile(visit);
+  // QCTO feedback 3.7: Marking & Moderation also needs its script verification sample.
+  const scriptIssues = getScriptVerificationIssues(visit);
   const submitIssues = canExecute
-    ? [...getChecklistIssues(visit.checklist, true), ...(reportFileUploaded ? [] : [{ field: 'evidence-report', message: MISSING_VISIT_REPORT_MESSAGE }])]
+    ? [
+        ...getChecklistIssues(visit.checklist, true),
+        ...(reportFileUploaded ? [] : [{ field: 'evidence-report', message: MISSING_VISIT_REPORT_MESSAGE }]),
+        ...scriptIssues,
+      ]
     : [];
 
   const dialogCopy: Record<Exclude<ReportDialogAction, null>, { title: string; confirmLabel: string; destructive?: boolean; actionId: string }> = {
@@ -438,7 +560,7 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
           <div className="flex justify-end">
             <Button
               className="gap-2"
-              disabled={!checklistComplete || !reportFileUploaded || reportAction.isPending}
+              disabled={!checklistComplete || !reportFileUploaded || scriptIssues.length > 0 || reportAction.isPending}
               onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'report-submit', actorRole: role, actorId, actorName })}
             >
               <Send className="h-4 w-4" />
@@ -473,17 +595,14 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
         </div>
       )}
 
-      {/* Row 37 (Fix 4 Part 2 correction): single, role-gated action bar for every visit type —
-          gated through shared/workflow's canActInStage (REPORT_WORKFLOW allows the Deputy
-          Director to act from 'approved') rather than a bare role comparison. This used to be
-          scoped to visit.visitType === 'post-eisa-monitoring' only, which hid the button for
-          Marking & Moderation, EISA Readiness and RPL/ARPL Monitoring visits (CR-058 only ever
-          meant "Post-EISA Monitoring gets extra recipients", not "only Post-EISA Monitoring
-          gets a Share Visit Outcome button" — see progress.md). */}
+      {visitCanBeShared(visit) && <StakeholderShareCard visit={visit} />}
+
+      {/* Row 37: one role-gated action for every visit type, gated through canActInStage
+          (REPORT_WORKFLOW allows the Deputy Director to act from 'approved'). */}
       {stage === 'approved' && canActInStage(REPORT_WORKFLOW, stage, role) && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'share-visit-outcome', actorRole: role, actorId, actorName })}>
-            {SHARE_VISIT_OUTCOME_LABEL}
+            {COMPLETE_VISIT_LABEL}
           </Button>
         </div>
       )}
@@ -491,9 +610,8 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       {stage === 'rejected' && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Report rejected.</div>}
       {(stage === 'approved' || stage === 'outcome-shared' || stage === 'closed') && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {/* QCTO feedback 2.12: sharing the outcome now completes the visit, so 'outcome-shared'
-              only remains on visits stored before Batch A3. */}
-          Report {stage === 'approved' ? 'approved' : stage === 'outcome-shared' ? 'approved — outcome shared, awaiting QP' : 'approved — outcome shared, visit completed'}.
+          {/* 'outcome-shared' only remains on visits stored before Batch A3. */}
+          Report approved{stage === 'approved' ? '' : ' — visit completed'}.
         </div>
       )}
 

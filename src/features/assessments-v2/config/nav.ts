@@ -39,6 +39,8 @@ export const EXTERNAL_NAV: NavItem[] = [
   { path: 'eisa-registration', label: 'Learner EISA Registration' },
   { path: 'eisa-confirmation', label: 'EISA Confirmation' },
   { path: 'site-visits', label: 'Site Visits & Monitoring' },
+  // Shared visit outcomes: a separate, read-only page for the QP (shared/visibility/config.ts).
+  { path: 'visit-outcomes', label: 'Visit Outcomes' },
   { path: 'approval-of-results', label: 'Approval of Results' },
   { path: 'fisa', label: 'FISA' },
   { path: 'rpl-toolkit', label: 'RPL Toolkit' },
