@@ -1,6 +1,8 @@
 import { buildInstrumentValidationChecklist } from '../../mock/data/instrumentValidationChecklistItems';
 import { buildFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
 import { seedFisaStandards } from '../../mock/data/fisaStandardsSeed';
+import { DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE, hasActedInRoles } from '../../shared/iac/differentPerson';
+import type { IacMinutesFile } from '../../shared/iac/types';
 import { getPerson } from '../../shared/people/directory';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { addNotification } from '../../shared/notifications/store';
@@ -60,6 +62,7 @@ export async function createFisaStandard(input: NewFisaStandardInput): Promise<F
     workflow: { stageId: 'qd-submission', submittedBy: input.createdBy },
     checklist: buildFisaStandardChecklist(),
     evaluationReport: { findings: '', recommendation: '' },
+    iacMinutesFile: null,
     createdBy: input.createdBy,
     createdAt: new Date().toISOString(),
   };
@@ -107,6 +110,12 @@ export async function performStandardAction(params: StandardActionParams): Promi
       throw new Error('Complete the evaluation report (findings and recommendation) before sending to the Deputy Director.');
     }
   }
+  if (
+    record.workflow.stageId === 'director-office-review' &&
+    hasActedInRoles('fisa-standard', record.id, params.actorId, ['ASD', 'Deputy Director'])
+  ) {
+    throw new Error(DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE);
+  }
 
   const nextWorkflow = performAction({
     definition: FISA_STANDARD_WORKFLOW,
@@ -132,7 +141,9 @@ export async function performStandardAction(params: StandardActionParams): Promi
       ? 'FISA Standard declined'
       : nextWorkflow.stageId === 'approved'
         ? 'FISA Standard approved'
-        : action?.kind === 'send-back'
+        : params.actionId === 'standard-iac-remediation'
+          ? 'FISA Standard — IAC requested remediation'
+          : action?.kind === 'send-back'
           ? 'FISA Standard sent back for clarification'
           : `FISA Standard ready: ${nextStage?.label ?? nextWorkflow.stageId}`;
   const body = params.note
@@ -144,6 +155,19 @@ export async function performStandardAction(params: StandardActionParams): Promi
   } else if (nextStage?.allowedRoles[0]) {
     addNotification({ recipientRole: nextStage.allowedRoles[0], title, body });
   }
+  return updated;
+}
+
+// QCTO feedback 2.9: optional minutes from the IAC meeting, uploaded by the DD while recording
+// the outcome. Null removes the file.
+export async function saveFisaStandardIacMinutes(standardId: string, file: IacMinutesFile | null): Promise<FisaStandardRecord> {
+  const all = loadStandards();
+  const record = getStandardOrThrow(all, standardId);
+  if (record.workflow.stageId !== 'iac-review') {
+    throw new Error('The committee minutes can only be changed while the IAC outcome is being recorded.');
+  }
+  const updated = { ...record, iacMinutesFile: file };
+  saveStandards(replaceStandard(all, updated));
   return updated;
 }
 

@@ -33,9 +33,11 @@ export const ROLE_DESCRIPTORS: RoleDescriptor[] = [
   { role: 'Domain Director', portal: 'internal', label: 'Domain Director', teams: ['site-visits'] },
   { role: 'Chief Director', portal: 'internal', label: 'Chief Director', teams: ['approval-of-results'] },
   { role: 'IAC', portal: 'internal', label: 'IAC', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
-  { role: 'CEO', portal: 'internal', label: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit'] },
+  // QCTO feedback 2.9: the CEO also signs the FISA Standard outcome letter.
+  { role: 'CEO', portal: 'internal', label: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
   { role: 'Sub Domain Admin', portal: 'internal', label: 'Sub Domain Admin', teams: ['site-visits'] },
-  { role: 'Director & Team', portal: 'internal', label: 'Director Office', teams: ['rpl-toolkit'] },
+  // QCTO feedback 2.1 / 2.9: the Director Office also quality-assures QASAs and FISA Standards before the IAC.
+  { role: 'Director & Team', portal: 'internal', label: 'Director Office', teams: ['rpl-toolkit', 'qsa-evaluation', 'fisa'] },
   { role: 'Qualifications Development', portal: 'internal', label: 'Qualifications Development', teams: ['fisa'] },
 ];
 

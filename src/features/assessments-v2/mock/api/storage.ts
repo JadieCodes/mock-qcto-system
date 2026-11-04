@@ -27,7 +27,10 @@ export function writeStore<T>(key: string, value: T): void {
 // 'A3' = RPL/ARPL visits at the SDP with no QP or sitting (2.7); sharing an outcome completes
 // the visit (2.12). 'A4' = RPL toolkit file (3.13); Post-EISA Monitoring at 45% with the
 // automatic visit on the 40% Welding batch and none on the 50% Electrical batch (2.8).
-export const SEED_VERSION = 'A4';
+// 'A5' = Batch E: QASA Director Office stage and DD-recorded IAC outcomes (2.1), plus a 13th
+// QASA at the Director Office stage. 'A6' = FISA Standards on the same route (2.9), one at each
+// new stage; QASA assessment components and the Certification hand-off (3.3).
+export const SEED_VERSION = 'A6';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

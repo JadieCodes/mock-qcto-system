@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Role } from '../../../types';
+import { StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
@@ -15,6 +16,15 @@ import { NewStandardDialog } from './NewStandardDialog';
 import { StandardWorkspace } from './StandardWorkspace';
 import { ValidationWorkspace } from './ValidationWorkspace';
 import type { FisaStandardRecord, FisaValidationRecord } from '../types';
+
+const STANDARD_STAGE_TILES: { label: string; stageIds: string[] }[] = [
+  { label: 'With ASD', stageIds: ['asd-evaluation'] },
+  { label: 'With Deputy Director', stageIds: ['dd-review'] },
+  { label: 'With Director Office', stageIds: ['director-office-review'] },
+  { label: 'Awaiting IAC outcome', stageIds: ['iac-review'] },
+  { label: 'Awaiting CEO signature', stageIds: ['ceo-signature', 'ceo-signature-declined'] },
+  { label: 'Approved', stageIds: ['approved'] },
+];
 
 // Brand-new records nobody has personally touched yet still belong under "My items" for
 // whichever role can act on their current stage (09-visibility-matrix.md "Approved corrections").
@@ -73,6 +83,14 @@ export function InternalDashboard() {
         </TabsList>
 
         <TabsContent value="standards" className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Roles: Qualifications Development creates · ASD evaluates · DD moderates · Director Office quality-assures and approves for tabling · DD presents at the IAC and records the outcome · CEO signs the outcome letter.
+          </p>
+          <StatTileGrid className="md:grid-cols-6">
+            {STANDARD_STAGE_TILES.map((tile) => (
+              <StatTile key={tile.label} label={tile.label} value={standards.filter((s) => tile.stageIds.includes(s.workflow.stageId)).length} />
+            ))}
+          </StatTileGrid>
           <div className="flex items-center justify-end">
             <Button onClick={() => setIsStandardFormOpen(true)} className="gap-2">
               <Plus className="h-4 w-4" />

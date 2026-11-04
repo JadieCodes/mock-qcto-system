@@ -1,5 +1,6 @@
+import type { IacOutcomeOption } from '../../shared/iac/types';
 import type { WorkflowDefinition, WorkflowRecordState } from '../../shared/workflow/types';
-import { APPROVAL_LETTER_SIGNER_ROLE } from './config';
+import { APPROVAL_LETTER_SIGNER_ROLE, IAC_OUTCOME_RECORDER_ROLE, QASA_DIRECTOR_OFFICE_ROLE } from './config';
 import type { QsaAddendumApplication } from './types';
 
 // CR-005, CR-007: the acknowledgement letter is generated on submission, previewed by the
@@ -34,7 +35,14 @@ export const ACK_WORKFLOW: WorkflowDefinition = {
   ],
 };
 
-// CR-014 Flow 1: evaluation approval — ASD -> DD -> IAC. The CEO never appears here (CR-008).
+// Audit-entry action labels the screens look up to show the latest note for a step.
+export const RETURN_TO_DD_LABEL = 'Return to DD';
+export const APPROVE_FOR_TABLING_LABEL = 'Approve for tabling';
+export const IAC_REMEDIATION_LABEL = 'Record IAC outcome: Remediation requested';
+
+// CR-014 Flow 1: evaluation approval. QCTO feedback 2.1 (29 Oct 2026): ASD evaluates -> DD
+// moderates -> Director Office quality-assures and approves for tabling -> the DD presents at
+// the IAC and records its outcome. The CEO never appears here (CR-008).
 //
 // Row 7 (test findings): the ASD does not choose between `eval-send-to-dd` and
 // `eval-return-to-qp` — the mock/integrations/aiValidation.ts `autoEvaluateQsaChecklist`
@@ -47,8 +55,9 @@ export const EVAL_WORKFLOW: WorkflowDefinition = {
   stages: [
     { id: 'asd-evaluation', label: 'ASD evaluation', allowedRoles: ['ASD'] },
     { id: 'qp-corrections', label: 'Corrections requested from QP', allowedRoles: ['QP'] },
-    { id: 'dd-review', label: 'Deputy Director review', allowedRoles: ['Deputy Director'] },
-    { id: 'iac-review', label: 'IAC review', allowedRoles: ['IAC'] },
+    { id: 'dd-review', label: 'Deputy Director moderation', allowedRoles: ['Deputy Director'] },
+    { id: 'director-office-review', label: 'Director Office quality assurance', allowedRoles: [QASA_DIRECTOR_OFFICE_ROLE] },
+    { id: 'iac-review', label: 'Awaiting IAC outcome', allowedRoles: [IAC_OUTCOME_RECORDER_ROLE] },
     { id: 'approved', label: 'Approved', allowedRoles: [] },
     { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],
@@ -73,33 +82,68 @@ export const EVAL_WORKFLOW: WorkflowDefinition = {
       requiresNote: true,
     },
     {
-      id: 'eval-dd-send-to-iac',
-      label: 'Send to IAC',
+      id: 'eval-dd-send-to-director-office',
+      label: 'Send to Director Office',
       fromStage: 'dd-review',
+      toStage: 'director-office-review',
+      kind: 'advance',
+      requiresDifferentActor: true,
+    },
+    // QCTO feedback 2.1: the engine only compares against the DD who sent it; api.ts also
+    // checks the Director Office person was not the ASD on the same submission.
+    {
+      id: 'eval-do-approve-for-tabling',
+      label: APPROVE_FOR_TABLING_LABEL,
+      fromStage: 'director-office-review',
       toStage: 'iac-review',
       kind: 'advance',
       requiresDifferentActor: true,
     },
-    // CR-016: the IAC can approve, decline, or send for remediation back down the chain to ASD.
+    {
+      id: 'eval-do-return-to-dd',
+      label: RETURN_TO_DD_LABEL,
+      fromStage: 'director-office-review',
+      toStage: 'dd-review',
+      kind: 'send-back',
+      requiresNote: true,
+      requiresDifferentActor: true,
+    },
+    // CR-016 / QCTO feedback 2.1: the DD records the IAC's outcome. Remediation returns the
+    // QASA to the QP, the same way a negative evaluation does.
     {
       id: 'eval-iac-approve',
-      label: 'Approve',
+      label: 'Record IAC outcome: Approved',
       fromStage: 'iac-review',
       toStage: 'approved',
       kind: 'advance',
-      requiresDifferentActor: true,
     },
-    { id: 'eval-iac-decline', label: 'Decline', fromStage: 'iac-review', toStage: 'declined', kind: 'reject', requiresNote: true },
+    {
+      id: 'eval-iac-decline',
+      label: 'Record IAC outcome: Declined',
+      fromStage: 'iac-review',
+      toStage: 'declined',
+      kind: 'reject',
+      requiresNote: true,
+    },
     {
       id: 'eval-iac-remediation',
-      label: 'Send for remediation',
+      label: IAC_REMEDIATION_LABEL,
       fromStage: 'iac-review',
-      toStage: 'asd-evaluation',
+      toStage: 'qp-corrections',
       kind: 'send-back',
       requiresNote: true,
     },
   ],
 };
+
+export const IAC_OUTCOME_ACTION_IDS = ['eval-iac-approve', 'eval-iac-decline', 'eval-iac-remediation'] as const;
+export type IacOutcomeActionId = (typeof IAC_OUTCOME_ACTION_IDS)[number];
+
+export const IAC_OUTCOME_OPTIONS: (IacOutcomeOption & { actionId: IacOutcomeActionId })[] = [
+  { actionId: 'eval-iac-approve', label: 'Approved', commentRequired: false },
+  { actionId: 'eval-iac-decline', label: 'Declined', commentRequired: true },
+  { actionId: 'eval-iac-remediation', label: 'Remediation requested', commentRequired: true },
+];
 
 // CR-014 Flow 2: the outcome letter — generated from a template, viewed, then the CEO signs
 // it. The CEO does not tick any checklist (CR-008) and reaches this flow however the IAC
@@ -163,9 +207,11 @@ export function qsaOverallStatusLabel(app: QsaAddendumApplication): string {
     case 'qp-corrections':
       return 'Corrections requested';
     case 'dd-review':
-      return 'Under Deputy Director review';
+      return 'Under Deputy Director moderation';
+    case 'director-office-review':
+      return 'With Director Office for quality assurance';
     case 'iac-review':
-      return 'With IAC';
+      return 'Approved for tabling — awaiting IAC outcome';
     case 'declined':
       return app.outcomeState.stageId === 'signed' ? 'Declined' : 'Declined — feedback letter pending CEO signature';
     case 'approved':
@@ -191,6 +237,8 @@ export function qsaOverallStatusTone(app: QsaAddendumApplication): QsaStatusTone
       return 'amber';
     case 'dd-review':
       return 'blue';
+    case 'director-office-review':
+      return 'indigo';
     case 'iac-review':
       return 'indigo';
     case 'declined':

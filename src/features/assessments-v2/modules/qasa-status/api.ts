@@ -31,6 +31,8 @@ export function qasaPlainStatus(app: QsaAddendumApplication): string {
       return 'Returned to the QP for corrections';
     case 'dd-review':
       return 'Under review';
+    case 'director-office-review':
+      return 'Under quality assurance';
     case 'iac-review':
       return 'Awaiting IAC decision';
     case 'approved':

@@ -6,6 +6,7 @@ import { Checklist } from '../../../shared/checklist/Checklist';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { useEvaluationAction } from '../hooks';
 import type { QsaAddendumApplication } from '../types';
+import { IAC_REMEDIATION_LABEL } from '../workflow';
 
 // CR-012: corrections only ever travel DD -> ASD -> QP, so this panel is only actionable from
 // the external portal as QP. Internal roles see it read-only (there is no DD -> QP shortcut).
@@ -18,14 +19,19 @@ export function CorrectionsPanel({ application }: { application: QsaAddendumAppl
   const [response, setResponse] = useState('');
   const evaluationAction = useEvaluationAction();
 
-  const latestNote = getAuditTrail('qsa-addendum-evaluation', application.id)
+  // QCTO feedback 2.1: the IAC's "Remediation requested" returns the QASA here too.
+  const latestReturn = getAuditTrail('qsa-addendum-evaluation', application.id)
     .slice()
     .reverse()
-    .find((entry) => entry.action === 'Return to QP for corrections')?.note;
+    .find((entry) => entry.action === 'Return to QP for corrections' || entry.action === IAC_REMEDIATION_LABEL);
+  const latestNote = latestReturn?.note;
+  const fromIac = latestReturn?.action === IAC_REMEDIATION_LABEL;
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-      <p className="text-sm font-semibold text-amber-800">Negative evaluation outcome — corrections requested</p>
+      <p className="text-sm font-semibold text-amber-800">
+        {fromIac ? 'The IAC requested remediation — please correct and resubmit' : 'Negative evaluation outcome — corrections requested'}
+      </p>
       {latestNote && (
         <p className="text-sm text-amber-900 bg-white rounded-xl p-3 border border-amber-100 whitespace-pre-wrap">{latestNote}</p>
       )}

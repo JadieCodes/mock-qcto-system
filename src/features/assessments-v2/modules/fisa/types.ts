@@ -1,4 +1,5 @@
 import type { ChecklistSection } from '../../shared/checklist/types';
+import type { IacMinutesFile } from '../../shared/iac/types';
 import type { WorkflowRecordState } from '../../shared/workflow/types';
 
 // CR-026: FISA is a fully independent process for Skills Programmes. It never joins the
@@ -7,7 +8,7 @@ import type { WorkflowRecordState } from '../../shared/workflow/types';
 
 // ---------------------------------------------------------------------------
 // Stage 1 — FISA Standards (internal-only: Qualifications Development, ASD,
-// Deputy Director, IAC, Qualifications Development Director & Team).
+// Deputy Director, Director Office, CEO; the IAC views).
 // ---------------------------------------------------------------------------
 
 export interface SourceDocument {
@@ -30,12 +31,15 @@ export interface FisaStandardRecord {
   sourceDocuments: SourceDocument[];
   notes: string;
 
-  // stageId: 'qd-submission' | 'asd-evaluation' | 'dd-review' | 'iac-review' | 'qd-signoff'
-  //          | 'approved' | 'declined'
+  // stageId: 'qd-submission' | 'asd-evaluation' | 'dd-review' | 'director-office-review'
+  //          | 'iac-review' | 'ceo-signature' | 'ceo-signature-declined' | 'approved' | 'declined'
   workflow: WorkflowRecordState;
 
   checklist: ChecklistSection[];
   evaluationReport: StandardEvaluationReport;
+  // QCTO feedback 2.9: optional IAC committee minutes, uploaded by the DD with the outcome.
+  // Optional so Standards stored before this change still load.
+  iacMinutesFile?: IacMinutesFile | null;
 
   createdBy: string;
   createdAt: string;

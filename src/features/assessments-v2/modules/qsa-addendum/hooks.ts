@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChecklistSection } from '../../shared/checklist/types';
+import type { AssessmentDetailsInput } from './assessmentDetails';
 import {
   createApplication,
   getApplication,
@@ -10,12 +11,14 @@ import {
   performEvaluationAction,
   performOutcomeAction,
   saveApprovalLetterDraft,
+  saveAssessmentDetails,
   saveDdReviewChecklist,
   saveEvaluationReport,
+  saveIacMinutes,
   saveIacPresentation,
   saveQsaChecklist,
 } from './api';
-import type { ApprovalLetterDraft, EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
+import type { ApprovalLetterDraft, EvaluationReport, IacMinutesFile, NewApplicationInput, QsaAddendumApplication } from './types';
 
 const LIST_KEY = ['qsa-addendum', 'applications'] as const;
 const detailKey = (id: string) => ['qsa-addendum', 'applications', id] as const;
@@ -100,6 +103,18 @@ export function useSaveEvaluationReport() {
 export function useSaveIacPresentation() {
   return useQsaAddendumMutation((args: { applicationId: string; fileName: string }) =>
     saveIacPresentation(args.applicationId, args.fileName),
+  );
+}
+
+export function useSaveAssessmentDetails() {
+  return useQsaAddendumMutation((args: { applicationId: string; input: AssessmentDetailsInput }) =>
+    saveAssessmentDetails(args.applicationId, args.input),
+  );
+}
+
+export function useSaveIacMinutes() {
+  return useQsaAddendumMutation((args: { applicationId: string; file: IacMinutesFile | null }) =>
+    saveIacMinutes(args.applicationId, args.file),
   );
 }
 

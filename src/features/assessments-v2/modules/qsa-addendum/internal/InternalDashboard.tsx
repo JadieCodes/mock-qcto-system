@@ -56,6 +56,7 @@ export function InternalDashboard() {
 
   const asdCount = applications.filter((a) => a.evalState.stageId === 'asd-evaluation' || a.ackState.stageId === 'asd-preview').length;
   const ddCount = applications.filter((a) => a.evalState.stageId === 'dd-review' || a.ackState.stageId === 'dd-review').length;
+  const directorOfficeCount = applications.filter((a) => a.evalState.stageId === 'director-office-review').length;
   const iacCount = applications.filter((a) => a.evalState.stageId === 'iac-review').length;
   const approvedCount = applications.filter((a) => isApprovalLetterFinal(a.approvalState)).length;
 
@@ -65,7 +66,9 @@ export function InternalDashboard() {
         title="QAS Addendum (QASA)"
         description={
           <>
-            <span className="block">Roles: ASD evaluates · DD reviews · IAC decides · CEO signs the feedback letter.</span>
+            <span className="block">
+              Roles: ASD evaluates · DD moderates · Director Office quality-assures and approves for tabling · DD presents at the IAC and records the outcome · CEO signs the feedback letter.
+            </span>
             {isCeoQueue
               ? 'Feedback letters you can sign now — the IAC has approved or declined these QASAs.'
               : 'Open one to act on it — only the actions your current role may perform are shown.'}
@@ -74,10 +77,11 @@ export function InternalDashboard() {
         actions={<ScopeToggle scope={scope} onChange={setScope} />}
       />
 
-      <StatTileGrid>
+      <StatTileGrid className="md:grid-cols-5">
         <StatTile label="With ASD" value={asdCount} />
         <StatTile label="With Deputy Director" value={ddCount} />
-        <StatTile label="With IAC" value={iacCount} />
+        <StatTile label="With Director Office" value={directorOfficeCount} />
+        <StatTile label="Awaiting IAC outcome" value={iacCount} />
         <StatTile label="Approved" value={approvedCount} />
       </StatTileGrid>
 

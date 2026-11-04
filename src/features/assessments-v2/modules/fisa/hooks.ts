@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChecklistSection } from '../../shared/checklist/types';
+import type { IacMinutesFile } from '../../shared/iac/types';
 import {
   createFisaStandard,
   getFisaStandard,
@@ -12,6 +13,7 @@ import {
   performStandardAction,
   saveFisaStandardChecklist,
   saveFisaStandardEvaluationReport,
+  saveFisaStandardIacMinutes,
   saveFisaValidationChecklist,
   startFisaValidation,
   uploadFisaInstrument,
@@ -77,6 +79,12 @@ export function useSaveFisaStandardEvaluationReport() {
 
 export function useStandardAction() {
   return useStandardMutation(performStandardAction);
+}
+
+export function useSaveFisaStandardIacMinutes() {
+  return useStandardMutation((args: { standardId: string; file: IacMinutesFile | null }) =>
+    saveFisaStandardIacMinutes(args.standardId, args.file),
+  );
 }
 
 // ---------------------------------------------------------------------------

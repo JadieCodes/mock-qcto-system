@@ -4,6 +4,14 @@ import type { Role } from '../../types';
 // approval letter. Kept as a constant to change if QCTO ever names someone else.
 export const APPROVAL_LETTER_SIGNER_ROLE: Role = 'Deputy Director';
 
+// QCTO feedback 2.1: the Director Office quality-assures moderated QASAs and decides which go
+// to the IAC. It is the same role (label "Director Office") that moderates RPL Toolkits.
+export const QASA_DIRECTOR_OFFICE_ROLE: Role = 'Director & Team';
+
+// QCTO feedback 2.1: the Deputy Director presents at the IAC and records the committee's
+// outcome — the IAC itself does not act in the system.
+export const IAC_OUTCOME_RECORDER_ROLE: Role = 'Deputy Director';
+
 // Row 7 (test findings): which QSA checklist lines are "mandatory" for the automatic
 // evaluation outcome — a "No" on any of these makes the outcome NEGATIVE. The register
 // doesn't name a smaller mandatory subset, so this defaults to every line being mandatory

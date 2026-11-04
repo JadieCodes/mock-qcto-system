@@ -1,4 +1,5 @@
 import type { ChecklistSection } from '../../shared/checklist/types';
+import type { IacMinutesFile } from '../../shared/iac/types';
 import type { WorkflowRecordState } from '../../shared/workflow/types';
 
 export type SaqaGateOutcome = 'registered' | 'not-registered';
@@ -19,6 +20,31 @@ export interface EvaluationReport {
   // CR-030 assumption: captured here on the ASD's evaluation report until QCTO confirms the
   // real home for this value. Flagged as an open question in progress.md.
   approvedEisaSittingsPerYear: number | null;
+  // QCTO feedback 3.3: trades can sit the EISA "on demand" instead of a fixed number per year.
+  // Optional so reports stored before this change still load (missing = not on demand).
+  eisaSittingsOnDemand?: boolean;
+}
+
+// QCTO feedback 3.3: one component of the external assessment, as approved in the QASA.
+export type AssessmentComponentType = 'written' | 'practical';
+
+export interface AssessmentComponent {
+  id: string;
+  name: string;
+  type: AssessmentComponentType;
+  weightingPercent: number;
+  days: number;
+}
+
+// QCTO feedback 3.3: the simulated "Recommended to Certification" hand-off, recorded when the
+// CEO signs the feedback letter on an approved QASA. A snapshot of the details at that moment.
+export interface QasaCertificationHandoff {
+  recommendedAt: string;
+  recommendedBy: string;
+  components: AssessmentComponent[];
+  approvedEisaSittingsPerYear: number | null;
+  eisaSittingsOnDemand: boolean;
+  validityPeriodYears: number | null;
 }
 
 // Row 13 (test findings): the ASD's editable content for the approval letter, before it goes
@@ -27,6 +53,8 @@ export interface EvaluationReport {
 export interface ApprovalLetterDraft {
   notes: string;
 }
+
+export type { IacMinutesFile };
 
 export interface QsaAddendumApplication {
   id: string;
@@ -65,6 +93,14 @@ export interface QsaAddendumApplication {
   ddReviewChecklist: ChecklistSection[];
   evaluationReport: EvaluationReport;
   iacPresentationFileName: string | null;
+  // QCTO feedback 2.1: optional, so QASAs stored before this change still load.
+  iacMinutesFile?: IacMinutesFile | null;
+
+  // QCTO feedback 3.3: optional and additive — read them through assessmentDetails.ts, which
+  // treats a missing value as "not captured".
+  assessmentComponents?: AssessmentComponent[];
+  validityPeriodYears?: number | null;
+  certificationHandoff?: QasaCertificationHandoff | null;
 }
 
 export interface NewApplicationInput {

@@ -1,4 +1,4 @@
-// Demo seed — QAS Addendum (QASA), items 1.3 and 1.4. Twelve submissions, written in the same
+// Demo seed — QAS Addendum (QASA), items 1.3, 1.4 and 2.1. Thirteen submissions, written in the same
 // shape as qsa-addendum/api.ts (createApplication + the perform*Action functions), with the
 // audit entries and QP notifications each stage implies. Letters are generated from the record
 // state on screen, so they need no stored data. Days are "days ago".
@@ -10,13 +10,21 @@
 //  04  Gas Practitioner                     Johan van der Merwe Approved — approval letter drafted by ASD, awaiting DD signature
 //  05  Millwright                           Nomvula Dlamini     IAC approved — outcome (feedback) letter awaiting CEO signature
 //  06  Boilermaker                          Precious Mahlangu   Declined by IAC — outcome letter signed by the CEO
-//  07  Rigger                               Precious Mahlangu   IAC decision pending (IAC still to upload the summary presentation)
+//  07  Rigger                               Precious Mahlangu   Approved for tabling by the Director Office — DD still to record the IAC outcome
 //  08  Lift Mechanic                        Nomvula Dlamini     DD review (just sent by the ASD)
 //  09  Drainlayer                           Johan van der Merwe Returned to the ASD by the DD, with the DD's comment
 //  10  Electrical Line Mechanic             Nomvula Dlamini     Negative evaluation — corrections requested from the QP
 //  11  Water and Wastewater Process Controller  Johan van der Merwe  Acknowledgement letter with the DD; ASD evaluation in progress
 //  12  Metal Fabricator                     Precious Mahlangu   Just submitted, NOT registered with SAQA (QP uploaded the documents);
 //                                                               acknowledgement letter with the ASD
+//  13  Refrigeration and Air Conditioning Mechanic  Johan van der Merwe  With the Director Office for quality assurance
+//
+// QCTO feedback 2.1: every QASA that reached the IAC went ASD → DD → Director Office (approve for
+// tabling) → the DD records the IAC outcome. The Director Office is Elsabe Steyn or Johannes Pretorius.
+//
+// QCTO feedback 3.3: the five IAC-approved QASAs (01–05) carry assessment components and a
+// validity period; Gas Practitioner (04) sits on demand. When the CEO signs the feedback letter
+// on an approved QASA (01–04), the "Recommended to Certification" hand-off is recorded.
 //
 // Pairings (09-visibility-matrix.md Section 3): Sipho Ndlovu (ASD) / Grace Mokoena (DD) for
 // Nomvula's and Johan's qualifications; Thandeka Zulu (ASD) / Peter Botha (DD) for Precious's.
@@ -26,10 +34,11 @@
 import { buildDdReviewChecklist } from '../ddReviewChecklistItems';
 import { buildQsaAddendumChecklist } from '../qsaChecklistItems';
 import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, OUTCOME_WORKFLOW } from '../../../modules/qsa-addendum/workflow';
-import type { QsaAddendumApplication, RequiredDocument } from '../../../modules/qsa-addendum/types';
+import { buildCertificationHandoff, RECOMMENDED_TO_CERTIFICATION_LABEL } from '../../../modules/qsa-addendum/assessmentDetails';
+import type { AssessmentComponentType, QsaAddendumApplication, RequiredDocument } from '../../../modules/qsa-addendum/types';
 import type { ChecklistSection } from '../../../shared/checklist/types';
 import type { WorkflowDefinition } from '../../../shared/workflow/types';
-import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step, workingDateAgo, type SeedLog } from './helpers';
+import { answerChecklist, audit, createClock, dateOf, notify, seedId, seedPerson, step, workingDateAgo, type SeedLog } from './helpers';
 
 const QASA_ID_GROUP = 1;
 export const QASA_SEED_IDS = {
@@ -69,6 +78,9 @@ interface SubmissionSpec {
   notRegisteredWithSaqa?: boolean;
 }
 
+// [name, type, weighting %, days]
+type ComponentSpec = [string, AssessmentComponentType, number, number];
+
 type ChecklistOverrides = Record<string, { answer: 'yes' | 'no'; comment: string }>;
 
 interface QasaBuilder {
@@ -77,8 +89,11 @@ interface QasaBuilder {
   patch: (fields: Partial<QsaAddendumApplication>) => QasaBuilder;
   acknowledge: (asdId: string, ddId: string, daysAgo: number) => QasaBuilder;
   completeEvaluation: (findings: string, sittingsPerYear: number, overrides?: ChecklistOverrides) => QasaBuilder;
-  toIacDecision: (asdId: string, ddId: string, evalDaysAgo: number, ddDaysAgo: number, findings: string, sittingsPerYear: number) => QasaBuilder;
+  toDirectorOffice: (asdId: string, ddId: string, evalDaysAgo: number, ddDaysAgo: number, findings: string, sittingsPerYear: number) => QasaBuilder;
+  toIacDecision: (asdId: string, ddId: string, doId: string, evalDaysAgo: number, ddDaysAgo: number, findings: string, sittingsPerYear: number) => QasaBuilder;
   iacPresentation: () => QasaBuilder;
+  recordIacOutcome: (actionId: 'eval-iac-approve' | 'eval-iac-decline', ddId: string, daysAgo: number, note?: string) => QasaBuilder;
+  assessmentDetails: (components: ComponentSpec[], validityPeriodYears: number, options?: { onDemand?: boolean }) => QasaBuilder;
   approvalLetterSent: (ceoId: string, asdId: string, ddId: string, ceoDaysAgo: number, letterNotes: string) => QasaBuilder;
 }
 
@@ -120,6 +135,7 @@ function qasaBuilder(log: SeedLog, spec: SubmissionSpec): QasaBuilder {
     ddReviewChecklist: buildDdReviewChecklist(),
     evaluationReport: { findings: '', recommendation: '', approvedEisaSittingsPerYear: null },
     iacPresentationFileName: null,
+    iacMinutesFile: null,
   };
 
   function stateOf(sub: Sub) {
@@ -168,6 +184,11 @@ function qasaBuilder(log: SeedLog, spec: SubmissionSpec): QasaBuilder {
         if (next.stageId === 'signed' && app.evalState.stageId === 'approved' && !app.approvalState) {
           app = { ...app, approvalState: { stageId: 'asd-draft' }, approvalLetterDraft: { notes: '' } };
         }
+        if (next.stageId === 'signed' && app.evalState.stageId === 'approved' && !app.certificationHandoff) {
+          const ceo = seedPerson(actorId);
+          app = { ...app, certificationHandoff: buildCertificationHandoff(app, at, ceo.name) };
+          audit(log, { recordType, recordId: app.id, actor: ceo, action: RECOMMENDED_TO_CERTIFICATION_LABEL, timestamp: at });
+        }
         if (next.stageId === 'signed') {
           notify(log, at, { recipientRole: 'QP', title: 'Feedback letter signed', body: `The feedback letter for "${title}" has been signed and is ready to view.` });
         }
@@ -204,17 +225,58 @@ function qasaBuilder(log: SeedLog, spec: SubmissionSpec): QasaBuilder {
       });
     },
 
-    // ASD → DD → IAC, with the DD checklist complete.
-    toIacDecision(asdId, ddId, evalDaysAgo, ddDaysAgo, findings, sittingsPerYear) {
+    // ASD → DD → Director Office, with the DD checklist complete.
+    toDirectorOffice(asdId, ddId, evalDaysAgo, ddDaysAgo, findings, sittingsPerYear) {
       return builder
         .completeEvaluation(findings, sittingsPerYear)
         .act('eval', 'eval-send-to-dd', asdId, evalDaysAgo)
         .patch({ ddReviewChecklist: answerChecklist(buildDdReviewChecklist(), DD_OK_COMMENT) })
-        .act('eval', 'eval-dd-send-to-iac', ddId, ddDaysAgo);
+        .act('eval', 'eval-dd-send-to-director-office', ddId, ddDaysAgo);
+    },
+
+    // ... then the Director Office approves it for tabling at the IAC, three days later.
+    toIacDecision(asdId, ddId, doId, evalDaysAgo, ddDaysAgo, findings, sittingsPerYear) {
+      return builder
+        .toDirectorOffice(asdId, ddId, evalDaysAgo, ddDaysAgo, findings, sittingsPerYear)
+        .act('eval', 'eval-do-approve-for-tabling', doId, ddDaysAgo - 3);
     },
 
     iacPresentation() {
       return builder.patch({ iacPresentationFileName: `${slug}_QASA_IAC_Summary.pptx` });
+    },
+
+    // The DD records the IAC outcome after the meeting, with the committee minutes attached.
+    recordIacOutcome(actionId, ddId, daysAgo, note) {
+      builder.patch({
+        iacMinutesFile: {
+          fileName: `IAC_Minutes_${slug}.pdf`,
+          fileSize: 184_320,
+          fileType: 'application/pdf',
+          uploadedAt: clock.at(daysAgo, 8),
+          uploadedBy: seedPerson(ddId).name,
+        },
+      });
+      return builder.act('eval', actionId, ddId, daysAgo, note);
+    },
+
+    // QCTO feedback 3.3: the ASD's optional assessment details (weightings add up to 100%).
+    assessmentDetails(components, validityPeriodYears, options) {
+      const total = components.reduce((sum, [, , weighting]) => sum + weighting, 0);
+      if (total !== 100) throw new Error(`Demo seed: "${app.qualificationTitle}" component weightings add up to ${total}%.`);
+      builder.patch({
+        assessmentComponents: components.map(([name, type, weightingPercent, days], i) => ({
+          id: seedId(QASA_ID_GROUP + 100, spec.n * 10 + i),
+          name,
+          type,
+          weightingPercent,
+          days,
+        })),
+        validityPeriodYears,
+      });
+      if (options?.onDemand) {
+        builder.patch({ evaluationReport: { ...app.evaluationReport, approvedEisaSittingsPerYear: null, eisaSittingsOnDemand: true } });
+      }
+      return builder;
     },
 
     // Outcome letter signed by the CEO, then the approval letter: ASD drafts → DD signs → ASD sends.
@@ -237,10 +299,13 @@ const SIPHO = 'sipho-ndlovu';
 const THANDEKA = 'thandeka-zulu';
 const GRACE = 'grace-mokoena';
 const PETER = 'peter-botha';
-const THABISO = 'thabiso-molefe';
-const PALESA = 'palesa-nkosi';
 const ANGELA = 'angela-fourie';
 const DAVID = 'david-molewa';
+const ELSABE = 'elsabe-steyn';
+const JOHANNES = 'johannes-pretorius';
+
+const ON_DEMAND_LETTER_NOTES =
+  'Approved EISA frequency: on demand. Please propose the EISA dates on the EISA Calendar when learners are ready, and book the instrument validation with the ASD.';
 
 function letterNotes(sittingsPerYear: number): string {
   return `Approved EISA frequency: ${sittingsPerYear} sitting(s) per year. Please propose the EISA dates on the EISA Calendar and book the instrument validation with the ASD.`;
@@ -251,58 +316,63 @@ export function seedQasaSubmissions(log: SeedLog): QsaAddendumApplication[] {
 
   const electrical = b({ n: 1, qpId: NOMVULA, qualificationTitle: 'Electrical Trades', saqaId: '91761', registeredYearsAgo: 6, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 160 })
     .acknowledge(SIPHO, GRACE, 158)
-    .toIacDecision(SIPHO, GRACE, 140, 133, 'All 44 lines met. The assessment model (written and practical) matches the external assessment specifications and the component weightings add up to 100%.', 3)
+    .toIacDecision(SIPHO, GRACE, ELSABE, 140, 133, 'All 44 lines met. The assessment model (written and practical) matches the external assessment specifications and the component weightings add up to 100%.', 3)
+    .assessmentDetails([['Knowledge assessment', 'written', 60, 1], ['Practical assessment', 'practical', 40, 1]], 3)
     .iacPresentation()
-    .act('eval', 'eval-iac-approve', THABISO, 120)
+    .recordIacOutcome('eval-iac-approve', GRACE, 120)
     .approvalLetterSent(ANGELA, SIPHO, GRACE, 115, letterNotes(3));
 
   const welding = b({ n: 2, qpId: PRECIOUS, qualificationTitle: 'Welding', saqaId: '91845', registeredYearsAgo: 5, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 150 })
     .acknowledge(THANDEKA, PETER, 148)
-    .toIacDecision(THANDEKA, PETER, 128, 121, 'Meets every requirement. Practical tasks are clearly mapped to the exit level outcomes and the marking guidelines are complete.', 2)
+    .toIacDecision(THANDEKA, PETER, JOHANNES, 128, 121, 'Meets every requirement. Practical tasks are clearly mapped to the exit level outcomes and the marking guidelines are complete.', 2)
+    .assessmentDetails([['Knowledge assessment', 'written', 30, 1], ['Welding practical tasks', 'practical', 70, 2]], 3)
     .iacPresentation()
-    .act('eval', 'eval-iac-approve', PALESA, 108)
+    .recordIacOutcome('eval-iac-approve', PETER, 108)
     .approvalLetterSent(DAVID, THANDEKA, PETER, 104, letterNotes(2));
 
   const plumbing = b({ n: 3, qpId: JOHAN, qualificationTitle: 'Plumbing', saqaId: '91802', registeredYearsAgo: 6, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 130 })
     .acknowledge(SIPHO, GRACE, 128)
-    .toIacDecision(SIPHO, GRACE, 105, 97, 'Meets every requirement. Security and distribution arrangements for the EISA are clearly described.', 2)
+    .toIacDecision(SIPHO, GRACE, JOHANNES, 105, 97, 'Meets every requirement. Security and distribution arrangements for the EISA are clearly described.', 2)
+    .assessmentDetails([['Knowledge assessment', 'written', 40, 1], ['Installation and repair practical', 'practical', 60, 2]], 3)
     .iacPresentation()
-    .act('eval', 'eval-iac-approve', THABISO, 85)
+    .recordIacOutcome('eval-iac-approve', GRACE, 85)
     .approvalLetterSent(ANGELA, SIPHO, GRACE, 80, letterNotes(2));
 
   const gas = b({ n: 4, qpId: JOHAN, qualificationTitle: 'Gas Practitioner', saqaId: '101941', registeredYearsAgo: 3, nqfLevel: 'Level 4', credits: '240', submittedDaysAgo: 110 })
     .acknowledge(SIPHO, GRACE, 108)
-    .toIacDecision(SIPHO, GRACE, 62, 50, 'Meets every requirement. The safety-critical practical tasks carry the required minimum weighting.', 2)
+    .toIacDecision(SIPHO, GRACE, ELSABE, 62, 50, 'Meets every requirement. The safety-critical practical tasks carry the required minimum weighting.', 2)
+    .assessmentDetails([['Knowledge assessment', 'written', 40, 1], ['Safety-critical practical tasks', 'practical', 60, 1]], 3, { onDemand: true })
     .iacPresentation()
-    .act('eval', 'eval-iac-approve', THABISO, 30)
+    .recordIacOutcome('eval-iac-approve', GRACE, 30)
     .act('outcome', 'outcome-sign', DAVID, 24)
-    .patch({ approvalLetterDraft: { notes: letterNotes(2) } })
+    .patch({ approvalLetterDraft: { notes: ON_DEMAND_LETTER_NOTES } })
     .act('approval', 'approval-submit-to-dd', SIPHO, 4);
 
   // Item 1.4: IAC has approved — the outcome (feedback) letter now waits for the CEO.
   const millwright = b({ n: 5, qpId: NOMVULA, qualificationTitle: 'Millwright', saqaId: '91890', registeredYearsAgo: 4, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 75 })
     .acknowledge(SIPHO, GRACE, 73)
-    .toIacDecision(SIPHO, GRACE, 40, 30, 'Meets every requirement. Mechanical and electrical components are both covered in the practical EISA.', 2)
+    .toIacDecision(SIPHO, GRACE, ELSABE, 40, 30, 'Meets every requirement. Mechanical and electrical components are both covered in the practical EISA.', 2)
+    .assessmentDetails([['Knowledge assessment', 'written', 50, 1], ['Mechanical and electrical practical', 'practical', 50, 2]], 3)
     .iacPresentation()
-    .act('eval', 'eval-iac-approve', PALESA, 6);
+    .recordIacOutcome('eval-iac-approve', GRACE, 6);
 
   const boilermaker = b({ n: 6, qpId: PRECIOUS, qualificationTitle: 'Boilermaker', saqaId: '91786', registeredYearsAgo: 5, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 120 })
     .acknowledge(THANDEKA, PETER, 118)
-    .toIacDecision(THANDEKA, PETER, 70, 60, 'All lines met on paper; the ASD flagged the practical weighting for the IAC to consider.', 2)
+    .toIacDecision(THANDEKA, PETER, JOHANNES, 70, 60, 'All lines met on paper; the ASD flagged the practical weighting for the IAC to consider.', 2)
     .iacPresentation()
-    .act(
-      'eval',
+    .recordIacOutcome(
       'eval-iac-decline',
-      THABISO,
+      PETER,
       45,
       'The practical component carries 30% of the final mark, but the curriculum requires the practical to carry at least 60%. The QP may develop a revised QASA and submit it again.',
     )
     .act('outcome', 'outcome-sign', ANGELA, 41);
 
-  // IAC decision pending: the IAC member still has to upload the summary presentation, then decide.
+  // Approved for tabling: the DD presents at the IAC, then records the outcome (QCTO feedback 2.1).
   const rigger = b({ n: 7, qpId: PRECIOUS, qualificationTitle: 'Rigger', saqaId: '98987', registeredYearsAgo: 3, nqfLevel: 'Level 3', credits: '180', submittedDaysAgo: 70 })
     .acknowledge(THANDEKA, PETER, 68)
-    .toIacDecision(THANDEKA, PETER, 25, 14, 'Meets every requirement. Load-calculation tasks are well moderated.', 2);
+    .toIacDecision(THANDEKA, PETER, ELSABE, 25, 14, 'Meets every requirement. Load-calculation tasks are well moderated.', 2)
+    .iacPresentation();
 
   const liftMechanic = b({ n: 8, qpId: NOMVULA, qualificationTitle: 'Lift Mechanic', saqaId: '91821', registeredYearsAgo: 4, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 45 })
     .acknowledge(SIPHO, GRACE, 43)
@@ -359,9 +429,14 @@ export function seedQasaSubmissions(log: SeedLog): QsaAddendumApplication[] {
     notRegisteredWithSaqa: true,
   });
 
+  // QCTO feedback 2.1: moderated by the DD, now with the Director Office to approve for tabling.
+  const refrigeration = b({ n: 13, qpId: JOHAN, qualificationTitle: 'Refrigeration and Air Conditioning Mechanic', saqaId: '91794', registeredYearsAgo: 4, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 40 })
+    .acknowledge(SIPHO, GRACE, 38)
+    .toDirectorOffice(SIPHO, GRACE, 12, 5, 'All 44 lines met. Refrigerant handling and system commissioning are both assessed in the practical EISA.', 2);
+
   // Newest first, the same order createApplication() leaves the list in.
   return [
-    electrical, welding, plumbing, gas, millwright, boilermaker, rigger, liftMechanic, drainlayer, lineMechanic, waterProcess, metalFabricator,
+    electrical, welding, plumbing, gas, millwright, boilermaker, rigger, liftMechanic, drainlayer, lineMechanic, waterProcess, metalFabricator, refrigeration,
   ]
     .map((builder) => builder.app())
     .sort((x, y) => y.submissionDate.localeCompare(x.submissionDate));

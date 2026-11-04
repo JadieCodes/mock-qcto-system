@@ -134,7 +134,7 @@ QCTO: "The information regarding the QASA status and approved instruments needs 
 - **Who:** every role on both portals — QP and SDP (external); ASD, Assistant Director, Deputy Director, Director, Domain Director, Chief Director, IAC, CEO, Sub Domain Admin, Director Office and Qualifications Development (internal). `[ASSUMPTION]` "All system users" includes SDPs, who get the same status-only view.
 - **Where:** its own menu item, "QASA Status and Approved Instruments" (path `qasa-status`), right after EISA Instrument Validation on both portals. Granted in one place: `MODULES_VISIBLE_TO_ALL_ROLES` in `src/features/assessments-v2/shared/visibility/config.ts`, read by `isModuleVisible()`. No role is special-cased in the screen.
 - **What it shows (read-only):**
-  - *QASA status* — qualification, QP, and a plain-language current status (Under evaluation · Returned to the QP for corrections · Under review · Awaiting IAC decision · Approved by the IAC — feedback letter awaiting CEO signature · Approved — approval letter being finalised · Approved · Declined by the IAC — feedback letter awaiting CEO signature · Declined).
+  - *QASA status* — qualification, QP, and a plain-language current status (Under evaluation · Returned to the QP for corrections · Under review · Under quality assurance (added with 2.1) · Awaiting IAC decision · Approved by the IAC — feedback letter awaiting CEO signature · Approved — approval letter being finalised · Approved · Declined by the IAC — feedback letter awaiting CEO signature · Declined).
   - *Approved instruments* — EISA instrument validations whose outcome is Approved or Approved with conditions: qualification, validation date, and the conditions (or "None").
 - **What it never shows:** documents, checklists, evaluations, letters, comments/notes other than validation conditions, audit trail, or any link or button into a QASA or validation record. The view's api (`modules/qasa-status/api.ts`) returns only those columns.
 - **Unchanged:** every role's access to every other module, including QASA itself. SDPs still cannot open the QASA or EISA Instrument Validation modules or records (Table A). The ASD's own "Status Dashboard" tab inside EISA Instrument Validation stays as it was (an ASD working list of every validation, in progress or not).
@@ -145,6 +145,22 @@ QCTO: "The information regarding the QASA status and approved instruments needs 
 - **Where:** its own internal menu item, "FISA Standards Status" (path `fisa-status`), right after FISA.
 - **What it shows (read-only):** every FISA Standard, with its Skills Programme, current stage and status. No documents, checklists, evaluation reports, notes, audit trail, actions, or links into a record.
 - **Unchanged:** every role's access to the FISA module itself (Table B), including Qualifications Development's own FISA access.
+
+### QCTO feedback 2.1 — QASA Director Office stage (answered 29 Oct 2026, built 4 Nov 2026)
+
+- **Director Office** (`'Director & Team'`): now also **See unit** on QASA (team `qsa-evaluation` added in `config/roles.ts`). Acts at `director-office-review` only: approve for tabling, or return to the DD with a comment. Must not be the ASD or DD of the same QASA.
+- **Deputy Director:** moderates (`dd-review`) and also records the IAC outcome (`iac-review`): Approved, Declined or Remediation requested, with a comment and optional committee minutes.
+- **IAC:** still **See unit** on QASA, but view only — it no longer acts. This replaces the IAC cell in Table B for QASA.
+- **Section 2, QASA approvers:** ASD → Deputy Director → Director Office → Deputy Director (records the IAC outcome); feedback letter: CEO signs.
+
+### QCTO feedback 2.9 — FISA Standards on the QASA route (answered 29 Oct 2026, built 4 Nov 2026)
+
+- **Director Office:** now **See unit** on FISA (team `fisa`). Acts at `director-office-review` on FISA Standards only. Must not be the ASD or DD of the same Standard.
+- **Deputy Director:** moderates and records the IAC outcome on FISA Standards.
+- **CEO:** now on FISA (team `fisa`), replacing Table B's "None": "My items" is the FISA Standard outcome letters awaiting signature (approved or declined by the IAC); "All in my team" shows every FISA record, view only. This replaces the "FISA's final sign-off is Qualifications Development, never the CEO" note.
+- **IAC:** view only on FISA Standards.
+- **Qualifications Development:** creates the Standard and gets it back on remediation; no longer signs off. Its read-only "FISA Standards Status" (3.8) is unchanged.
+- **Section 2, FISA Standards approvers:** ASD → Deputy Director → Director Office → Deputy Director (records the IAC outcome) → CEO signs the outcome letter.
 
 ### QCTO feedback 2.12 — external Site Visits removed (28 Oct 2026, replaces the QP-sees-own-visits rule)
 

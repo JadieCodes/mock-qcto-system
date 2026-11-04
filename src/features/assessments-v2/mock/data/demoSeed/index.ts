@@ -1,6 +1,6 @@
 // Demo seed (QCTO feedback Batch C) — so every module opens with records at every stage after
 // "Reset demo data". Records per module are listed at the top of each file:
-//   qasa.ts                  12 QASA submissions (phase C1)
+//   qasa.ts                  13 QASA submissions (phase C1; the 13th added in Batch E)
 //   eisaCalendar.ts          3 QP batches, 24 sittings — 7 from the batches, 17 added by the ASD (phases C1, C2)
 //   instrumentValidation.ts  4 EISA Instrument Validations (phase C1)
 //   eisaRegistration.ts      20 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)

@@ -38,14 +38,14 @@ export const USERS: AppUser[] = [
   { id: 'thabiso-molefe', name: 'Thabiso Molefe', role: 'IAC', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
   { id: 'palesa-nkosi', name: 'Palesa Nkosi', role: 'IAC', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
 
-  { id: 'angela-fourie', name: 'Angela Fourie', role: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit'] },
-  { id: 'david-molewa', name: 'David Molewa', role: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit'] },
+  { id: 'angela-fourie', name: 'Angela Fourie', role: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
+  { id: 'david-molewa', name: 'David Molewa', role: 'CEO', teams: ['qsa-evaluation', 'rpl-toolkit', 'fisa'] },
 
   { id: 'karabo-sithole', name: 'Karabo Sithole', role: 'Sub Domain Admin', teams: ['site-visits'] },
   { id: 'katlego-mahlangu', name: 'Katlego Mahlangu', role: 'Sub Domain Admin', teams: ['site-visits'] },
 
-  { id: 'elsabe-steyn', name: 'Elsabe Steyn', role: 'Director & Team', teams: ['rpl-toolkit'] },
-  { id: 'johannes-pretorius', name: 'Johannes Pretorius', role: 'Director & Team', teams: ['rpl-toolkit'] },
+  { id: 'elsabe-steyn', name: 'Elsabe Steyn', role: 'Director & Team', teams: ['rpl-toolkit', 'qsa-evaluation', 'fisa'] },
+  { id: 'johannes-pretorius', name: 'Johannes Pretorius', role: 'Director & Team', teams: ['rpl-toolkit', 'qsa-evaluation', 'fisa'] },
 
   { id: 'fundiswa-ngcobo', name: 'Fundiswa Ngcobo', role: 'Qualifications Development', teams: ['fisa'] },
   { id: 'ayesha-patel', name: 'Ayesha Patel', role: 'Qualifications Development', teams: ['fisa'] },

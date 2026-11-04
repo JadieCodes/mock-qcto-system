@@ -11,12 +11,13 @@ const LETTER_TITLES: Record<LetterKind, string> = {
 };
 
 // What an outcome letter is about. QASA is the default; the RPL Toolkit names its toolkit
-// instead (Batch A3).
-export type LetterSubject = 'qasa' | 'rpl-toolkit';
+// instead (Batch A3), and FISA names the Skills Programme's standard (QCTO feedback 2.9).
+export type LetterSubject = 'qasa' | 'rpl-toolkit' | 'fisa-standard';
 
 const OUTCOME_SUBJECT: Record<LetterSubject, (title: string) => string> = {
   qasa: (title) => `the QASA for "${title}"`,
   'rpl-toolkit': (title) => `the RPL toolkit "${title}"`,
+  'fisa-standard': (title) => `the FISA Standard for "${title}"`,
 };
 
 const TEMPLATES: Record<LetterKind, (data: LetterData, subject: LetterSubject) => string> = {

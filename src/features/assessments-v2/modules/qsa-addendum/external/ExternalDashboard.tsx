@@ -23,7 +23,7 @@ export function ExternalDashboard() {
 
   const correctionsCount = applications.filter((a) => a.evalState.stageId === 'qp-corrections').length;
   const underReviewCount = applications.filter((a) =>
-    ['asd-evaluation', 'dd-review', 'iac-review'].includes(a.evalState.stageId),
+    ['asd-evaluation', 'dd-review', 'director-office-review', 'iac-review'].includes(a.evalState.stageId),
   ).length;
   const approvedCount = applications.filter((a) => isApprovalLetterFinal(a.approvalState)).length;
 

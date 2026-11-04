@@ -1,9 +1,12 @@
-// PM-10: final sign-off on FISA Standards is the Qualifications Development Director & Team —
-// not the Assessments CEO. There is no separate role for "Director & Team" inside the
-// Qualifications Development domain in this build, so the existing 'Qualifications Development'
-// role (already wired to the 'fisa' team in config/roles.ts) performs both the initial
-// document supply and this final sign-off.
-export const FISA_STANDARD_SIGNOFF_ROLE = 'Qualifications Development' as const;
+import type { Role } from '../../types';
+
+// QCTO feedback 2.9 (29 Oct 2026): FISA Standards follow the QASA route. The Director Office
+// quality-assures and approves for tabling, the Deputy Director presents at the IAC and records
+// its outcome, and the CEO signs the outcome letter. This replaces PM-10's Qualifications
+// Development sign-off.
+export const FISA_DIRECTOR_OFFICE_ROLE: Role = 'Director & Team';
+export const FISA_IAC_OUTCOME_RECORDER_ROLE: Role = 'Deputy Director';
+export const FISA_OUTCOME_LETTER_SIGNER_ROLE: Role = 'CEO';
 
 // PM-01/PM-11: the Assistant Director allocates a submitted FISA instrument to an ASD. This
 // build has no individual logins, so "allocating to an ASD" is recorded as a free-text name

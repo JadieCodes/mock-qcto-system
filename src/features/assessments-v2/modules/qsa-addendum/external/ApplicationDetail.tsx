@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { Modal } from '../../../shared/ui/Modal';
+import { AssessmentDetailsCard } from '../components/AssessmentDetailsCard';
 import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
@@ -70,6 +71,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                   </div>
                 </div>
 
+                <AssessmentDetailsCard application={application} />
                 <DocumentsList documents={application.documents} />
 
                 {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}

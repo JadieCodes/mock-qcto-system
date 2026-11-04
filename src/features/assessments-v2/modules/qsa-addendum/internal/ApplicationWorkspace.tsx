@@ -18,6 +18,9 @@ import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FieldError, ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AssessmentDetailsCard } from '../components/AssessmentDetailsCard';
+import { AssessmentDetailsEditor } from '../components/AssessmentDetailsEditor';
 import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
@@ -32,10 +35,21 @@ import {
   useSaveApprovalLetterDraft,
   useSaveDdReviewChecklist,
   useSaveEvaluationReport,
+  useSaveIacMinutes,
   useSaveIacPresentation,
   useSaveQsaChecklist,
 } from '../hooks';
-import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, OUTCOME_WORKFLOW } from '../workflow';
+import {
+  ACK_WORKFLOW,
+  APPROVAL_LETTER_WORKFLOW,
+  APPROVE_FOR_TABLING_LABEL,
+  EVAL_WORKFLOW,
+  IAC_OUTCOME_OPTIONS,
+  IAC_REMEDIATION_LABEL,
+  OUTCOME_WORKFLOW,
+  RETURN_TO_DD_LABEL,
+} from '../workflow';
+import { IacMinutesFileLine, IacOutcomeForm } from '../../../shared/iac/IacOutcomeForm';
 import type { QsaAddendumApplication } from '../types';
 import type { Role } from '../../../types';
 
@@ -136,6 +150,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
   const saveDdChecklist = useSaveDdReviewChecklist();
   const saveReport = useSaveEvaluationReport();
   const savePresentation = useSaveIacPresentation();
+  const saveMinutes = useSaveIacMinutes();
   const saveApprovalDraft = useSaveApprovalLetterDraft();
 
   const checklistComplete = isChecklistComplete(application.qsaChecklist, true);
@@ -146,8 +161,9 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
   if (application.evaluationReport.recommendation === '') {
     reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
   }
-  if (application.evaluationReport.approvedEisaSittingsPerYear == null) {
-    reportIssues.push({ field: 'approvedEisaSittingsPerYear', message: 'Enter the approved EISA sittings per year.' });
+  const sittingsOnDemand = application.evaluationReport.eisaSittingsOnDemand ?? false;
+  if (application.evaluationReport.approvedEisaSittingsPerYear == null && !sittingsOnDemand) {
+    reportIssues.push({ field: 'approvedEisaSittingsPerYear', message: 'Enter the approved EISA sittings per year, or tick "On demand".' });
   }
   const reportComplete = reportIssues.length === 0;
   const ddChecklistComplete = isChecklistComplete(application.ddReviewChecklist, true);
@@ -167,9 +183,19 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
   // keep seeing their review (checklist + reason) even after it loops back to asd-evaluation
   // for a redo — not just while dd-review/iac-review is the current stage.
   const ddReviewTouched = application.ddReviewChecklist.some((section) => section.items.some((item) => item.answer !== null));
-  const iacTouched = !!application.iacPresentationFileName;
+  const iacTouched = !!application.iacPresentationFileName || !!application.iacMinutesFile;
   const showDdBox = application.evalState.stageId === 'dd-review' || ddReviewTouched;
   const showIacBox = application.evalState.stageId === 'iac-review' || decided || iacTouched;
+  const ddRecordsIacOutcome = canActInStage(EVAL_WORKFLOW, 'iac-review', role) && application.evalState.stageId === 'iac-review';
+
+  const evalTrailNewestFirst = getAuditTrail('qsa-addendum-evaluation', application.id).slice().reverse();
+  const tablingEntry = evalTrailNewestFirst.find((entry) => entry.action === APPROVE_FOR_TABLING_LABEL);
+  const showDirectorOfficeBox = application.evalState.stageId === 'director-office-review' || !!tablingEntry;
+  const latestDoReturnNote =
+    application.evalState.stageId === 'dd-review' ? evalTrailNewestFirst.find((entry) => entry.action === RETURN_TO_DD_LABEL)?.note : undefined;
+  const iacOutcomeEntry = decided
+    ? evalTrailNewestFirst.find((entry) => EVAL_WORKFLOW.actions.some((a) => a.label === entry.action && IAC_OUTCOME_OPTIONS.some((o) => o.actionId === a.id)))
+    : undefined;
 
   // Row 10 (test finding B-08): the DD's reason for sending the acknowledgement letter back
   // must be captured and shown to the ASD, not just silently bounced.
@@ -193,7 +219,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
       ? getAuditTrail('qsa-addendum-evaluation', application.id)
           .slice()
           .reverse()
-          .find((entry) => entry.action === 'Send for remediation')?.note
+          .find((entry) => entry.action === IAC_REMEDIATION_LABEL)?.note
       : undefined;
 
   const latestApprovalDeclineNote =
@@ -238,6 +264,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
             <p className="text-sm text-amber-900">{application.notes}</p>
           </div>
         )}
+        <AssessmentDetailsCard application={application} />
         <DocumentsList documents={application.documents} />
       </TabsContent>
 
@@ -329,7 +356,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
               <Input
                 type="number"
                 min={0}
-                disabled={!asdEditable}
+                disabled={!asdEditable || sittingsOnDemand}
                 value={application.evaluationReport.approvedEisaSittingsPerYear ?? ''}
                 onChange={(e) =>
                   saveReport.mutate({
@@ -341,10 +368,31 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
                   })
                 }
               />
+              {/* QCTO feedback 3.3: trades can sit the EISA on demand. */}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`on-demand-${application.id}`}
+                  checked={sittingsOnDemand}
+                  disabled={!asdEditable}
+                  onCheckedChange={(checked) =>
+                    saveReport.mutate({
+                      applicationId: application.id,
+                      report: {
+                        ...application.evaluationReport,
+                        eisaSittingsOnDemand: checked === true,
+                        approvedEisaSittingsPerYear: checked === true ? null : application.evaluationReport.approvedEisaSittingsPerYear,
+                      },
+                    })
+                  }
+                />
+                <Label htmlFor={`on-demand-${application.id}`} className="font-normal">On demand</Label>
+              </div>
               {asdEditable && <FieldError message={reportIssues.find((i) => i.field === 'approvedEisaSittingsPerYear')?.message} />}
             </div>
           </div>
         </div>
+
+        {asdEditable ? <AssessmentDetailsEditor application={application} /> : <AssessmentDetailsCard application={application} />}
 
         {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}
 
@@ -406,7 +454,13 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
 
         {showDdBox && (
           <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Deputy Director Review</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Deputy Director Moderation</p>
+            {latestDoReturnNote && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Director Office — reason for returning</p>
+                <p className="whitespace-pre-wrap">{latestDoReturnNote}</p>
+              </div>
+            )}
             <Checklist
               sections={application.ddReviewChecklist}
               readonly={!ddEditable}
@@ -417,7 +471,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
                 definition={EVAL_WORKFLOW}
                 stageId={application.evalState.stageId}
                 role={role}
-                disabledActionIds={!ddChecklistComplete ? ['eval-dd-send-to-iac'] : []}
+                disabledActionIds={!ddChecklistComplete ? ['eval-dd-send-to-director-office'] : []}
                 onRun={(actionId, note) =>
                   evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
                 }
@@ -426,40 +480,82 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           </div>
         )}
 
+        {/* QCTO feedback 2.1: the Director Office quality-assures and decides which QASAs are tabled at the IAC. */}
+        {showDirectorOfficeBox && (
+          <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Director Office Quality Assurance</p>
+            {application.evalState.stageId === 'director-office-review' ? (
+              <>
+                <p className="text-sm text-gray-600">
+                  Review the ASD evaluation and the Deputy Director moderation above, then approve this QASA for tabling at the IAC or return it to the Deputy Director with a comment.
+                </p>
+                <ActionBar
+                  definition={EVAL_WORKFLOW}
+                  stageId={application.evalState.stageId}
+                  role={role}
+                  onRun={(actionId, note) =>
+                    evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
+                  }
+                />
+              </>
+            ) : (
+              tablingEntry && <p className="text-sm text-emerald-700 font-medium">Approved for tabling by {tablingEntry.actorName}.</p>
+            )}
+          </div>
+        )}
+
         {showIacBox && (
           <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">IAC Summary Presentation</p>
-            {role === 'IAC' && application.evalState.stageId === 'iac-review' ? (
-              <Input
-                type="file"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) savePresentation.mutate({ applicationId: application.id, fileName: file.name });
-                }}
-              />
-            ) : null}
-            <p className="text-sm text-gray-700">
-              {application.iacPresentationFileName ? (
-                <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{application.iacPresentationFileName}</span>
-              ) : (
-                <span className="text-gray-400">No presentation uploaded yet.</span>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">IAC Outcome</p>
+            <div className="space-y-1.5">
+              <Label htmlFor={ddRecordsIacOutcome ? `iac-presentation-${application.id}` : undefined}>Summary presentation (optional)</Label>
+              <p className="text-sm text-gray-700">
+                {application.iacPresentationFileName ? (
+                  <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{application.iacPresentationFileName}</span>
+                ) : (
+                  <span className="text-xs text-gray-400">No presentation uploaded.</span>
+                )}
+              </p>
+              {ddRecordsIacOutcome && (
+                <Input
+                  id={`iac-presentation-${application.id}`}
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) savePresentation.mutate({ applicationId: application.id, fileName: file.name });
+                  }}
+                />
               )}
-            </p>
-            {application.evalState.stageId === 'iac-review' && (
-              <ActionBar
-                definition={EVAL_WORKFLOW}
-                stageId={application.evalState.stageId}
-                role={role}
-                disabledActionIds={!application.iacPresentationFileName ? ['eval-iac-approve', 'eval-iac-decline', 'eval-iac-remediation'] : []}
-                onRun={(actionId, note) =>
+            </div>
+            {ddRecordsIacOutcome ? (
+              <IacOutcomeForm
+                idPrefix={`qasa-iac-${application.id}`}
+                options={IAC_OUTCOME_OPTIONS}
+                minutesFile={application.iacMinutesFile}
+                uploaderName={actorName}
+                busy={evaluationAction.isPending || saveMinutes.isPending}
+                onSaveMinutes={(file) => saveMinutes.mutate({ applicationId: application.id, file })}
+                onRecord={(actionId, note) =>
                   evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
                 }
               />
+            ) : (
+              <div className="space-y-1.5">
+                <p className="text-xs text-gray-500">Committee minutes</p>
+                <IacMinutesFileLine file={application.iacMinutesFile} />
+              </div>
+            )}
+            {application.evalState.stageId === 'iac-review' && !ddRecordsIacOutcome && (
+              <p className="text-sm text-gray-500">Approved for tabling. The Deputy Director records the IAC outcome after the meeting.</p>
             )}
             {decided && (
-              <p className={`text-sm font-semibold ${application.evalState.stageId === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>
-                {application.evalState.stageId === 'approved' ? 'Approved by IAC.' : 'Declined by IAC.'}
-              </p>
+              <div className="space-y-1">
+                <p className={`text-sm font-semibold ${application.evalState.stageId === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {application.evalState.stageId === 'approved' ? 'IAC outcome: Approved' : 'IAC outcome: Declined'}
+                  {iacOutcomeEntry && <span className="font-normal text-gray-500"> — recorded by {iacOutcomeEntry.actorName}</span>}
+                </p>
+                {iacOutcomeEntry?.note && <p className="text-sm text-gray-700 whitespace-pre-wrap">{iacOutcomeEntry.note}</p>}
+              </div>
             )}
           </div>
         )}

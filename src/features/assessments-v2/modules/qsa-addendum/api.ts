@@ -1,3 +1,12 @@
+import { appendAuditEntry } from '../../shared/audit/auditLog';
+import { DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE, hasActedInRoles } from '../../shared/iac/differentPerson';
+import {
+  buildCertificationHandoff,
+  componentsOf,
+  RECOMMENDED_TO_CERTIFICATION_LABEL,
+  validateAssessmentDetails,
+  type AssessmentDetailsInput,
+} from './assessmentDetails';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { buildDdReviewChecklist } from '../../mock/data/ddReviewChecklistItems';
 import { buildQsaAddendumChecklist } from '../../mock/data/qsaChecklistItems';
@@ -8,7 +17,7 @@ import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
 import { QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from './config';
 import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from './workflow';
-import type { ApprovalLetterDraft, EvaluationReport, NewApplicationInput, QsaAddendumApplication } from './types';
+import type { ApprovalLetterDraft, EvaluationReport, IacMinutesFile, NewApplicationInput, QsaAddendumApplication } from './types';
 
 export const KEY = 'qsaAddendum:applications';
 
@@ -52,6 +61,7 @@ export async function createApplication(input: NewApplicationInput): Promise<Qsa
     ddReviewChecklist: buildDdReviewChecklist(),
     evaluationReport: { findings: '', recommendation: '', approvedEisaSittingsPerYear: null },
     iacPresentationFileName: null,
+    iacMinutesFile: null,
   };
   const all = loadAll();
   saveAll([app, ...all]);
@@ -107,8 +117,12 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
     if (!app.evaluationReport.findings.trim() || !app.evaluationReport.recommendation) {
       throw new Error('Complete the evaluation report (findings and recommendation) before the evaluation outcome can be generated.');
     }
-    if (app.evaluationReport.approvedEisaSittingsPerYear == null) {
-      throw new Error('Record the approved EISA sittings per year before the evaluation outcome can be generated.');
+    if (app.evaluationReport.approvedEisaSittingsPerYear == null && !app.evaluationReport.eisaSittingsOnDemand) {
+      throw new Error('Record the approved EISA sittings per year (or mark them as on demand) before the evaluation outcome can be generated.');
+    }
+    const detailIssues = validateAssessmentDetails({ components: componentsOf(app), validityPeriodYears: app.validityPeriodYears ?? null });
+    if (detailIssues.length > 0) {
+      throw new Error(detailIssues.map((i) => i.message).join(' '));
     }
     const outcome = autoEvaluateQsaChecklist(app.qsaChecklist, QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS);
     const expectedActionId = outcome === 'negative' ? 'eval-return-to-qp' : 'eval-send-to-dd';
@@ -119,14 +133,14 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
       );
     }
   }
-  if (params.actionId === 'eval-dd-send-to-iac' && !isChecklistComplete(app.ddReviewChecklist, true)) {
-    throw new Error('Every Deputy Director checklist line needs an answer and a comment before sending to the IAC.');
+  if (params.actionId === 'eval-dd-send-to-director-office' && !isChecklistComplete(app.ddReviewChecklist, true)) {
+    throw new Error('Every Deputy Director checklist line needs an answer and a comment before sending to the Director Office.');
   }
   if (
-    (params.actionId === 'eval-iac-approve' || params.actionId === 'eval-iac-decline' || params.actionId === 'eval-iac-remediation') &&
-    !app.iacPresentationFileName
+    app.evalState.stageId === 'director-office-review' &&
+    hasActedInRoles('qsa-addendum-evaluation', app.id, params.actorId, ['ASD', 'Deputy Director'])
   ) {
-    throw new Error('Upload the summary presentation before recording an IAC decision.');
+    throw new Error(DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE);
   }
 
   const nextState = performAction({
@@ -144,13 +158,21 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
   saveAll(replace(all, updated));
 
   if (nextState.stageId === 'qp-corrections') {
-    addNotification({
-      recipientRole: 'QP',
-      title: 'Negative evaluation outcome — corrections needed',
-      body: params.note
-        ? `The evaluation of "${app.qualificationTitle}" was negative. ASD notes: ${params.note}`
-        : `The evaluation of "${app.qualificationTitle}" was negative. See the evaluation report for details and correct and resubmit.`,
-    });
+    addNotification(
+      params.actionId === 'eval-iac-remediation'
+        ? {
+            recipientRole: 'QP',
+            title: 'IAC requested remediation — corrections needed',
+            body: `The IAC requested remediation on "${app.qualificationTitle}". IAC comment: ${params.note ?? ''} Correct the QASA and resubmit it.`,
+          }
+        : {
+            recipientRole: 'QP',
+            title: 'Negative evaluation outcome — corrections needed',
+            body: params.note
+              ? `The evaluation of "${app.qualificationTitle}" was negative. ASD notes: ${params.note}`
+              : `The evaluation of "${app.qualificationTitle}" was negative. See the evaluation report for details and correct and resubmit.`,
+          },
+    );
   }
   if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
     addNotification({
@@ -185,6 +207,19 @@ export async function performOutcomeAction(params: ActionParams): Promise<QsaAdd
   if (nextState.stageId === 'signed' && app.evalState.stageId === 'approved' && !updated.approvalState) {
     // Row 13: the approval letter now starts as an ASD draft, not straight at the signer.
     updated = { ...updated, approvalState: { stageId: 'asd-draft' }, approvalLetterDraft: { notes: '' } };
+  }
+  // QCTO feedback 3.3: simulated hand-off — the Certification domain has no role in this build,
+  // so it is recorded on the QASA and in the audit trail, as Approval of Results does.
+  if (nextState.stageId === 'signed' && app.evalState.stageId === 'approved' && !updated.certificationHandoff) {
+    updated = { ...updated, certificationHandoff: buildCertificationHandoff(updated, new Date().toISOString(), params.actorName) };
+    appendAuditEntry({
+      recordType: 'qsa-addendum-outcome-letter',
+      recordId: app.id,
+      actorRole: params.actorRole,
+      actorId: params.actorId,
+      actorName: params.actorName,
+      action: RECOMMENDED_TO_CERTIFICATION_LABEL,
+    });
   }
   saveAll(replace(all, updated));
 
@@ -270,6 +305,33 @@ export async function saveIacPresentation(applicationId: string, fileName: strin
   const all = loadAll();
   const app = getOrThrow(all, applicationId);
   const updated = { ...app, iacPresentationFileName: fileName };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// QCTO feedback 3.3: the optional assessment details, captured by the ASD during evaluation.
+export async function saveAssessmentDetails(applicationId: string, input: AssessmentDetailsInput): Promise<QsaAddendumApplication> {
+  const all = loadAll();
+  const app = getOrThrow(all, applicationId);
+  if (app.evalState.stageId !== 'asd-evaluation') {
+    throw new Error('The assessment details can only be changed while the ASD is evaluating the QASA.');
+  }
+  const issues = validateAssessmentDetails(input);
+  if (issues.length > 0) throw new Error(issues.map((i) => i.message).join(' '));
+  const updated = { ...app, assessmentComponents: input.components, validityPeriodYears: input.validityPeriodYears };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// QCTO feedback 2.1: optional minutes from the IAC meeting, uploaded by the DD while recording
+// the outcome. Null removes the file.
+export async function saveIacMinutes(applicationId: string, file: IacMinutesFile | null): Promise<QsaAddendumApplication> {
+  const all = loadAll();
+  const app = getOrThrow(all, applicationId);
+  if (app.evalState.stageId !== 'iac-review') {
+    throw new Error('The committee minutes can only be changed while the IAC outcome is being recorded.');
+  }
+  const updated = { ...app, iacMinutesFile: file };
   saveAll(replace(all, updated));
   return updated;
 }

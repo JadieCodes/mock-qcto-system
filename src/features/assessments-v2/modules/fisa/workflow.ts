@@ -1,18 +1,28 @@
+import type { IacOutcomeOption } from '../../shared/iac/types';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
-import { FISA_STANDARD_SIGNOFF_ROLE } from './config';
+import { FISA_DIRECTOR_OFFICE_ROLE, FISA_IAC_OUTCOME_RECORDER_ROLE, FISA_OUTCOME_LETTER_SIGNER_ROLE } from './config';
 import type { FisaStandardRecord, FisaValidationRecord } from './types';
 
-// CR-026/PM-10: evaluate -> moderate -> validate -> approve, the same shape as the QSA
-// Addendum's evaluation flow, but final sign-off is the Qualifications Development Director &
-// Team — never the Assessments CEO, and there is no outcome-letter/CEO stage anywhere here.
+// Audit-entry action labels the screens look up to show the latest note for a step.
+export const STANDARD_RETURN_TO_DD_LABEL = 'Return to DD';
+export const STANDARD_APPROVE_FOR_TABLING_LABEL = 'Approve for tabling';
+export const STANDARD_IAC_REMEDIATION_LABEL = 'Record IAC outcome: Remediation requested';
+
+// QCTO feedback 2.9 (29 Oct 2026): the same route as the QASA (2.1). Qualifications
+// Development creates -> ASD evaluates -> DD moderates -> Director Office quality-assures and
+// approves for tabling -> the DD presents at the IAC and records its outcome -> the CEO signs
+// the outcome letter. Both IAC outcomes that end the process (approved or declined) reach the
+// CEO; the Standard is only Approved once the CEO signs an "approved" letter.
 export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
   id: 'fisa-standard',
   stages: [
     { id: 'qd-submission', label: 'Qualifications Development — source documents', allowedRoles: ['Qualifications Development'] },
     { id: 'asd-evaluation', label: 'ASD evaluation', allowedRoles: ['ASD'] },
-    { id: 'dd-review', label: 'Deputy Director review', allowedRoles: ['Deputy Director'] },
-    { id: 'iac-review', label: 'IAC review', allowedRoles: ['IAC'] },
-    { id: 'qd-signoff', label: 'Qualifications Development Director Office sign-off', allowedRoles: [FISA_STANDARD_SIGNOFF_ROLE] },
+    { id: 'dd-review', label: 'Deputy Director moderation', allowedRoles: ['Deputy Director'] },
+    { id: 'director-office-review', label: 'Director Office quality assurance', allowedRoles: [FISA_DIRECTOR_OFFICE_ROLE] },
+    { id: 'iac-review', label: 'Awaiting IAC outcome', allowedRoles: [FISA_IAC_OUTCOME_RECORDER_ROLE] },
+    { id: 'ceo-signature', label: 'Outcome letter awaiting CEO signature — IAC approved', allowedRoles: [FISA_OUTCOME_LETTER_SIGNER_ROLE] },
+    { id: 'ceo-signature-declined', label: 'Outcome letter awaiting CEO signature — IAC declined', allowedRoles: [FISA_OUTCOME_LETTER_SIGNER_ROLE] },
     { id: 'approved', label: 'Approved', allowedRoles: [] },
     { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],
@@ -31,10 +41,10 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
     { id: 'standard-asd-reject', label: 'Reject', fromStage: 'asd-evaluation', toStage: 'declined', kind: 'reject', requiresNote: true },
 
     {
-      id: 'standard-dd-send-to-iac',
-      label: 'Send to IAC',
+      id: 'standard-dd-send-to-director-office',
+      label: 'Send to Director Office',
       fromStage: 'dd-review',
-      toStage: 'iac-review',
+      toStage: 'director-office-review',
       kind: 'advance',
       requiresDifferentActor: true,
     },
@@ -48,45 +58,61 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
     },
     { id: 'standard-dd-reject', label: 'Reject', fromStage: 'dd-review', toStage: 'declined', kind: 'reject', requiresNote: true },
 
+    // The engine only compares against the DD who sent it; api.ts also checks the Director
+    // Office person was not the ASD on the same Standard.
     {
-      id: 'standard-iac-send-to-qd',
-      label: 'Send to Qualifications Development for sign-off',
-      fromStage: 'iac-review',
-      toStage: 'qd-signoff',
+      id: 'standard-do-approve-for-tabling',
+      label: STANDARD_APPROVE_FOR_TABLING_LABEL,
+      fromStage: 'director-office-review',
+      toStage: 'iac-review',
       kind: 'advance',
       requiresDifferentActor: true,
     },
     {
-      id: 'standard-iac-remediation',
-      label: 'Send for remediation',
-      fromStage: 'iac-review',
-      toStage: 'asd-evaluation',
-      kind: 'send-back',
-      requiresNote: true,
-    },
-    { id: 'standard-iac-decline', label: 'Decline', fromStage: 'iac-review', toStage: 'declined', kind: 'reject', requiresNote: true },
-
-    {
-      id: 'standard-qd-signoff',
-      label: 'Sign off — Approved',
-      fromStage: 'qd-signoff',
-      toStage: 'approved',
-      kind: 'complete',
-      requiresDifferentActor: true,
-    },
-    {
-      id: 'standard-qd-return',
-      label: 'Send back for clarification',
-      fromStage: 'qd-signoff',
+      id: 'standard-do-return-to-dd',
+      label: STANDARD_RETURN_TO_DD_LABEL,
+      fromStage: 'director-office-review',
       toStage: 'dd-review',
       kind: 'send-back',
       requiresNote: true,
+      requiresDifferentActor: true,
     },
-    // CR-056: send-back AND reject must both be available on every approval stage — qd-signoff
-    // only had the send-back half until this fix.
-    { id: 'standard-qd-reject', label: 'Reject', fromStage: 'qd-signoff', toStage: 'declined', kind: 'reject', requiresNote: true },
+
+    // The DD records the IAC's outcome. Remediation returns the Standard to Qualifications
+    // Development, which started it (FISA has no QP).
+    { id: 'standard-iac-approve', label: 'Record IAC outcome: Approved', fromStage: 'iac-review', toStage: 'ceo-signature', kind: 'advance' },
+    {
+      id: 'standard-iac-decline',
+      label: 'Record IAC outcome: Declined',
+      fromStage: 'iac-review',
+      toStage: 'ceo-signature-declined',
+      kind: 'reject',
+      requiresNote: true,
+    },
+    {
+      id: 'standard-iac-remediation',
+      label: STANDARD_IAC_REMEDIATION_LABEL,
+      fromStage: 'iac-review',
+      toStage: 'qd-submission',
+      kind: 'send-back',
+      requiresNote: true,
+    },
+
+    // CR-008: the CEO only signs the outcome letter.
+    { id: 'standard-ceo-sign', label: 'Sign outcome letter', fromStage: 'ceo-signature', toStage: 'approved', kind: 'complete' },
+    { id: 'standard-ceo-sign-declined', label: 'Sign outcome letter', fromStage: 'ceo-signature-declined', toStage: 'declined', kind: 'complete' },
   ],
 };
+
+export const STANDARD_IAC_OUTCOME_OPTIONS: IacOutcomeOption[] = [
+  { actionId: 'standard-iac-approve', label: 'Approved', commentRequired: false },
+  { actionId: 'standard-iac-decline', label: 'Declined', commentRequired: true },
+  { actionId: 'standard-iac-remediation', label: 'Remediation requested', commentRequired: true },
+];
+
+export function isAwaitingCeoSignature(record: FisaStandardRecord): boolean {
+  return record.workflow.stageId === 'ceo-signature' || record.workflow.stageId === 'ceo-signature-declined';
+}
 
 export type FisaStandardStatusTone = 'amber' | 'blue' | 'indigo' | 'emerald' | 'red';
 
@@ -97,11 +123,15 @@ export function fisaStandardStatusLabel(record: FisaStandardRecord): string {
     case 'asd-evaluation':
       return 'Under ASD evaluation';
     case 'dd-review':
-      return 'Under Deputy Director review';
+      return 'Under Deputy Director moderation';
+    case 'director-office-review':
+      return 'With Director Office for quality assurance';
     case 'iac-review':
-      return 'With IAC';
-    case 'qd-signoff':
-      return 'Awaiting Qualifications Development sign-off';
+      return 'Approved for tabling — awaiting IAC outcome';
+    case 'ceo-signature':
+      return 'Approved by the IAC — outcome letter pending CEO signature';
+    case 'ceo-signature-declined':
+      return 'Declined by the IAC — outcome letter pending CEO signature';
     case 'approved':
       return 'Approved';
     case 'declined':
@@ -119,10 +149,14 @@ export function fisaStandardStatusTone(record: FisaStandardRecord): FisaStandard
       return 'amber';
     case 'dd-review':
       return 'blue';
+    case 'director-office-review':
+      return 'indigo';
     case 'iac-review':
       return 'indigo';
-    case 'qd-signoff':
+    case 'ceo-signature':
       return 'blue';
+    case 'ceo-signature-declined':
+      return 'red';
     case 'approved':
       return 'emerald';
     case 'declined':
