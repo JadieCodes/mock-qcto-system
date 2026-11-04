@@ -75,9 +75,10 @@ export function ensureDemoSeed(): void {
   clearWorkflowStores();
   try {
     seedDemoData();
-  } catch {
+    markSeedCurrent();
+  } catch (error) {
     // A broken seed must not take the app down — the modules fall back to empty lists.
+    console.error('Assessments v2 demo seed failed:', error);
     clearWorkflowStores();
   }
-  markSeedCurrent();
 }

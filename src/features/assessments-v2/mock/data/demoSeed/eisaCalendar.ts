@@ -289,7 +289,7 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
       'Too few learners are expected for this sitting. The QP asked to combine it with the next published sitting.',
       null,
     ),
-    addDirect(welding, 125, THANDEKA, 20).sitting,
+    addDirect(welding, 125, THANDEKA, 30).sitting,
     // Phase C2 — each added about 200 days before it was held, like S1–S3.
     addDirect(electrical, -60, SIPHO, 260).sitting,
     addDirect(plumbing, -75, SIPHO, 275).sitting,
