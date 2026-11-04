@@ -59,7 +59,7 @@ export function InternalDashboard() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const adCount = applications.filter((a) => a.evalState.stageId === 'ad-allocation').length;
+  const awaitingAllocationCount = applications.filter((a) => a.evalState.stageId === 'ad-allocation').length;
   const asdCount = applications.filter((a) => a.evalState.stageId === 'asd-evaluation').length;
   const ddCount = applications.filter((a) => a.evalState.stageId === 'dd-review').length;
   const directorTeamCount = applications.filter((a) => a.evalState.stageId === 'director-team-review').length;
@@ -72,7 +72,7 @@ export function InternalDashboard() {
         <div>
           <h2 className="text-xl font-bold text-gray-900">RPL Toolkit Evaluation</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Roles: Assistant Director allocates · ASD evaluates · DD reviews · Director Office moderates · IAC approves · CEO signs the
+            Roles: DD allocates · ASD evaluates · DD reviews · Director Office moderates · IAC approves · CEO signs the
             outcome letter.
           </p>
           <p className="text-sm text-gray-500 mt-1">
@@ -86,7 +86,7 @@ export function InternalDashboard() {
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         {[
-          { label: 'With Assistant Director', value: adCount },
+          { label: 'Awaiting allocation', value: awaitingAllocationCount },
           { label: 'With ASD', value: asdCount },
           { label: 'With Deputy Director', value: ddCount },
           { label: 'With Director Office', value: directorTeamCount },

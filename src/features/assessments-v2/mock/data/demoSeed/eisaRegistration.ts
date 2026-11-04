@@ -13,12 +13,12 @@
 // Open registrations (the screens' live demo):
 //  #   SDP                        Sitting                     Category    Stage
 //  G1  Khanya Skills Academy      Electrical Trades, B1 2nd   Trades      Being built — 2 learners, 1 SOR still to upload
-//  G2  Khanya Skills Academy      Electrical Trades, B1 1st   Trades      With the Assistant Director — 1 SOR accepted, 1 under review, 1 not yet looked at
-//  G3  Khanya Skills Academy      Welding, today + 125        Trades      With the Assistant Director — 1 SOR flagged, waiting for the SDP to correct it
+//  G2  Khanya Skills Academy      Electrical Trades, B1 1st   Trades      With the ASD — 1 SOR accepted, 1 under review, 1 not yet looked at
+//  G3  Khanya Skills Academy      Welding, today + 125        Trades      With the ASD — 1 SOR flagged, waiting for the SDP to correct it
 //  G4  Khanya Skills Academy      Welding, today + 55         Trades      Registered (registration closed since) — sitting ready for an EISA Confirmation
 //  G5  Khanya Skills Academy      Electrical Trades, today+35 Non-Trades  Registered — files prepared for the QP, SDP list shared with QA
 //  G6  Thabo Technical College    Electrical Trades, today+35 Trades      Registered (same sitting as G5)
-//  G7  Lerato Training Institute  Plumbing, today + 150       Trades      Just submitted to the Assistant Director, no SOR reviewed yet
+//  G7  Lerato Training Institute  Plumbing, today + 150       Trades      Just submitted to the ASD, no SOR reviewed yet
 //  —   Vuma Trade Centre          —                           —           None: Vuma is non-compliant (CR-041), so "Start Registration" is
 //                                                                         blocked for it; nothing is seeded around that rule.
 //
@@ -36,7 +36,7 @@
 //  P10 Electrical Trades  today - 170  Thabo (4)
 //  P11 Plumbing           today - 50   Lerato (3)
 //
-// Assistant Directors (09-visibility-matrix.md Section 3): Lindiwe Khumalo handles Khanya Skills
+// ASDs (09-visibility-matrix.md Section 3): Lindiwe Khumalo handles Khanya Skills
 // Academy; Riaan Pretorius handles Thabo Technical College and Lerato Training Institute.
 // Registration numbers are given in the order the numbers were created, as the api does.
 import type { RplArplMonitoringItem } from '../../api/siteVisitsStore';
@@ -162,7 +162,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     }
 
     function requireAdReview(what: string) {
-      if (record.workflow.stageId !== 'ad-review') throw new Error(`Demo seed: SORs can only be ${what} while the registration is with the Assistant Director.`);
+      if (record.workflow.stageId !== 'ad-review') throw new Error(`Demo seed: SORs can only be ${what} while the registration is with the ASD.`);
     }
 
     const api: RegistrationSeedBuilder = {
@@ -219,7 +219,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
         const workflow = step(log, { definition: REGISTRATION_WORKFLOW, state: record.workflow, actionId: 'reg-submit', actor: sdp, at, recordType: 'eisa-registration', recordId: record.id });
         set({ ...record, workflow });
         notify(log, at, {
-          recipientRole: 'Assistant Director',
+          recipientRole: REGISTRATION_PROCESSOR_ROLE,
           title: 'New EISA registration submitted',
           body: `${record.sdpName} submitted a registration for "${record.qualificationTitle}" (${record.learners.length} learner(s)).`,
         });
@@ -293,7 +293,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
           monitoringItems.push(item);
           set({ ...record, rplMonitoringItemId: item.id });
           const body = `A monitoring item was created for "${record.qualificationTitle}" (${record.sdpName}) — ${rplLearners.length} RPL/ARPL learner(s).`;
-          notify(log, at, { recipientRole: 'Assistant Director', title: 'RPL/ARPL monitoring item created', body });
+          // QCTO feedback 3.11: sent once, to the ASD (it used to go to the Assistant Director too).
           notify(log, at, { recipientRole: 'ASD', title: 'RPL/ARPL monitoring item created', body });
         }
         pendingNumbers.push({ record: () => record, set, at });
@@ -378,7 +378,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     .accept('all', LINDIWE, 82)
     .createNumber(LINDIWE, 80);
 
-  // G2 — Khanya, Electrical Trades (B1 1st date): with the Assistant Director, review under way.
+  // G2 — Khanya, Electrical Trades (B1 1st date): with the ASD, review under way.
   start(KHANYA, b1Sitting(sittings, 0), 'trades', 25)
     .addLearners(['learner-015', 'learner-016', 'learner-017'], 25)
     .uploadSors('all', 24)

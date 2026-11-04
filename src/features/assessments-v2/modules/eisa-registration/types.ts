@@ -17,7 +17,7 @@ export interface SupportingDocument {
 
 // Row 25 (E-10): a per-learner SOR status, independent of the registration's own workflow
 // stage. `null` means no SOR has been uploaded yet. CR-038's flag still lives here too — the
-// SDP corrects and re-uploads just that learner's SOR without the record leaving AD review.
+// SDP corrects and re-uploads just that learner's SOR without the record leaving ASD review.
 export type SorStatus = 'uploaded' | 'under-review' | 'accepted' | 'flagged' | 'replaced';
 
 export interface RegistrationLearner {

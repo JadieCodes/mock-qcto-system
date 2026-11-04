@@ -5,7 +5,7 @@
 // each step implies. Days are "days ago".
 //
 //  #    QP                   Toolkit                               Stage
-//  R1   Johan van der Merwe  Plumbing RPL Toolkit (new)            Just submitted — awaiting Assistant Director allocation
+//  R1   Johan van der Merwe  Plumbing RPL Toolkit (new)            Just submitted — awaiting Deputy Director allocation
 //  R2   Nomvula Dlamini      Electrical Trades RPL Toolkit (v2)    Updated toolkit (supersedes R8) — awaiting allocation for 5 days
 //  R3   Precious Mahlangu    Welding RPL Toolkit                   ASD evaluation (Thandeka Zulu; first checklist section done; one uploaded toolkit file)
 //  R4   Johan van der Merwe  Drainlayer RPL Toolkit                Returned to the QP for corrections (by Sipho Ndlovu)
@@ -17,9 +17,9 @@
 //  R10  Johan van der Merwe  Gas Practitioner RPL Toolkit          Approved by the IAC — outcome letter waiting for the CEO (signable now)
 //  R11  Precious Mahlangu    Rigger RPL Toolkit                    Declined by the IAC — outcome letter waiting for the CEO (signable now)
 //
-// Officials: Assistant Director Lindiwe Khumalo / Riaan Pretorius (allocate); ASD Sipho Ndlovu
-// (Nomvula's and Johan's) / Thandeka Zulu (Precious's); Deputy Director Grace Mokoena / Peter
-// Botha; Director Office Elsabe Steyn / Johannes Pretorius; IAC Thabiso Molefe / Palesa Nkosi;
+// Officials: ASD Sipho Ndlovu (Nomvula's and Johan's) / Thandeka Zulu (Precious's); Deputy
+// Director Grace Mokoena / Peter Botha — each allocates to their own ASD (QCTO feedback 3.11:
+// the DD allocates) and reviews; Director Office Elsabe Steyn / Johannes Pretorius; IAC Thabiso Molefe / Palesa Nkosi;
 // CEO Angela Fourie / David Molewa. The R numbers are labels; seed ids follow the order the
 // records are created below (oldest first).
 import { buildRplToolkitChecklist } from '../rplToolkitChecklistItems';
@@ -31,8 +31,6 @@ import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step,
 
 const RPL_ID_GROUP = 11;
 
-const LINDIWE = 'lindiwe-khumalo';
-const RIAAN = 'riaan-pretorius';
 const SIPHO = 'sipho-ndlovu';
 const THANDEKA = 'thandeka-zulu';
 const GRACE = 'grace-mokoena';
@@ -53,7 +51,7 @@ const MODERATION_COMMENT = 'The Director Office agrees with the ASD evaluation.'
 const IAC_DECISION_ACTION_IDS = ['rpl-iac-approve', 'rpl-iac-decline', 'rpl-iac-remediation'];
 
 interface RplSeedBuilder {
-  allocate: (adId: string, asdId: string, atDaysAgo: number) => RplSeedBuilder;
+  allocate: (ddId: string, asdId: string, atDaysAgo: number) => RplSeedBuilder;
   evaluate: (asdId: string, options: { sectionCount?: number; findings?: string; recommendation?: RplRecommendation; noOnFirstItem?: string }) => RplSeedBuilder;
   moderate: (directorOfficeId: string, sectionCount?: number) => RplSeedBuilder;
   endorse: (iacId: string, note: string) => RplSeedBuilder;
@@ -123,8 +121,8 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
     };
 
     const api: RplSeedBuilder = {
-      allocate(adId, asdId, atDaysAgo) {
-        return api.act('rpl-allocate', adId, atDaysAgo, undefined, asdId);
+      allocate(ddId, asdId, atDaysAgo) {
+        return api.act('rpl-allocate', ddId, atDaysAgo, undefined, asdId);
       },
       // saveRplToolkitChecklist() + saveRplEvaluationReport(): the ASD's evaluation; no audit entry.
       evaluate(asdId, options) {
@@ -234,7 +232,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R8 — Nomvula: approved and signed (v1, updated by R2).
   create({ qpId: NOMVULA, toolkitTitle: 'Electrical Trades RPL Toolkit', description: 'RPL toolkit for the Electrical Trades occupational qualification.', createdDaysAgo: 120 })
-    .allocate(LINDIWE, SIPHO, 117)
+    .allocate(GRACE, SIPHO, 117)
     .evaluate(SIPHO, recommended)
     .act('rpl-asd-send-to-dd', SIPHO, 105)
     .act('rpl-dd-send-to-director-team', GRACE, 98)
@@ -248,7 +246,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R9 — Precious: declined by the IAC, letter signed.
   create({ qpId: PRECIOUS, toolkitTitle: 'Metal Fabricator RPL Toolkit', description: 'RPL toolkit for the Metal Fabricator qualification.', createdDaysAgo: 140 })
-    .allocate(RIAAN, THANDEKA, 137)
+    .allocate(PETER, THANDEKA, 137)
     .evaluate(THANDEKA, notRecommended)
     .act('rpl-asd-send-to-dd', THANDEKA, 125)
     .act('rpl-dd-send-to-director-team', PETER, 118)
@@ -261,7 +259,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R10 — Johan: approved by the IAC, waiting for the CEO.
   create({ qpId: JOHAN, toolkitTitle: 'Gas Practitioner RPL Toolkit', description: 'RPL toolkit for the Gas Practitioner qualification.', createdDaysAgo: 95 })
-    .allocate(RIAAN, SIPHO, 92)
+    .allocate(GRACE, SIPHO, 92)
     .evaluate(SIPHO, recommended)
     .act('rpl-asd-send-to-dd', SIPHO, 70)
     .act('rpl-dd-send-to-director-team', GRACE, 55)
@@ -273,7 +271,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R11 — Precious: declined by the IAC, waiting for the CEO.
   create({ qpId: PRECIOUS, toolkitTitle: 'Rigger RPL Toolkit', description: 'RPL toolkit for the Rigger qualification.', createdDaysAgo: 100 })
-    .allocate(LINDIWE, THANDEKA, 97)
+    .allocate(PETER, THANDEKA, 97)
     .evaluate(THANDEKA, notRecommended)
     .act('rpl-asd-send-to-dd', THANDEKA, 75)
     .act('rpl-dd-send-to-director-team', PETER, 60)
@@ -285,7 +283,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R7 — Johan: with the IAC, endorsement note not yet written.
   create({ qpId: JOHAN, toolkitTitle: 'Lift Mechanic RPL Toolkit', description: 'RPL toolkit for the Lift Mechanic qualification.', createdDaysAgo: 70 })
-    .allocate(RIAAN, SIPHO, 67)
+    .allocate(GRACE, SIPHO, 67)
     .evaluate(SIPHO, recommended)
     .act('rpl-asd-send-to-dd', SIPHO, 52)
     .act('rpl-dd-send-to-director-team', GRACE, 45)
@@ -295,7 +293,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R6 — Nomvula: Director Office moderation, first moderation section done.
   create({ qpId: NOMVULA, toolkitTitle: 'Electrical Line Mechanic RPL Toolkit', description: 'RPL toolkit for the Electrical Line Mechanic qualification.', createdDaysAgo: 55 })
-    .allocate(LINDIWE, SIPHO, 52)
+    .allocate(GRACE, SIPHO, 52)
     .evaluate(SIPHO, recommended)
     .act('rpl-asd-send-to-dd', SIPHO, 38)
     .act('rpl-dd-send-to-director-team', GRACE, 30)
@@ -304,14 +302,14 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
   // R5 — Precious: with the Deputy Director.
   create({ qpId: PRECIOUS, toolkitTitle: 'Boilermaker RPL Toolkit', description: 'RPL toolkit for the Boilermaker qualification.', createdDaysAgo: 40 })
-    .allocate(LINDIWE, THANDEKA, 37)
+    .allocate(PETER, THANDEKA, 37)
     .evaluate(THANDEKA, recommended)
     .act('rpl-asd-send-to-dd', THANDEKA, 20)
     .done();
 
   // R4 — Johan: returned to the QP for corrections.
   create({ qpId: JOHAN, toolkitTitle: 'Drainlayer RPL Toolkit', description: 'RPL toolkit for the Drainlayer qualification.', createdDaysAgo: 30 })
-    .allocate(RIAAN, SIPHO, 28)
+    .allocate(GRACE, SIPHO, 28)
     .evaluate(SIPHO, { ...notRecommended, noOnFirstItem: 'The toolkit has no candidate guide.' })
     .act('rpl-return-to-qp', SIPHO, 15, 'Add a candidate guide and map the evidence requirements to the practical skills modules, then resubmit.')
     .done();
@@ -324,7 +322,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
     createdDaysAgo: 20,
     fileNames: ['Welding_RPL_Toolkit_v1.pdf'],
   })
-    .allocate(RIAAN, THANDEKA, 17)
+    .allocate(PETER, THANDEKA, 17)
     .evaluate(THANDEKA, { sectionCount: 1 })
     .done();
 

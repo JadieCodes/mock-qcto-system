@@ -1,8 +1,9 @@
 import type { Role } from '../../types';
 
 // Planning chain roles — named explicitly in the register/build prompt, so no open question
-// here (unlike the EISA Calendar's CALENDAR_REVIEWER_ROLE).
-export const PLANNER_ROLE: Role = 'Assistant Director';
+// here (unlike the EISA Calendar's CALENDAR_REVIEWER_ROLE). QCTO feedback 3.11: the planner is
+// the ASD (formerly "Assistant Director"), the same role that later submits the report.
+export const PLANNER_ROLE: Role = 'ASD';
 export const PLAN_RECOMMENDER_ROLE: Role = 'Deputy Director';
 export const PLAN_APPROVER_ROLE: Role = 'Domain Director';
 export const BOOKING_ROLE: Role = 'Sub Domain Admin';

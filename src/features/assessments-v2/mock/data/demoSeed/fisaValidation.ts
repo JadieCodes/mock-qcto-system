@@ -7,10 +7,10 @@
 //
 //  #   SDP                        Allocated by / ASD               Stage
 //  F1  Thabo Technical College    —                                Developing — instrument uploaded, SDP still to notify QCTO
-//  F2  Khanya Skills Academy      —                                SDP notified QCTO — awaiting Assistant Director allocation
-//  F3  Thabo Technical College    Riaan Pretorius → Thandeka Zulu  ASD validating (first two checklist sections done)
-//  F4  Lerato Training Institute  Riaan Pretorius → Sipho Ndlovu   Outcome returned: Not approved — changes needed (cycle 2, SDP to fix and resubmit)
-//  F5  Khanya Skills Academy      Lindiwe Khumalo → Sipho Ndlovu   Validated — Approved (FISA Validation Report ready)
+//  F2  Khanya Skills Academy      —                                SDP notified QCTO — awaiting Deputy Director allocation
+//  F3  Thabo Technical College    Peter Botha → Thandeka Zulu      ASD validating (first two checklist sections done)
+//  F4  Lerato Training Institute  Grace Mokoena → Sipho Ndlovu     Outcome returned: Not approved — changes needed (cycle 2, SDP to fix and resubmit)
+//  F5  Khanya Skills Academy      Grace Mokoena → Sipho Ndlovu     Validated — Approved (FISA Validation Report ready)
 //
 // QCTO feedback 2.11 follow-up (Batch B): one standard can have several validations — every
 // record here is for the same standard, and Khanya (F2, F5) and Thabo (F1, F3) have two each.
@@ -24,8 +24,8 @@ import { answerChecklist, createClock, notify, seedId, seedPerson, step, type Se
 const FISA_VALIDATION_ID_GROUP = 10;
 const APPROVED_STANDARD_ID = 'seed-fisa-standard-approved';
 
-const LINDIWE = 'lindiwe-khumalo';
-const RIAAN = 'riaan-pretorius';
+const GRACE = 'grace-mokoena';
+const PETER = 'peter-botha';
 const SIPHO = 'sipho-ndlovu';
 const THANDEKA = 'thandeka-zulu';
 const KHANYA = 'sdp-khanya-skills-academy';
@@ -155,7 +155,7 @@ export function seedFisaValidations(log: SeedLog): FisaValidationRecord[] {
   start(KHANYA, 40)
     .upload('Khanya_Electrical_Installation_FISA_Instrument_v1.pdf', 2_097_152, 38)
     .act('fval-submit', KHANYA, 37)
-    .act('fval-allocate', LINDIWE, 35, { allocatedAsdId: SIPHO })
+    .act('fval-allocate', GRACE, 35, { allocatedAsdId: SIPHO })
     .checklist(SIPHO, 'all')
     .act('fval-approve', SIPHO, 28, { note: 'The instrument covers every exit-level outcome of the standard. Marking guidelines are clear.' })
     .done();
@@ -164,7 +164,7 @@ export function seedFisaValidations(log: SeedLog): FisaValidationRecord[] {
   start(LERATO, 34)
     .upload('Lerato_Electrical_Installation_FISA_Instrument.pdf', 1_835_008, 32)
     .act('fval-submit', LERATO, 31)
-    .act('fval-allocate', RIAAN, 29, { allocatedAsdId: SIPHO })
+    .act('fval-allocate', GRACE, 29, { allocatedAsdId: SIPHO })
     .checklist(SIPHO, 'all')
     .act('fval-not-approved', SIPHO, 21, {
       note: 'The practical task does not assess fault-finding on a three-phase supply, and the rubric has no pass mark. Add both and resubmit.',
@@ -175,7 +175,7 @@ export function seedFisaValidations(log: SeedLog): FisaValidationRecord[] {
   start(THABO, 22)
     .upload('Thabo_Electrical_Installation_FISA_Instrument.pdf', 2_359_296, 20)
     .act('fval-submit', THABO, 19)
-    .act('fval-allocate', RIAAN, 15, { allocatedAsdId: THANDEKA })
+    .act('fval-allocate', PETER, 15, { allocatedAsdId: THANDEKA })
     .checklist(THANDEKA, 2)
     .done();
 

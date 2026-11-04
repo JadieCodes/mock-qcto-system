@@ -12,7 +12,7 @@
 //       each sitting, with marking 2 and moderation 7 working days after it. F2 (Electrical
 //       Trades, today - 15) is the confirmed one still awaiting its results batch.
 // Not seeded on purpose: Welding at today + 55 (eisaRegistration.ts G4) is Registered with no
-// confirmation yet, so it is listed under "Ready to Confirm" for the Assistant Director.
+// confirmation yet, so it is listed under "Ready to Confirm" for the ASD.
 import { addWorkingDays } from '../../../shared/dates/workingDays';
 import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import { CONFIRMATION_GENERATOR_ROLE } from '../../../modules/eisa-confirmation/config';
@@ -26,7 +26,7 @@ const CONFIRMATION_ID_GROUP = 6;
 const LINDIWE = 'lindiwe-khumalo';
 const RIAAN = 'riaan-pretorius';
 
-// Assistant Directors as in eisaRegistration.ts: Riaan Pretorius for Plumbing (Lerato), Lindiwe
+// ASDs as in eisaRegistration.ts: Riaan Pretorius for Plumbing (Lerato), Lindiwe
 // Khumalo for Electrical Trades and Welding.
 const PAST_SITTINGS: { title: string; offset: number; adId: string }[] = [
   { title: 'Electrical Trades', offset: -15, adId: LINDIWE },
@@ -130,7 +130,7 @@ export function seedEisaConfirmations(log: SeedLog, sittings: EisaSitting[], reg
         });
         record = { ...record, workflow, confirmedCentres, markingDate, moderationDate };
         notify(log, at, {
-          recipientRole: 'Assistant Director',
+          recipientRole: CONFIRMATION_GENERATOR_ROLE,
           title: 'EISA Confirmation complete',
           body: `"${record.qualificationTitle}" (${record.sittingDate}) is confirmed — marking ${markingDate}, moderation ${moderationDate}.`,
         });

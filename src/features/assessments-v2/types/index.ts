@@ -18,9 +18,9 @@ export type ExternalRole = 'QP' | 'SDP';
 
 // Internal portal roles. "Deputy & Assistant Director" and "AIC" are deliberately excluded —
 // the combined DD/AD role caused the old build's self-approval bug, and AIC is a duplicate of IAC.
+// QCTO feedback 3.11: "Assistant Director" is the same role as the ASD, so it is not listed.
 export type InternalRole =
   | 'ASD'
-  | 'Assistant Director'
   | 'Deputy Director'
   | 'Director'
   | 'Domain Director'

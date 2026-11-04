@@ -35,10 +35,10 @@ export const INTERNAL_MODULE_TEAM: Partial<Record<string, ProcessStageTeam>> = {
 };
 
 // EISA Confirmation has no CR-015 team (09-visibility-matrix.md Section 4, gap #8).
-// [ASSUMPTION] the Assistant Director — the record's generator role — is the visibility
-// owner, per the matrix's Section 1/Section 5 assumption. Still an open question for QCTO.
+// [ASSUMPTION] the ASD — the record's generator role — is the visibility owner, per the
+// matrix's Section 1/Section 5 assumption. Still an open question for QCTO.
 export const INTERNAL_MODULE_ROLE_OVERRIDE: Partial<Record<string, Role[]>> = {
-  'eisa-confirmation': ['Assistant Director'],
+  'eisa-confirmation': ['ASD'],
   // QCTO feedback 3.8: the FISA Standards status list is for the Qualifications Development
   // domain only. Every role's access to the FISA module itself is unchanged.
   'fisa-status': ['Qualifications Development'],

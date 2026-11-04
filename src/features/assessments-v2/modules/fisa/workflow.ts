@@ -1,6 +1,6 @@
 import type { IacOutcomeOption } from '../../shared/iac/types';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
-import { FISA_DIRECTOR_OFFICE_ROLE, FISA_IAC_OUTCOME_RECORDER_ROLE, FISA_OUTCOME_LETTER_SIGNER_ROLE } from './config';
+import { FISA_DIRECTOR_OFFICE_ROLE, FISA_IAC_OUTCOME_RECORDER_ROLE, FISA_OUTCOME_LETTER_SIGNER_ROLE, FISA_VALIDATION_ALLOCATOR_ROLE } from './config';
 import type { FisaStandardRecord, FisaValidationRecord } from './types';
 
 // Audit-entry action labels the screens look up to show the latest note for a step.
@@ -166,13 +166,13 @@ export function fisaStandardStatusTone(record: FisaStandardRecord): FisaStandard
   }
 }
 
-// PM-01/PM-11: the SDP submits, the Assistant Director allocates to an ASD, the ASD validates,
-// and the outcome goes STRAIGHT back to the SDP — no Deputy Director stage anywhere.
+// PM-01/PM-11: the SDP submits, the DD allocates to an ASD (QCTO feedback 3.11), the ASD
+// validates, and the outcome goes STRAIGHT back to the SDP — no Deputy Director review stage.
 export const FISA_VALIDATION_WORKFLOW: WorkflowDefinition = {
   id: 'fisa-instrument-validation',
   stages: [
     { id: 'sdp-instrument', label: 'SDP developing instrument', allowedRoles: ['SDP'] },
-    { id: 'awaiting-allocation', label: 'Awaiting Assistant Director allocation', allowedRoles: ['Assistant Director'] },
+    { id: 'awaiting-allocation', label: 'Awaiting Deputy Director allocation', allowedRoles: [FISA_VALIDATION_ALLOCATOR_ROLE] },
     { id: 'asd-validation', label: 'ASD validating', allowedRoles: ['ASD'] },
     { id: 'validated', label: 'Validated', allowedRoles: [] },
   ],
@@ -206,7 +206,7 @@ export function fisaValidationStatusLabel(record: FisaValidationRecord): string 
     case 'sdp-instrument':
       return record.cycleCount > 1 ? 'Changes requested — awaiting resubmission' : 'Developing instrument';
     case 'awaiting-allocation':
-      return 'Awaiting Assistant Director allocation';
+      return 'Awaiting Deputy Director allocation';
     case 'asd-validation':
       return `Under ASD validation${record.allocatedAsdName ? ` (${record.allocatedAsdName})` : ''}`;
     case 'validated':

@@ -8,9 +8,9 @@
 //
 //  #    Qualification      Sitting      QP                   Rate   Stage
 //  —    Electrical Trades  today - 15   Nomvula Dlamini      —      Awaiting submission (QP side) — no batch yet
-//  A2   Plumbing           today - 30   Johan van der Merwe  75%    Submitted — with the Assistant Director, review not started
-//  A3   Welding            today - 45   Precious Mahlangu    75%    Assistant Director: compliance review (notes + first folder done)
-//  A4   Electrical Trades  today - 60   Nomvula Dlamini      100%   Assistant Director: evidence evaluation (both notes, 3 of 4 folders, evidence uploaded)
+//  A2   Plumbing           today - 30   Johan van der Merwe  75%    Submitted — with the ASD, review not started
+//  A3   Welding            today - 45   Precious Mahlangu    75%    ASD: compliance review (notes + first folder done)
+//  A4   Electrical Trades  today - 60   Nomvula Dlamini      100%   ASD: evidence evaluation (both notes, 3 of 4 folders, evidence uploaded)
 //  A5   Plumbing           today - 75   Johan van der Merwe  66.7%  With the Deputy Director
 //  A6   Welding            today - 90   Precious Mahlangu    100%   With the Director
 //  A7   Electrical Trades  today - 105  Nomvula Dlamini      75%    With the Chief Director (final approval pending)
@@ -20,13 +20,14 @@
 //  A10  Electrical Trades  today - 170  Nomvula Dlamini      50%    Approved, above the 45% threshold — no Post-EISA Monitoring visit
 //  A11  Plumbing           today - 50   Johan van der Merwe  66.7%  Declined by the Deputy Director with a reason — QP can resubmit
 //
-// Officials: Assistant Director Lindiwe Khumalo (Electrical Trades, Welding) / Riaan Pretorius
+// Officials: ASD Lindiwe Khumalo (Electrical Trades, Welding) / Riaan Pretorius
 // (Plumbing); Deputy Director Grace Mokoena (Nomvula's and Johan's) / Peter Botha (Precious's);
 // Director Zanele Mthembu (Nomvula's) / Sarah Naidoo (Precious's and Johan's); Chief Director
 // Busisiwe Radebe / Francois Le Roux.
 import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
+import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
 import type { ResultsBatch } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
@@ -123,17 +124,17 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     };
     if (dateOf(submittedAt) > batch.submissionDeadline) throw new Error(`Demo seed: ${title} ${sittingDate} submitted after its deadline.`);
     notify(log, submittedAt, {
-      recipientRole: 'Assistant Director',
+      recipientRole: RESULTS_AD_ROLE,
       title: 'Results batch submitted',
       body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (${sittingDate}).`,
     });
 
     const api: ResultsSeedBuilder = {
-      // The Assistant Director's three-part review (save* functions write no audit entry).
+      // The ASD's three-part review (save* functions write no audit entry).
       adReview(adId, atDaysAgo, progress) {
         if (batch.workflow.stageId !== 'ad-review') throw new Error('Demo seed: the compliance review is only edited in ad-review.');
         const ad = seedPerson(adId);
-        if (ad.role !== 'Assistant Director') throw new Error(`Demo seed: ${ad.name} is not an Assistant Director.`);
+        if (ad.role !== RESULTS_AD_ROLE) throw new Error(`Demo seed: ${ad.name} cannot do the first results review.`);
         const at = clock.at(atDaysAgo, 11);
         batch = {
           ...batch,

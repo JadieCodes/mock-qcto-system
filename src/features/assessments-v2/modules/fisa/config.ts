@@ -8,7 +8,8 @@ export const FISA_DIRECTOR_OFFICE_ROLE: Role = 'Director & Team';
 export const FISA_IAC_OUTCOME_RECORDER_ROLE: Role = 'Deputy Director';
 export const FISA_OUTCOME_LETTER_SIGNER_ROLE: Role = 'CEO';
 
-// PM-01/PM-11: the Assistant Director allocates a submitted FISA instrument to an ASD. This
-// build has no individual logins, so "allocating to an ASD" is recorded as a free-text name
-// for the audit trail/display rather than a real assignment to one of several ASD accounts.
-export const FISA_VALIDATION_ALLOCATOR_ROLE = 'Assistant Director' as const;
+// PM-01/PM-11: a submitted FISA instrument is allocated to a named ASD. QCTO feedback 3.11
+// (29 Oct 2026): the "Assistant Director" who used to allocate is the ASD, and the DD allocates
+// work to the ASDs, so the DD allocates here. The DD only allocates — the outcome still goes
+// straight from the ASD back to the SDP (PM-01).
+export const FISA_VALIDATION_ALLOCATOR_ROLE: Role = 'Deputy Director';

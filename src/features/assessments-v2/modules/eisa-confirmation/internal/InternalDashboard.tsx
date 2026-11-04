@@ -8,7 +8,7 @@ import { ConfirmationStatusBadge } from '../components/StatusBadge';
 import { useConfirmationRecords, useGenerateConfirmation, useSittingsReadyToConfirm } from '../hooks';
 
 // CR-043: triggered once registration for a sitting is complete. Not auto-started — a QCTO
-// official (here, the Assistant Director — see config.ts) generates it explicitly.
+// official (here, the ASD — see config.ts) generates it explicitly.
 export function InternalDashboard() {
   const { person } = useV2Role();
   const actorName = person.name;

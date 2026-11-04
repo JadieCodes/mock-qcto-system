@@ -17,6 +17,7 @@ import { ValidationSummary, FieldError } from '../../../shared/validation/Valida
 import type { ValidationIssue } from '../../../shared/validation/types';
 import { ActionBar } from '../components/ActionBar';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
+import { RPL_ALLOCATOR_ROLE } from '../config';
 import { ToolkitFilesList } from '../components/ToolkitFilesList';
 import { toolkitFilesOf } from '../toolkitFiles';
 import {
@@ -50,7 +51,7 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
   if (application.evaluationReport.recommendation === '') reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
   const reportComplete = reportIssues.length === 0;
   const editableChecklist = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
-  const canAllocate = role === 'Assistant Director' && application.evalState.stageId === 'ad-allocation';
+  const canAllocate = role === RPL_ALLOCATOR_ROLE && application.evalState.stageId === 'ad-allocation';
   const decided = application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined';
 
   // Row 46: Director & Team moderation (a checklist, comment on every line) sits before the

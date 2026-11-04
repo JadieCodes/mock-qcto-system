@@ -29,7 +29,7 @@ import {
   SHARE_VISIT_OUTCOME_LABEL,
 } from '../config';
 import { usePlanningAction, useReportAction, useSiteVisit, useUpdateVisitDetails } from '../hooks';
-import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
+import { PLAN_SEND_BACK_TO_PLANNER_LABEL, PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { isPerQualificationVisit, VISIT_TYPE_LABELS, visitHasQp, visitHasSdp, visitSiteKindLabel, visitSiteName, visitSubject } from '../visitTypeLabels';
 import type { SiteVisit } from '../types';
 import type { Role } from '../../../types';
@@ -193,7 +193,7 @@ type PlanningDialogAction = { actionId: 'plan-dd-send-back' | 'plan-dd-reject' |
 const PLANNING_STAGE_ORDER = ['ad-planning', 'dd-recommend', 'domain-director-approval', 'sda-booking', 'booked'] as const;
 
 // A stage has been "reached" once an audit entry exists for an action that enters it
-// (toStage === stageId, e.g. the Assistant Director's "Submit Plan") OR leaves it
+// (toStage === stageId, e.g. the ASD's "Submit Plan") OR leaves it
 // (fromStage === stageId, e.g. the Deputy Director's "Recommend to Domain Director"). Checking
 // only the "leaves it" half (as a previous version of this function did) means a stage's own
 // action bar never appears the first time it's entered, because the only audit entry that
@@ -208,7 +208,7 @@ function stageReached(stageId: string, auditTrail: { action: string }[]): boolea
 // Row 32: once a stage has been reached, its box stays visible (read-only once passed) instead
 // of disappearing the moment the record moves on — every later approver can still see the plan
 // and every earlier reviewer's decision. Row 33: every review stage (every stage downstream of
-// the Assistant Director's own, which originates the plan and has nothing to send back to) gets
+// the ASD's own, which originates the plan and has nothing to send back to) gets
 // a Reject and a Send back action alongside its forward action.
 function PlanningTab({ visit }: { visit: SiteVisit }) {
   const { role, person } = useV2Role();
@@ -257,7 +257,7 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
   const sdaReached = stageReached('sda-booking', auditTrail);
 
   const dialogCopy: Record<Exclude<PlanningDialogAction, null>['actionId'], { title: string; confirmLabel: string; destructive?: boolean }> = {
-    'plan-dd-send-back': { title: 'Send back to Assistant Director', confirmLabel: 'Send back' },
+    'plan-dd-send-back': { title: PLAN_SEND_BACK_TO_PLANNER_LABEL, confirmLabel: 'Send back' },
     'plan-dd-reject': { title: 'Reject plan', confirmLabel: 'Reject', destructive: true },
     'plan-domain-director-send-back': { title: 'Send back to Deputy Director', confirmLabel: 'Send back' },
     'plan-domain-director-reject': { title: 'Reject plan', confirmLabel: 'Reject', destructive: true },
@@ -273,9 +273,9 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
       </div>
 
       <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-        <p className="text-xs font-semibold text-gray-500 uppercase">Assistant Director planning</p>
-        {stage === 'ad-planning' && latestNoteFor('Send back to Assistant Director') && (
-          <p className="text-xs text-amber-700">Sent back for clarification: {latestNoteFor('Send back to Assistant Director')}</p>
+        <p className="text-xs font-semibold text-gray-500 uppercase">ASD planning</p>
+        {stage === 'ad-planning' && latestNoteFor(PLAN_SEND_BACK_TO_PLANNER_LABEL) && (
+          <p className="text-xs text-amber-700">Sent back for clarification: {latestNoteFor(PLAN_SEND_BACK_TO_PLANNER_LABEL)}</p>
         )}
         <Textarea
           rows={3}
@@ -317,7 +317,7 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
           ) : currentIdx > PLANNING_STAGE_ORDER.indexOf('dd-recommend') ? (
             <p className="text-sm text-emerald-700">Recommended to Domain Director.</p>
           ) : (
-            <p className="text-sm text-amber-700">Sent back for clarification{latestNoteFor('Send back to Assistant Director') ? `: ${latestNoteFor('Send back to Assistant Director')}` : '.'}</p>
+            <p className="text-sm text-amber-700">Sent back for clarification{latestNoteFor(PLAN_SEND_BACK_TO_PLANNER_LABEL) ? `: ${latestNoteFor(PLAN_SEND_BACK_TO_PLANNER_LABEL)}` : '.'}</p>
           )}
         </div>
       )}

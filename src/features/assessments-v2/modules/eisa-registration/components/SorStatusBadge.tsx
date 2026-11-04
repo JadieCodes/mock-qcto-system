@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { SorStatus } from '../types';
 
-// Row 25 (E-10): shown on the learner row for both the SDP and the Assistant Director, so
+// Row 25 (E-10): shown on the learner row for both the SDP and the ASD, so
 // both sides read the same status off the same field.
 const LABELS: Record<SorStatus, string> = {
   uploaded: 'Uploaded',

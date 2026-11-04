@@ -15,6 +15,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { FisaValidationReport } from '../components/FisaValidationReport';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
+import { FISA_VALIDATION_ALLOCATOR_ROLE } from '../config';
 import { useFisaValidation, useFisaValidationAction, useSaveFisaValidationChecklist } from '../hooks';
 import type { FisaValidationRecord } from '../types';
 
@@ -28,7 +29,7 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
   const [allocatedAsdId, setAllocatedAsdId] = useState('');
   const asdOptions = personsForRole('ASD');
 
-  const canAllocate = role === 'Assistant Director' && record.workflow.stageId === 'awaiting-allocation';
+  const canAllocate = role === FISA_VALIDATION_ALLOCATOR_ROLE && record.workflow.stageId === 'awaiting-allocation';
   const canValidate = role === 'ASD' && record.workflow.stageId === 'asd-validation';
   const checklistComplete = isChecklistComplete(record.checklist, true);
 
@@ -127,7 +128,7 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
             )}
 
             {record.workflow.stageId === 'awaiting-allocation' && !canAllocate && (
-              <p className="text-sm text-gray-400">Awaiting Assistant Director allocation.</p>
+              <p className="text-sm text-gray-400">Awaiting Deputy Director allocation.</p>
             )}
 
             {record.allocatedAsdName && (

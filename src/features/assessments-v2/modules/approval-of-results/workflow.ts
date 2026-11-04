@@ -11,7 +11,7 @@ import {
 } from './config';
 import type { ResultsBatch } from './types';
 
-// CR-059: Assistant Director (compliance review -> evidence evaluation -> folder-by-folder
+// CR-059: ASD (compliance review -> evidence evaluation -> folder-by-folder
 // checklist) -> Deputy Director -> Director -> Chief Director final approval. The register's
 // "QCTO can approve or decline" is read as available at every one of QCTO's four internal
 // stages, not only the last one — mirroring this domain's running "decline/send-back
@@ -21,7 +21,7 @@ import type { ResultsBatch } from './types';
 export const RESULTS_WORKFLOW: WorkflowDefinition = {
   id: 'approval-of-results',
   stages: [
-    { id: 'ad-review', label: 'Assistant Director review', allowedRoles: [RESULTS_AD_ROLE] },
+    { id: 'ad-review', label: 'ASD review', allowedRoles: [RESULTS_AD_ROLE] },
     { id: 'dd-review', label: 'Deputy Director review', allowedRoles: [RESULTS_DD_ROLE] },
     { id: 'director-review', label: 'Director review', allowedRoles: [RESULTS_DIRECTOR_ROLE] },
     { id: 'chief-director-review', label: 'Chief Director review', allowedRoles: [RESULTS_CHIEF_DIRECTOR_ROLE] },
@@ -53,7 +53,7 @@ export type ResultsStatusTone = 'amber' | 'blue' | 'indigo' | 'purple' | 'emeral
 export function resultsStatusLabel(batch: ResultsBatch): string {
   switch (batch.workflow.stageId) {
     case 'ad-review':
-      return batch.cycleCount > 1 ? `With Assistant Director (cycle ${batch.cycleCount})` : 'With Assistant Director';
+      return batch.cycleCount > 1 ? `With ASD (cycle ${batch.cycleCount})` : 'With ASD';
     case 'dd-review':
       return 'With Deputy Director';
     case 'director-review':

@@ -2,16 +2,19 @@ import type { WorkflowDefinition } from '../../shared/workflow/types';
 import { BOOKING_ROLE, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE, SHARE_VISIT_OUTCOME_LABEL } from './config';
 import type { SiteVisit } from './types';
 
-// Planning chain: Assistant Director plans -> Deputy Director recommends -> Domain Director
-// approves -> Sub Domain Admin books. Row 33 (test findings): every REVIEW stage (the three
-// stages downstream of the Assistant Director's own, which is where the plan originates and
+// Audit-entry action label the Planning tab looks up to show the latest send-back note.
+export const PLAN_SEND_BACK_TO_PLANNER_LABEL = 'Send back to ASD';
+
+// Planning chain: ASD plans -> Deputy Director recommends -> Domain Director approves -> Sub
+// Domain Admin books. Row 33 (test findings): every REVIEW stage (the three stages downstream
+// of the ASD's own, which is where the plan originates and
 // has no prior owner to reject or send back to) gets a Reject and a Send back action, same
 // shape as CR-056's "every approval stage" rule elsewhere in this domain. Reject is terminal
 // (`planning-rejected`); Send back returns to the immediately preceding stage.
 export const PLANNING_WORKFLOW: WorkflowDefinition = {
   id: 'site-visits-planning',
   stages: [
-    { id: 'ad-planning', label: 'Assistant Director planning', allowedRoles: [PLANNER_ROLE] },
+    { id: 'ad-planning', label: 'ASD planning', allowedRoles: [PLANNER_ROLE] },
     { id: 'dd-recommend', label: 'Deputy Director recommendation', allowedRoles: [PLAN_RECOMMENDER_ROLE] },
     { id: 'domain-director-approval', label: 'Domain Director approval', allowedRoles: [PLAN_APPROVER_ROLE] },
     { id: 'sda-booking', label: 'Sub Domain Admin booking', allowedRoles: [BOOKING_ROLE] },
@@ -23,7 +26,7 @@ export const PLANNING_WORKFLOW: WorkflowDefinition = {
     { id: 'plan-recommend', label: 'Recommend to Domain Director', fromStage: 'dd-recommend', toStage: 'domain-director-approval', kind: 'advance' },
     {
       id: 'plan-dd-send-back',
-      label: 'Send back to Assistant Director',
+      label: PLAN_SEND_BACK_TO_PLANNER_LABEL,
       fromStage: 'dd-recommend',
       toStage: 'ad-planning',
       kind: 'send-back',
@@ -77,7 +80,8 @@ export const PLANNING_WORKFLOW: WorkflowDefinition = {
 // Report chain: the submitter (ASD) and the approver (Deputy Director) must always be
 // different roles — CR-053 fixes the old "Deputy & Assistant Director" self-approval bug by
 // construction (role-gating alone already blocks it), and `requiresDifferentActor` is kept as
-// a second, explicit line of defence. CR-056: send-back and reject are both available, each
+// a second, explicit line of defence. QCTO feedback 3.11: the ASD who planned the visit may
+// also conduct it; planning is approved separately by the DD and the Domain Director. CR-056: send-back and reject are both available, each
 // with a mandatory reason. CR-055: a manual re-route back into the same stage, also with a
 // mandatory audit note, for workload-sharing when a DD is unavailable.
 export const REPORT_WORKFLOW: WorkflowDefinition = {

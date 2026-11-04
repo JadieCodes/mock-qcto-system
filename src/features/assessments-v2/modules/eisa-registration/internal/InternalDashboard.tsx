@@ -16,7 +16,7 @@ import type { EisaRegistrationRecord } from '../types';
 // A brand-new submission nobody has personally touched yet still belongs under "My items" for
 // whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
 // A flagged SOR with every other SOR already accepted is waiting for the SDP, not the
-// Assistant Director, so it is left out until the SDP resubmits.
+// ASD, so it is left out until the SDP resubmits.
 function isUnassignedActionable(record: EisaRegistrationRecord, role: Role): boolean {
   return (
     canActInStage(REGISTRATION_WORKFLOW, record.workflow.stageId, role) &&
@@ -25,7 +25,7 @@ function isUnassignedActionable(record: EisaRegistrationRecord, role: Role): boo
 }
 
 // CR-019/CR-035: its own section, separate from EISA Instrument Validation. CR: category split
-// into Trades / Non-Trades tabs for the Assistant Director's queue.
+// into Trades / Non-Trades tabs for the ASD's queue.
 function RecordsTable({ records, onSelect }: { records: EisaRegistrationRecord[]; onSelect: (id: string) => void }) {
   if (records.length === 0) {
     return (
@@ -92,7 +92,7 @@ export function InternalDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Learner EISA Registration</h2>
-          <p className="text-sm text-gray-500 mt-1">Roles: Assistant Director reviews each learner's SOR and creates the registration number.</p>
+          <p className="text-sm text-gray-500 mt-1">Roles: ASD reviews each learner's SOR and creates the registration number.</p>
         </div>
         <ScopeToggle scope={scope} onChange={setScope} />
       </div>
@@ -100,7 +100,7 @@ export function InternalDashboard() {
       <div className="grid gap-4 md:grid-cols-3">
         {[
           { label: 'With SDP', value: records.filter((r) => r.workflow.stageId === 'sdp-submission').length },
-          { label: 'With Assistant Director', value: records.filter((r) => r.workflow.stageId === 'ad-review').length },
+          { label: 'With ASD', value: records.filter((r) => r.workflow.stageId === 'ad-review').length },
           { label: 'Registered', value: records.filter((r) => r.workflow.stageId === 'registered').length },
         ].map((card) => (
           <div key={card.label} className="rounded-2xl border bg-white p-5 shadow-sm">

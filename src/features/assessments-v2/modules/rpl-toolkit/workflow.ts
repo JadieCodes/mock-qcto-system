@@ -1,13 +1,15 @@
 import type { WorkflowDefinition } from '../../shared/workflow/types';
+import { RPL_ALLOCATOR_ROLE } from './config';
 import type { RplToolkitApplication } from './types';
 
-// PM-09: QP -> Assistant Director (allocates to an ASD) -> ASD evaluation -> Deputy Director
-// review -> Director & Team review -> IAC -> approved/declined. Corrections only ever travel
-// back through the ASD (CR-012's rule applied domain-wide) — no stage returns straight to the QP.
+// PM-09: QP -> Deputy Director (allocates to an ASD, QCTO feedback 3.11) -> ASD evaluation ->
+// Deputy Director review -> Director & Team review -> IAC -> approved/declined. Corrections only
+// ever travel back through the ASD (CR-012's rule applied domain-wide) — no stage returns
+// straight to the QP. The stage id 'ad-allocation' is kept so stored records still load.
 export const RPL_EVAL_WORKFLOW: WorkflowDefinition = {
   id: 'rpl-toolkit-evaluation',
   stages: [
-    { id: 'ad-allocation', label: 'Awaiting Assistant Director allocation', allowedRoles: ['Assistant Director'] },
+    { id: 'ad-allocation', label: 'Awaiting Deputy Director allocation', allowedRoles: [RPL_ALLOCATOR_ROLE] },
     { id: 'asd-evaluation', label: 'ASD evaluation', allowedRoles: ['ASD'] },
     { id: 'qp-corrections', label: 'Corrections requested from QP', allowedRoles: ['QP'] },
     { id: 'dd-review', label: 'Deputy Director review', allowedRoles: ['Deputy Director'] },
@@ -103,7 +105,7 @@ export type RplStatusTone = 'amber' | 'blue' | 'indigo' | 'emerald' | 'red';
 export function rplOverallStatusLabel(app: RplToolkitApplication): string {
   switch (app.evalState.stageId) {
     case 'ad-allocation':
-      return 'Awaiting Assistant Director allocation';
+      return 'Awaiting Deputy Director allocation';
     case 'asd-evaluation':
       return `Under ASD evaluation${app.allocatedAsdName ? ` (${app.allocatedAsdName})` : ''}`;
     case 'qp-corrections':

@@ -79,7 +79,9 @@ The old build uses a dropdown to pretend to be different users. Keep that idea: 
 ## Roles in v2
 
 External portal: **Quality Partner (QP)**, **SDP**.
-Internal portal: **ASD**, **Assistant Director**, **Deputy Director (DD)**, **Director**, **Domain Director**, **Chief Director**, **IAC** (committee), **CEO**, **Sub Domain Admin**, **Director & Team** and **Qualifications Development** (FISA only).
+Internal portal: **ASD**, **Deputy Director (DD)**, **Director**, **Domain Director**, **Chief Director**, **IAC** (committee), **CEO**, **Sub Domain Admin**, **Director & Team** (screen label "Director Office") and **Qualifications Development** (FISA only).
+
+"Assistant Director" is the same role as the ASD (QCTO feedback 3.11, 29 Oct 2026). There is one role, `'ASD'`, labelled "ASD" on every screen. Never add an "Assistant Director" role or label again. The DD allocates work to the ASDs.
 
 Do NOT recreate the old combined role "Deputy & Assistant Director" (it caused the self-approval bug) or the duplicate "AIC" (it is the IAC). Work is assigned by **process-stage team** (QSA evaluation, instrument validation, registration, site visits…), not by QP portfolio (CR-015).
 

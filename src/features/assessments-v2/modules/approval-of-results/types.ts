@@ -47,7 +47,7 @@ export interface ResultsBatch {
   learnerResults: LearnerResult[];
   evidenceDocuments: EvidenceDocument[];
 
-  // CR-059: the Assistant Director's three-part review before the batch can advance.
+  // CR-059: the ASD's three-part review before the batch can advance.
   complianceReviewNotes: string;
   evidenceEvaluationNotes: string;
   complianceChecklist: ChecklistSection[];

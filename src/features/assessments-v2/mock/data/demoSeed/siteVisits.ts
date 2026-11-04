@@ -24,7 +24,7 @@
 //  SV9   EISA Readiness        Johan van der Merwe                  today - 20    Report sent back for clarification — ASD to answer
 //  SV10  EISA Readiness        Johan van der Merwe                  today + 10    Plan rejected by the Domain Director (reason given)
 //  SV11  Marking & Moderation  Plumbing sitting today - 75          today - 75    Closed — outcome shared, QP notified
-//  SV12  Marking & Moderation  Welding sitting today + 55           today + 55    Plan sent back to the Assistant Director (reason given)
+//  SV12  Marking & Moderation  Welding sitting today + 55           today + 55    Plan sent back to the ASD (reason given)
 //
 // The Electrical Trades batch at 50% (Nomvula Dlamini) is above the 45% threshold, so it has no
 // Post-EISA Monitoring visit. SV5, SV7 and SV11 are linked to sittings
@@ -36,7 +36,7 @@
 // sample visit report, uploaded by the ASD after executing the visit. SV5 (draft) has one
 // attendance register and no report yet.
 //
-// Planners (Assistant Director): Lindiwe Khumalo / Riaan Pretorius. Deputy Director: Grace
+// Planners (ASD): Lindiwe Khumalo / Riaan Pretorius. Deputy Director: Grace
 // Mokoena / Peter Botha. Domain Director: Michael van Wyk / Nokuthula Dube. Sub Domain Admin:
 // Karabo Sithole / Katlego Mahlangu. Report submitters (ASD): Sipho Ndlovu / Thandeka Zulu.
 import { LABELS } from '../../../config/labels';
@@ -433,7 +433,7 @@ export function seedSiteVisits(
       body: `"${batch.qualificationTitle}" (${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
     });
     audit(log, { recordType: 'results-batch', recordId: batch.id, actor, action: 'Post-EISA Monitoring visit created — waiting for a date', timestamp: createdAt });
-    // The planning chain starts with the Assistant Director (whoever picks the date), so the
+    // The planning chain starts with the ASD (whoever picks the date), so the
     // seed itself never submits this plan.
     return builder(visit, clock, null);
   }

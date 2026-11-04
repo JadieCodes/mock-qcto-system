@@ -2,7 +2,8 @@ import type { Role } from '../../types';
 
 // CR-059 names each role explicitly — no open question here, unlike several other modules'
 // "no specific role named" assumptions.
-export const RESULTS_AD_ROLE: Role = 'Assistant Director';
+// QCTO feedback 3.11: the first review is the ASD's (formerly "Assistant Director").
+export const RESULTS_AD_ROLE: Role = 'ASD';
 export const RESULTS_DD_ROLE: Role = 'Deputy Director';
 export const RESULTS_DIRECTOR_ROLE: Role = 'Director';
 export const RESULTS_CHIEF_DIRECTOR_ROLE: Role = 'Chief Director';

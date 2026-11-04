@@ -6,11 +6,11 @@ export const PROCESS_STAGE_TEAMS: { id: ProcessStageTeam; label: string }[] = [
   { id: 'qsa-evaluation', label: 'ASD, DD, IAC, CEO' },
   { id: 'instrument-validation', label: 'ASD' },
   { id: 'eisa-calendar', label: 'ASD' },
-  { id: 'registration', label: 'Assistant Director' },
-  { id: 'site-visits', label: 'Assistant Director, ASD, DD, Domain Director, Sub Domain Admin' },
-  { id: 'approval-of-results', label: 'Assistant Director, DD, Director, CD' },
-  { id: 'fisa', label: 'Qualifications Development, Assistant Director, ASD, DD, IAC' },
-  { id: 'rpl-toolkit', label: 'Assistant Director, ASD, DD, Director Office, IAC, CEO' },
+  { id: 'registration', label: 'ASD' },
+  { id: 'site-visits', label: 'ASD, DD, Domain Director, Sub Domain Admin' },
+  { id: 'approval-of-results', label: 'ASD, DD, Director, CD' },
+  { id: 'fisa', label: 'Qualifications Development, ASD, DD, IAC' },
+  { id: 'rpl-toolkit', label: 'ASD, DD, Director Office, IAC, CEO' },
 ];
 
 export function teamLabel(id: ProcessStageTeam): string {

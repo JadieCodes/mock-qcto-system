@@ -10,6 +10,7 @@ import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
 import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
+import { RESULTS_AD_ROLE } from './config';
 import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
 import type { EvidenceDocument, LearnerResult, NewResultsBatchInput, ResultsBatch } from './types';
 
@@ -129,7 +130,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   saveAll([batch, ...all]);
 
   addNotification({
-    recipientRole: 'Assistant Director',
+    recipientRole: RESULTS_AD_ROLE,
     title: 'Results batch submitted',
     body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (${confirmation.sittingDate}).`,
   });
@@ -218,7 +219,7 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     };
     saveAll(replace(all, updated));
     addNotification({
-      recipientRole: 'Assistant Director',
+      recipientRole: RESULTS_AD_ROLE,
       title: 'Results batch resubmitted',
       body: `"${batch.qualificationTitle}" was resubmitted after being declined (cycle ${updated.cycleCount}).`,
     });

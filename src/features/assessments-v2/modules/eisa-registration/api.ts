@@ -10,7 +10,7 @@ import type { Role } from '../../types';
 import { listPublishedSittings } from '../eisa-calendar/api';
 import { calcRegistrationClosingDate, isRegistrationClosed } from '../eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../eisa-calendar/types';
-import { REGISTRATION_NUMBER_PREFIX } from './config';
+import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from './config';
 import { REGISTRATION_WORKFLOW } from './workflow';
 import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SorStatus, SupportingDocument } from './types';
 
@@ -90,7 +90,7 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
   );
   if (existingOpen) {
     throw new Error(
-      `"${input.sdpName}" already has an open registration for this sitting (${existingOpen.workflow.stageId === 'sdp-submission' ? 'still building' : 'with the Assistant Director'}). Open it to continue, or withdraw it first.`,
+      `"${input.sdpName}" already has an open registration for this sitting (${existingOpen.workflow.stageId === 'sdp-submission' ? 'still building' : 'with the ASD'}). Open it to continue, or withdraw it first.`,
     );
   }
 
@@ -198,7 +198,7 @@ export async function setLearnerRplArpl(registrationId: string, learnerId: strin
 }
 
 // CR-036 (SOR upload, UI-only) and CR-038 (re-upload clears a flag without the registration
-// leaving AD review) and CR-037 (backend-dependent, no screen — called and ignored).
+// leaving ASD review) and CR-037 (backend-dependent, no screen — called and ignored).
 export async function uploadLearnerSor(
   registrationId: string,
   learnerId: string,
@@ -239,7 +239,7 @@ export async function uploadLearnerSor(
       action: `Corrected and resubmitted the SOR for ${learner.fullName}`,
     });
     addNotification({
-      recipientRole: 'Assistant Director',
+      recipientRole: REGISTRATION_PROCESSOR_ROLE,
       title: 'SOR corrected and resubmitted',
       body: `${record.sdpName} resubmitted ${learner.fullName}'s SOR for "${record.qualificationTitle}".`,
     });
@@ -257,7 +257,7 @@ export async function uploadSupportingDocument(registrationId: string, file: { f
   return updated;
 }
 
-// CR-038: the Assistant Director flags one learner's SOR with a mandatory reason. This does
+// CR-038: the ASD flags one learner's SOR with a mandatory reason. This does
 // NOT move the registration's stage — only that learner's SOR status changes.
 export async function flagLearnerSor(
   registrationId: string,
@@ -270,7 +270,7 @@ export async function flagLearnerSor(
   const all = loadAll();
   const record = getOrThrow(all, registrationId);
   if (record.workflow.stageId !== 'ad-review') {
-    throw new Error('SORs can only be flagged while the registration is with the Assistant Director.');
+    throw new Error('SORs can only be flagged while the registration is with the ASD.');
   }
   const learner = record.learners.find((l) => l.learnerId === learnerId);
   if (!learner) throw new Error('Learner not found on this registration.');
@@ -284,7 +284,7 @@ export async function flagLearnerSor(
   appendAuditEntry({
     recordType: 'eisa-registration',
     recordId: record.id,
-    actorRole: 'Assistant Director',
+    actorRole: REGISTRATION_PROCESSOR_ROLE,
     actorId,
     actorName,
     action: `Flagged ${learner.fullName}'s SOR as non-compliant`,
@@ -299,7 +299,7 @@ export async function flagLearnerSor(
   return updated;
 }
 
-// Row 25 (E-10): the Assistant Director's own two non-flag review outcomes — starting a
+// Row 25 (E-10): the ASD's own two non-flag review outcomes — starting a
 // review, and accepting the SOR outright. Neither moves the registration's own stage, same
 // as the existing flag action.
 export async function markLearnerSorUnderReview(
@@ -311,7 +311,7 @@ export async function markLearnerSorUnderReview(
   const all = loadAll();
   const record = getOrThrow(all, registrationId);
   if (record.workflow.stageId !== 'ad-review') {
-    throw new Error('SORs can only be reviewed while the registration is with the Assistant Director.');
+    throw new Error('SORs can only be reviewed while the registration is with the ASD.');
   }
   const learner = record.learners.find((l) => l.learnerId === learnerId);
   if (!learner) throw new Error('Learner not found on this registration.');
@@ -324,7 +324,7 @@ export async function markLearnerSorUnderReview(
   appendAuditEntry({
     recordType: 'eisa-registration',
     recordId: record.id,
-    actorRole: 'Assistant Director',
+    actorRole: REGISTRATION_PROCESSOR_ROLE,
     actorId,
     actorName,
     action: `Started reviewing ${learner.fullName}'s SOR`,
@@ -341,7 +341,7 @@ export async function acceptLearnerSor(
   const all = loadAll();
   const record = getOrThrow(all, registrationId);
   if (record.workflow.stageId !== 'ad-review') {
-    throw new Error('SORs can only be accepted while the registration is with the Assistant Director.');
+    throw new Error('SORs can only be accepted while the registration is with the ASD.');
   }
   const learner = record.learners.find((l) => l.learnerId === learnerId);
   if (!learner) throw new Error('Learner not found on this registration.');
@@ -354,7 +354,7 @@ export async function acceptLearnerSor(
   appendAuditEntry({
     recordType: 'eisa-registration',
     recordId: record.id,
-    actorRole: 'Assistant Director',
+    actorRole: REGISTRATION_PROCESSOR_ROLE,
     actorId,
     actorName,
     action: `Accepted ${learner.fullName}'s SOR`,
@@ -399,7 +399,7 @@ export async function performRegistrationAction(params: RegistrationActionParams
 
   if (params.actionId === 'reg-submit') {
     addNotification({
-      recipientRole: 'Assistant Director',
+      recipientRole: REGISTRATION_PROCESSOR_ROLE,
       title: 'New EISA registration submitted',
       body: `${record.sdpName} submitted a registration for "${record.qualificationTitle}" (${record.learners.length} learner(s)).`,
     });
@@ -447,11 +447,8 @@ export async function performRegistrationAction(params: RegistrationActionParams
         createdBy: params.actorName,
       });
       updated = { ...updated, rplMonitoringItemId: item.id };
-      addNotification({
-        recipientRole: 'Assistant Director',
-        title: 'RPL/ARPL monitoring item created',
-        body: `A monitoring item was created for "${updated.qualificationTitle}" (${updated.sdpName}) — ${rplLearners.length} RPL/ARPL learner(s).`,
-      });
+      // QCTO feedback 3.11: this used to go to the Assistant Director and the ASD separately;
+      // they are one role now, so it is sent once.
       addNotification({
         recipientRole: 'ASD',
         title: 'RPL/ARPL monitoring item created',

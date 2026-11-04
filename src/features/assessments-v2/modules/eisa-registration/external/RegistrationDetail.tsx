@@ -50,7 +50,7 @@ function LearnerSorCell({
   if (!learner) return null;
 
   // CR-038: re-upload is allowed while the SDP is still building, or to correct a flag raised
-  // during AD review — but only for the SDP role, never the Assistant Director.
+  // during ASD review — but only for the SDP role, never the ASD.
   const canUpload = canAct && (record.workflow.stageId === 'sdp-submission' || learner.sorStatus === 'flagged');
 
   return (
@@ -193,7 +193,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
             <Alert className="border-amber-400 bg-amber-50">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">
-                {flaggedLearners.length} learner(s) have an SOR flagged by the Assistant Director — correct and re-upload below.
+                {flaggedLearners.length} learner(s) have an SOR flagged by the ASD — correct and re-upload below.
               </AlertDescription>
             </Alert>
           )}
@@ -329,7 +329,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
               disabled={!canSubmit || registrationAction.isPending}
               onClick={() => registrationAction.mutate({ registrationId: record.id, actionId: 'reg-submit', actorRole: role, actorId, actorName })}
             >
-              Submit to Assistant Director
+              Submit to ASD
             </Button>
           )}
         </DialogFooter>

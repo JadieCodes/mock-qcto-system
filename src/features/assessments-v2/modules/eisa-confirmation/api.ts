@@ -4,6 +4,7 @@ import { readStore, writeStore } from '../../mock/api/storage';
 import { listSittings } from '../eisa-calendar/api';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api';
+import { CONFIRMATION_GENERATOR_ROLE } from './config';
 import { CONFIRMATION_WORKFLOW } from './workflow';
 import type { ConfirmDetailsInput, ConsolidatedLearnerRow, EisaConfirmationRecord, GenerateConfirmationInput } from './types';
 
@@ -166,7 +167,7 @@ export async function confirmDetails(input: ConfirmDetailsInput): Promise<EisaCo
   saveAll(replace(all, updated));
 
   addNotification({
-    recipientRole: 'Assistant Director',
+    recipientRole: CONFIRMATION_GENERATOR_ROLE,
     title: 'EISA Confirmation complete',
     body: `"${record.qualificationTitle}" (${record.sittingDate}) is confirmed — marking ${input.markingDate}, moderation ${input.moderationDate}.`,
   });

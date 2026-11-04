@@ -12,16 +12,16 @@ export interface AppUser {
   managerId?: string;
 }
 
-const ASD_TEAMS: ProcessStageTeam[] = ['qsa-evaluation', 'instrument-validation', 'eisa-calendar', 'site-visits', 'fisa', 'rpl-toolkit'];
-const AD_TEAMS: ProcessStageTeam[] = ['registration', 'site-visits', 'fisa', 'approval-of-results', 'rpl-toolkit'];
+const ASD_TEAMS: ProcessStageTeam[] = ['qsa-evaluation', 'instrument-validation', 'eisa-calendar', 'registration', 'site-visits', 'approval-of-results', 'fisa', 'rpl-toolkit'];
 const DD_TEAMS: ProcessStageTeam[] = ['qsa-evaluation', 'site-visits', 'approval-of-results', 'fisa', 'rpl-toolkit'];
 
 export const USERS: AppUser[] = [
   { id: 'sipho-ndlovu', name: 'Sipho Ndlovu', role: 'ASD', teams: ASD_TEAMS, managerId: 'grace-mokoena' },
   { id: 'thandeka-zulu', name: 'Thandeka Zulu', role: 'ASD', teams: ASD_TEAMS, managerId: 'peter-botha' },
-
-  { id: 'lindiwe-khumalo', name: 'Lindiwe Khumalo', role: 'Assistant Director', teams: AD_TEAMS },
-  { id: 'riaan-pretorius', name: 'Riaan Pretorius', role: 'Assistant Director', teams: AD_TEAMS },
+  // QCTO feedback 3.11: formerly the "Assistant Director" users. They keep their ids, so a saved
+  // person selection and every seeded record that names them still resolve.
+  { id: 'lindiwe-khumalo', name: 'Lindiwe Khumalo', role: 'ASD', teams: ASD_TEAMS },
+  { id: 'riaan-pretorius', name: 'Riaan Pretorius', role: 'ASD', teams: ASD_TEAMS },
 
   { id: 'grace-mokoena', name: 'Grace Mokoena', role: 'Deputy Director', teams: DD_TEAMS },
   { id: 'peter-botha', name: 'Peter Botha', role: 'Deputy Director', teams: DD_TEAMS },

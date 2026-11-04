@@ -17,6 +17,7 @@ import { isModuleVisible } from '../../../shared/visibility/moduleAccess';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT, visibilityScopeForRole } from '../../site-visits/config';
 import { useSiteVisit } from '../../site-visits/hooks';
 import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
+import { RESULTS_AD_ROLE } from '../config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import {
@@ -153,7 +154,7 @@ function PemVisitBanner({ batch }: { batch: ResultsBatch }) {
           Open the visit in Site Visits &amp; Monitoring
         </Link>
       ) : (
-        <p className="text-xs text-amber-700">The Assistant Director picks the date in Site Visits &amp; Monitoring.</p>
+        <p className="text-xs text-amber-700">The ASD picks the date in Site Visits &amp; Monitoring.</p>
       )}
     </div>
   );
@@ -291,7 +292,7 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
   const uploadEvidence = useUploadEvidenceDocument();
   const resultsAction = useResultsAction();
 
-  const editable = role === 'Assistant Director' && batch.workflow.stageId === 'ad-review';
+  const editable = role === RESULTS_AD_ROLE && batch.workflow.stageId === 'ad-review';
   const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
   const notesComplete = batch.complianceReviewNotes.trim().length > 0 && batch.evidenceEvaluationNotes.trim().length > 0;
   const advanceIssues: ValidationIssue[] = editable
@@ -370,7 +371,7 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Approval Chain</p>
         </div>
         <div className="p-4 flex flex-wrap items-center gap-2 text-xs">
-          {['Assistant Director', 'Deputy Director', 'Director', 'Chief Director'].map((label, i) => (
+          {['ASD', 'Deputy Director', 'Director', 'Chief Director'].map((label, i) => (
             <span key={label} className={i <= currentIndex && batch.workflow.stageId !== 'declined' ? 'font-semibold text-blue-700' : 'text-gray-400'}>
               {label}
               {i < 3 ? ' →' : ''}
