@@ -74,6 +74,35 @@ export interface FisaValidationOutcome {
   decidedAt: string;
 }
 
+// QCTO feedback 3.10: the header of QCTO's "FISA Validation of Instrument Report". Every value
+// is free text; evaluatorName and dateCompleted are filled in when the outcome is recorded.
+export interface FisaValidationReportHeader {
+  qapSdpName: string;
+  contactNumber: string;
+  evaluatorName: string;
+  dateCompleted: string | null;
+  qualificationTitle: string;
+  spId: string;
+  nqfLevel: string;
+  credits: string;
+  fisaDatePeriod: string;
+  duration: string;
+  totalMarks: string;
+  passMark: string;
+}
+
+// The signature is a typed name plus a "Signed" tick (UI-only, no digital signature).
+export interface FisaValidationSignOff {
+  fullNames: string;
+  designation: string;
+  signed: boolean;
+  date: string | null;
+}
+
+// 'qcto-2026-10' = QCTO's own form (3.10). A record without it was started on the old
+// borrowed EISA checklist.
+export type FisaValidationFormVersion = 'qcto-2026-10';
+
 export interface FisaValidationRecord {
   id: string;
   // Links back to the approved FISA Standard the instrument is developed against.
@@ -91,6 +120,13 @@ export interface FisaValidationRecord {
   cycleCount: number;
 
   checklist: ChecklistSection[];
+  // QCTO feedback 3.10. Optional so records stored before the change still load; read them
+  // through fisaValidationFormOf() (validationForm.ts).
+  formVersion?: FisaValidationFormVersion;
+  reportHeader?: FisaValidationReportHeader;
+  section2Comment?: string;
+  findings?: string;
+  signOff?: FisaValidationSignOff;
   // PM-11: allocated to a named ASD person, not a free-text name.
   allocatedAsdId: string | null;
   allocatedAsdName: string | null;
@@ -100,6 +136,16 @@ export interface FisaValidationRecord {
   outcomeHistory: FisaValidationOutcome[];
 
   instrumentStatus: 'not-validated' | 'validated';
+}
+
+// What the ASD's Validate tab saves. The evaluator name, the completion date and the sign-off
+// date are set by the api, not typed.
+export interface FisaValidationFormPatch {
+  checklist?: ChecklistSection[];
+  reportHeader?: Partial<Omit<FisaValidationReportHeader, 'evaluatorName' | 'dateCompleted'>>;
+  section2Comment?: string;
+  findings?: string;
+  signOff?: Partial<Omit<FisaValidationSignOff, 'date'>>;
 }
 
 export interface NewFisaValidationInput {

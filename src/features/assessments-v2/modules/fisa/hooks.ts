@@ -14,12 +14,13 @@ import {
   saveFisaStandardChecklist,
   saveFisaStandardEvaluationReport,
   saveFisaStandardIacMinutes,
-  saveFisaValidationChecklist,
+  saveFisaValidationForm,
   startFisaValidation,
   uploadFisaInstrument,
 } from './api';
 import type {
   FisaStandardRecord,
+  FisaValidationFormPatch,
   FisaValidationRecord,
   NewFisaStandardInput,
   NewFisaValidationInput,
@@ -138,9 +139,9 @@ export function useUploadFisaInstrument() {
   );
 }
 
-export function useSaveFisaValidationChecklist() {
-  return useValidationMutation((args: { recordId: string; sections: ChecklistSection[] }) =>
-    saveFisaValidationChecklist(args.recordId, args.sections),
+export function useSaveFisaValidationForm() {
+  return useValidationMutation((args: { recordId: string; patch: FisaValidationFormPatch }) =>
+    saveFisaValidationForm(args.recordId, args.patch),
   );
 }
 

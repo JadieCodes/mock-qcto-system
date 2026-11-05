@@ -2,8 +2,8 @@ import { checklistItem, checklistSection, type ChecklistSection } from '../../sh
 
 // Wording copied from the old build's "QA Validation of Assessment Instrument Checklist"
 // (src/pages/assessment/Internal/InternalEisaValidation.tsx:688-794). Used for EISA Instrument
-// Validation (CR-018: QP-only, no SDP visibility) and, per 01-process-flow.md §3 map 4,
-// reused for FISA Instrument Validation with the "FISA Validation Report" output name.
+// Validation (CR-018: QP-only, no SDP visibility). FISA Instrument Validation used to reuse it;
+// since QCTO feedback 3.10 it has its own form (fisaInstrumentValidationChecklistItems.ts).
 
 export interface RequiredDocument {
   id: string;

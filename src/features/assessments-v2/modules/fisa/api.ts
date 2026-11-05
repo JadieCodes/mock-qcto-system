@@ -1,4 +1,3 @@
-import { buildInstrumentValidationChecklist } from '../../mock/data/instrumentValidationChecklistItems';
 import { buildFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
 import { seedFisaStandards } from '../../mock/data/fisaStandardsSeed';
 import { DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE, hasActedInRoles } from '../../shared/iac/differentPerson';
@@ -14,10 +13,18 @@ import type {
   FisaStandardRecord,
   FisaValidationOutcome,
   FisaValidationDecision,
+  FisaValidationFormPatch,
   FisaValidationRecord,
   NewFisaStandardInput,
   NewFisaValidationInput,
 } from './types';
+import {
+  fisaValidationFormOf,
+  isFisaValidationFormComplete,
+  upgradeFisaValidationRecord,
+  withBlankFisaValidationForm,
+  withNextCycleFisaValidationForm,
+} from './validationForm';
 
 // ---------------------------------------------------------------------------
 // Stage 1 — FISA Standards
@@ -184,7 +191,7 @@ export async function listApprovedFisaStandards(): Promise<FisaStandardRecord[]>
 export const VALIDATION_KEY = 'fisa:validations';
 
 function loadValidations(): FisaValidationRecord[] {
-  return readStore<FisaValidationRecord[]>(VALIDATION_KEY, []);
+  return readStore<FisaValidationRecord[]>(VALIDATION_KEY, []).map(upgradeFisaValidationRecord);
 }
 
 function saveValidations(records: FisaValidationRecord[]): void {
@@ -225,7 +232,7 @@ export async function startFisaValidation(input: NewFisaValidationInput): Promis
 
   const all = loadValidations();
 
-  const record: FisaValidationRecord = {
+  const record = withBlankFisaValidationForm({
     id: crypto.randomUUID(),
     fisaStandardId: standard.id,
     skillsProgrammeTitle: standard.skillsProgrammeTitle,
@@ -235,13 +242,13 @@ export async function startFisaValidation(input: NewFisaValidationInput): Promis
     createdBy: input.createdBy,
     instrument: null,
     cycleCount: 1,
-    checklist: buildInstrumentValidationChecklist(),
+    checklist: [],
     allocatedAsdId: null,
     allocatedAsdName: null,
     workflow: { stageId: 'sdp-instrument' },
     outcomeHistory: [],
     instrumentStatus: 'not-validated',
-  };
+  });
   saveValidations([record, ...all]);
   return record;
 }
@@ -257,10 +264,27 @@ export async function uploadFisaInstrument(recordId: string, file: { fileName: s
   return updated;
 }
 
-export async function saveFisaValidationChecklist(recordId: string, sections: ChecklistSection[]): Promise<FisaValidationRecord> {
+// QCTO feedback 3.10: the ASD's work on the "FISA Validation of Instrument Report", saved as
+// they go. Ticking "Signed" dates the signature; unticking clears the date.
+export async function saveFisaValidationForm(recordId: string, patch: FisaValidationFormPatch): Promise<FisaValidationRecord> {
   const all = loadValidations();
   const record = getValidationOrThrow(all, recordId);
-  const updated = { ...record, checklist: sections };
+  if (record.workflow.stageId !== 'asd-validation') {
+    throw new Error('The validation report can only be changed while the ASD is validating.');
+  }
+  const form = fisaValidationFormOf(record);
+  const signOff = { ...form.signOff, ...patch.signOff };
+  if (patch.signOff?.signed !== undefined) {
+    signOff.date = patch.signOff.signed ? (form.signOff.date ?? new Date().toISOString()) : null;
+  }
+  const updated: FisaValidationRecord = {
+    ...record,
+    checklist: patch.checklist ?? form.checklist,
+    reportHeader: { ...form.header, ...patch.reportHeader },
+    section2Comment: patch.section2Comment ?? form.section2Comment,
+    findings: patch.findings ?? form.findings,
+    signOff,
+  };
   saveValidations(replaceValidation(all, updated));
   return updated;
 }
@@ -288,8 +312,8 @@ export async function performFisaValidationAction(params: FisaValidationActionPa
   if (params.actionId === 'fval-allocate' && !params.allocatedAsdId) {
     throw new Error('Pick the ASD this validation is allocated to.');
   }
-  if (FISA_VALIDATION_OUTCOME_ACTION_IDS.includes(params.actionId) && !isChecklistComplete(record.checklist, true)) {
-    throw new Error('Every checklist line needs an answer and a comment before recording an outcome.');
+  if (FISA_VALIDATION_OUTCOME_ACTION_IDS.includes(params.actionId) && !isFisaValidationFormComplete(record)) {
+    throw new Error('Answer every checklist line, complete the Findings and Recommendations and sign off before recording an outcome.');
   }
 
   const nextWorkflow = performAction({
@@ -331,16 +355,21 @@ export async function performFisaValidationAction(params: FisaValidationActionPa
       decidedBy: params.actorName,
       decidedAt: new Date().toISOString(),
     };
-    updated = { ...updated, outcomeHistory: [...updated.outcomeHistory, outcome] };
+    // 3.10: the report's "Evaluator full names" and "Date completed" come from the outcome.
+    const header = fisaValidationFormOf(updated).header;
+    updated = {
+      ...updated,
+      outcomeHistory: [...updated.outcomeHistory, outcome],
+      reportHeader: { ...header, evaluatorName: params.actorName, dateCompleted: outcome.decidedAt },
+    };
 
     if (decision === 'not-approved') {
       // PM-01 loop: straight back to the SDP, a fresh cycle, no Deputy Director stop.
-      updated = {
+      updated = withNextCycleFisaValidationForm({
         ...updated,
         instrument: null,
         cycleCount: updated.cycleCount + 1,
-        checklist: buildInstrumentValidationChecklist(),
-      };
+      });
       addNotification({
         recipientRole: 'SDP',
         title: 'Changes required on your FISA instrument',

@@ -6,24 +6,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
-import { Checklist } from '../../../shared/checklist/Checklist';
-import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { LABELS } from '../../../config/labels';
 import { personsForRole } from '../../../shared/people/directory';
 import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { FisaValidationFormEditor } from '../components/FisaValidationFormEditor';
 import { FisaValidationReport } from '../components/FisaValidationReport';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
 import { FISA_VALIDATION_ALLOCATOR_ROLE } from '../config';
-import { useFisaValidation, useFisaValidationAction, useSaveFisaValidationChecklist } from '../hooks';
+import { useFisaValidation, useFisaValidationAction, useSaveFisaValidationForm } from '../hooks';
 import type { FisaValidationRecord } from '../types';
+import { getFisaValidationFormIssues } from '../validationForm';
 
 function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }) {
   const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
-  const saveChecklist = useSaveFisaValidationChecklist();
+  const saveForm = useSaveFisaValidationForm();
   const validationAction = useFisaValidationAction();
   const [notApprovedOpen, setNotApprovedOpen] = useState(false);
   const [allocatedAsdId, setAllocatedAsdId] = useState('');
@@ -31,7 +31,8 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
 
   const canAllocate = role === FISA_VALIDATION_ALLOCATOR_ROLE && record.workflow.stageId === 'awaiting-allocation';
   const canValidate = role === 'ASD' && record.workflow.stageId === 'asd-validation';
-  const checklistComplete = isChecklistComplete(record.checklist, true);
+  const formIssues = getFisaValidationFormIssues(record);
+  const formComplete = formIssues.length === 0;
 
   const runOutcome = (actionId: string, note?: string) => {
     validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorId, actorName, note });
@@ -137,24 +138,27 @@ function ValidationWorkspaceContent({ record }: { record: FisaValidationRecord }
 
             {record.workflow.stageId === 'asd-validation' && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">FISA Instrument Validation Checklist</p>
-                <Checklist sections={record.checklist} readonly={!canValidate} onChange={(sections) => saveChecklist.mutate({ recordId: record.id, sections })} />
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">FISA Validation of Instrument Report</p>
+                <FisaValidationFormEditor
+                  record={record}
+                  readonly={!canValidate}
+                  evaluatorName={canValidate ? actorName : (record.allocatedAsdName ?? '')}
+                  onSave={(patch) => saveForm.mutate({ recordId: record.id, patch })}
+                />
               </div>
             )}
 
-            {canValidate && (
-              <ValidationSummary issues={getChecklistIssues(record.checklist, true)} title="Complete these before recording an outcome:" />
-            )}
+            {canValidate && <ValidationSummary issues={formIssues} title="Complete these before recording an outcome:" />}
             {canValidate && (
               <div className="flex flex-wrap gap-2 pt-2">
-                <Button size="sm" className="gap-2 bg-emerald-600 hover:bg-emerald-700" disabled={!checklistComplete || validationAction.isPending} onClick={() => runOutcome('fval-approve')}>
+                <Button size="sm" className="gap-2 bg-emerald-600 hover:bg-emerald-700" disabled={!formComplete || validationAction.isPending} onClick={() => runOutcome('fval-approve')}>
                   <CheckCircle2 className="h-4 w-4" />
                   Approved
                 </Button>
-                <Button size="sm" variant="outline" disabled={!checklistComplete || validationAction.isPending} onClick={() => runOutcome('fval-approve-with-conditions')}>
+                <Button size="sm" variant="outline" disabled={!formComplete || validationAction.isPending} onClick={() => runOutcome('fval-approve-with-conditions')}>
                   Approved with conditions
                 </Button>
-                <Button size="sm" variant="destructive" className="gap-2" disabled={!checklistComplete || validationAction.isPending} onClick={() => setNotApprovedOpen(true)}>
+                <Button size="sm" variant="destructive" className="gap-2" disabled={!formComplete || validationAction.isPending} onClick={() => setNotApprovedOpen(true)}>
                   <XCircle className="h-4 w-4" />
                   Not approved
                 </Button>
