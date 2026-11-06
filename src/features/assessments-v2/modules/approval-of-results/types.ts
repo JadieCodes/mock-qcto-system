@@ -74,3 +74,79 @@ export interface NewResultsBatchInput {
   submittedBy: string;
   submittedById: string;
 }
+
+// ---------------------------------------------------------------------------
+// QCTO feedback 3.14: FISA results. FISA is decentralised — there is no QP; the SDP conducts
+// the assessment and submits the batch against an Approved FISA Standard (skills programme).
+// ---------------------------------------------------------------------------
+
+export type ResultsTrack = 'eisa' | 'fisa';
+
+export type FisaEvidenceTag = 'assessment-instrument' | 'marksheet' | 'moderation-report' | 'attendance-register' | 'other';
+
+// UI-only upload: the file's details and the SDP's tag, never the file itself.
+export interface TaggedEvidenceDocument {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedAt: string;
+  tag: FisaEvidenceTag;
+}
+
+export interface FisaResultsDeclaration {
+  acceptedBy: string;
+  acceptedById: string;
+  acceptedAt: string;
+}
+
+// Generated automatically at final approval and sent to the SDP (in-app notification).
+export interface FisaApprovalLetterRecord {
+  generatedAt: string;
+  signedBy: string;
+  sentToSdpAt: string;
+}
+
+// stageId: 'sdp-draft' | 'ad-review' | 'dd-review' | 'director-review' |
+// 'chief-director-review' | 'approved' | 'declined'. See workflow.ts FISA_RESULTS_WORKFLOW.
+export interface FisaResultsBatch {
+  id: string;
+  fisaStandardId: string;
+  skillsProgrammeTitle: string;
+  sdpId: string;
+  sdpName: string;
+
+  learnerResults: LearnerResult[];
+  evidenceDocuments: TaggedEvidenceDocument[];
+  declaration: FisaResultsDeclaration | null;
+
+  complianceReviewNotes: string;
+  evidenceEvaluationNotes: string;
+  complianceChecklist: ChecklistSection[];
+
+  workflow: WorkflowRecordState;
+  cycleCount: number;
+  declineHistory: ResultsDeclineEntry[];
+
+  createdAt: string;
+  createdBy: string;
+  createdById: string;
+  // Empty until the SDP submits.
+  submittedAt: string | null;
+
+  recommendation: CertificationRecommendation | null;
+  approvalLetter: FisaApprovalLetterRecord | null;
+}
+
+export interface NewFisaResultsBatchInput {
+  fisaStandardId: string;
+  sdpId: string;
+  sdpName: string;
+  createdBy: string;
+  createdById: string;
+}
+
+// What the SDP's draft saves as it is edited.
+export interface FisaResultsDraftPatch {
+  learnerResults?: LearnerResult[];
+  evidenceDocuments?: TaggedEvidenceDocument[];
+}

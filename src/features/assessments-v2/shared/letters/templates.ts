@@ -10,14 +10,26 @@ const LETTER_TITLES: Record<LetterKind, string> = {
   approval: 'Approval Letter',
 };
 
-// What an outcome letter is about. QASA is the default; the RPL Toolkit names its toolkit
-// instead (Batch A3), and FISA names the Skills Programme's standard (QCTO feedback 2.9).
-export type LetterSubject = 'qasa' | 'rpl-toolkit' | 'fisa-standard';
+// What a letter is about. QASA is the default; the RPL Toolkit names its toolkit instead
+// (Batch A3), FISA names the Skills Programme's standard (QCTO feedback 2.9), and Approval of
+// Results names the EISA or FISA results (QCTO feedback 3.14).
+export type LetterSubject = 'qasa' | 'rpl-toolkit' | 'fisa-standard' | 'eisa-results' | 'fisa-results';
 
 const OUTCOME_SUBJECT: Record<LetterSubject, (title: string) => string> = {
   qasa: (title) => `the QASA for "${title}"`,
   'rpl-toolkit': (title) => `the RPL toolkit "${title}"`,
   'fisa-standard': (title) => `the FISA Standard for "${title}"`,
+  'eisa-results': (title) => `the EISA results for "${title}"`,
+  'fisa-results': (title) => `the FISA results for "${title}"`,
+};
+
+// The approval letter's opening line. The QASA wording is unchanged.
+const APPROVAL_OPENING: Record<LetterSubject, (d: LetterData) => string> = {
+  qasa: (d) => `The QASA for "${d.qualificationTitle}"${d.nqfLevel ? ` (NQF Level ${d.nqfLevel})` : ''} has been approved.`,
+  'rpl-toolkit': (d) => `The RPL toolkit "${d.qualificationTitle}" has been approved.`,
+  'fisa-standard': (d) => `The FISA Standard for "${d.qualificationTitle}" has been approved.`,
+  'eisa-results': (d) => `The EISA results for "${d.qualificationTitle}" have been approved.`,
+  'fisa-results': (d) => `The FISA results for "${d.qualificationTitle}" have been approved.`,
 };
 
 const TEMPLATES: Record<LetterKind, (data: LetterData, subject: LetterSubject) => string> = {
@@ -37,18 +49,18 @@ Following the Internal Assessment Committee's review, ${OUTCOME_SUBJECT[subject]
 ${d.notes ?? ''}
 `.trim(),
 
-  approval: (d) => `
+  approval: (d, subject) => `
 Dear ${d.qpName},
 
-The QASA for "${d.qualificationTitle}"${d.nqfLevel ? ` (NQF Level ${d.nqfLevel})` : ''} has been approved.
+${APPROVAL_OPENING[subject](d)}
 
 ${d.notes ?? ''}
 `.trim(),
 };
 
 // `title` lets a module show its own name for a shared template (QASA calls the outcome
-// letter its "feedback letter", RPL Toolkit keeps "Outcome Letter"). `subject` changes only
-// the outcome letter's body wording.
+// letter its "feedback letter", RPL Toolkit keeps "Outcome Letter"). `subject` changes the
+// outcome and approval letters' body wording.
 export function generateLetter(
   kind: LetterKind,
   recordId: string,

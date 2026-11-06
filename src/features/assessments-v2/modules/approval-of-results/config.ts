@@ -1,4 +1,5 @@
 import type { Role } from '../../types';
+import type { FisaEvidenceTag } from './types';
 
 // CR-059 names each role explicitly — no open question here, unlike several other modules'
 // "no specific role named" assumptions.
@@ -18,3 +19,24 @@ export const RESULTS_SUBMISSION_DEADLINE_WORKING_DAYS = 21;
 // unconfirmed-figure open item in this build (EISA Calendar's lead time, Site Visits' notice
 // lead time).
 export const RESULTS_DUE_SOON_WINDOW_WORKING_DAYS = 5;
+
+// QCTO feedback 3.14: FISA results are submitted by the SDP, not a QP.
+export const FISA_RESULTS_SUBMITTER_ROLE: Role = 'SDP';
+
+// Audit record types — one per track, so each tab's Recent Activity and each batch's audit
+// trail only read their own entries.
+export const EISA_RESULTS_RECORD_TYPE = 'results-batch';
+export const FISA_RESULTS_RECORD_TYPE = 'fisa-results-batch';
+
+// The tag the SDP puts on each FISA evidence file.
+export const FISA_EVIDENCE_TAG_OPTIONS: { value: FisaEvidenceTag; label: string }[] = [
+  { value: 'assessment-instrument', label: 'Assessment instrument' },
+  { value: 'marksheet', label: 'Marksheet' },
+  { value: 'moderation-report', label: 'Moderation report' },
+  { value: 'attendance-register', label: 'Attendance register' },
+  { value: 'other', label: 'Other evidence' },
+];
+
+export function fisaEvidenceTagLabel(tag: FisaEvidenceTag): string {
+  return FISA_EVIDENCE_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
+}

@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '../../../shared/ui/PageHeader';
 import { EmptyState, SectionCard } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { APPROVAL_OF_RESULTS_EXTERNAL_TABS } from '../../../shared/visibility/config';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
+import type { ResultsTrack } from '../types';
+import { FisaResultsView } from './FisaResultsView';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches, useSittingsAwaitingSubmission } from '../hooks';
@@ -26,8 +30,6 @@ function QpResultsView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Approval of Results" description="Submit your exam results batch within 21 working days of the sitting." />
-
       <SectionCard title="Awaiting Submission">
         {myAwaiting.length === 0 ? (
           <EmptyState title="Nothing awaiting submission." />
@@ -106,9 +108,8 @@ function QpResultsView() {
   );
 }
 
-// SDP is not named for this module (register's "Who's involved" list is QP, Assistant
-// Director, Deputy Director, Director, Chief Director) — shown the same informational card
-// pattern used by Site Visits for the roles a module doesn't involve.
+// Shown to an external role with no Approval of Results tab (none today: the QP has EISA, the
+// SDP has FISA).
 function NotApplicableView() {
   return (
     <div className="space-y-6">
@@ -116,14 +117,44 @@ function NotApplicableView() {
       <SectionCard>
         <EmptyState
           title="Not applicable for this role"
-          description="Only the QP submits results batches here. QCTO reviews them on the internal portal."
+          description="The QP submits EISA results and the SDP submits FISA results here. QCTO reviews them on the internal portal."
         />
       </SectionCard>
     </div>
   );
 }
 
+const HEADER_DESCRIPTION: Record<ResultsTrack, string> = {
+  eisa: 'Submit your exam results batch within 21 working days of the sitting.',
+  fisa: 'Submit the results of the FISA assessments you conducted, for an approved skills programme.',
+};
+
+// QCTO feedback 3.14: an EISA tab (the QP's screen, as before) and a FISA tab (the SDP's).
+// Which tabs a role sees is set in shared/visibility/config.ts.
 export function ExternalDashboard() {
   const { role } = useV2Role();
-  return role === 'QP' ? <QpResultsView /> : <NotApplicableView />;
+  const tabs = APPROVAL_OF_RESULTS_EXTERNAL_TABS[role] ?? [];
+  if (tabs.length === 0) return <NotApplicableView />;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Approval of Results" description={HEADER_DESCRIPTION[tabs[0]]} />
+      <Tabs defaultValue={tabs[0]}>
+        <TabsList>
+          {tabs.includes('eisa') && <TabsTrigger value="eisa">EISA</TabsTrigger>}
+          {tabs.includes('fisa') && <TabsTrigger value="fisa">FISA</TabsTrigger>}
+        </TabsList>
+        {tabs.includes('eisa') && (
+          <TabsContent value="eisa" className="pt-4">
+            <QpResultsView />
+          </TabsContent>
+        )}
+        {tabs.includes('fisa') && (
+          <TabsContent value="fisa" className="pt-4">
+            <FisaResultsView />
+          </TabsContent>
+        )}
+      </Tabs>
+    </div>
+  );
 }

@@ -7,6 +7,8 @@
 //   eisaRegistration.ts      20 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
 //   eisaConfirmation.ts      12 EISA Confirmations — 1 ready to confirm, 11 confirmed (phase C2)
 //   approvalOfResults.ts     10 results batches at every stage, 1 sitting awaiting submission (phase C2)
+//   fisaResults.ts           4 FISA results batches: awaiting submission, with the ASD, with the DD,
+//                            approved with the letter sent (QCTO feedback 3.14)
 //   siteVisits.ts            16 site visits — every type, every planning and report stage (phase C3, Batch G)
 //   fisaValidation.ts        6 FISA Instrument Validations against the approved FISA Standard (phase C3;
 //                            the 6th, Approved with conditions, added with QCTO's report form in 3.10)
@@ -19,6 +21,7 @@
 // confirmations; Site Visits needs the sittings, the RPL/ARPL monitoring items from
 // Registration and the low-competency results batch (it sets that batch's pemVisitId).
 import { KEY as RESULTS_KEY } from '../../../modules/approval-of-results/api';
+import { FISA_RESULTS_KEY } from '../../../modules/approval-of-results/fisaApi';
 import { BATCHES_KEY, SITTINGS_KEY } from '../../../modules/eisa-calendar/api';
 import { CHANGE_REQUESTS_KEY } from '../../../modules/eisa-calendar/changeRequests';
 import { KEY as CONFIRMATION_KEY } from '../../../modules/eisa-confirmation/api';
@@ -37,6 +40,7 @@ import { seedEisaCalendar } from './eisaCalendar';
 import { seedEisaConfirmations } from './eisaConfirmation';
 import { seedEisaRegistrations } from './eisaRegistration';
 import { seedFisaValidations } from './fisaValidation';
+import { seedFisaResultsBatches } from './fisaResults';
 import { createSeedLog } from './helpers';
 import { seedInstrumentValidations } from './instrumentValidation';
 import { seedQasaSubmissions } from './qasa';
@@ -52,6 +56,7 @@ export function seedDemoData(): void {
   const confirmations = seedEisaConfirmations(log, calendar.sittings, registrations);
   const siteVisits = seedSiteVisits(log, calendar.sittings, registrations, monitoringItems, seedResultsBatches(log, confirmations));
   const fisaValidations = seedFisaValidations(log);
+  const fisaResults = seedFisaResultsBatches(log);
   const rplToolkits = seedRplToolkits(log);
 
   writeStore(QASA_KEY, qasa);
@@ -65,6 +70,7 @@ export function seedDemoData(): void {
   writeStore(MONITORING_ITEMS_KEY, monitoringItems);
   writeStore(SITE_VISITS_KEY, siteVisits.visits);
   writeStore(FISA_VALIDATION_KEY, fisaValidations);
+  writeStore(FISA_RESULTS_KEY, fisaResults);
   writeStore(RPL_TOOLKIT_KEY, rplToolkits);
   // The audit log is read oldest-first (getAuditTrail callers take the latest by reversing);
   // notifications are stored newest-first, as addNotification() leaves them.

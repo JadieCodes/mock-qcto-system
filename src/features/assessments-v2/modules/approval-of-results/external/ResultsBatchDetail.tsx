@@ -1,7 +1,11 @@
 import { Button } from '@/components/ui/button';
+import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { EISA_RESULTS_RECORD_TYPE } from '../config';
+import { BatchDownloads } from '../components/BatchDownloads';
 import { DeadlineBadge } from '../components/DeadlineBadge';
+import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsAction, useResultsBatch } from '../hooks';
 import { competencyRatePercent, competentCountOf } from '../workflow';
@@ -49,6 +53,12 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
               Recommended to Certification on {new Date(batch.recommendation.recommendedAt).toLocaleDateString('en-ZA')}.
             </div>
+          )}
+          {batch.workflow.stageId === 'approved' && (
+            <BatchDownloads
+              onDownloadLetter={() => downloadEisaApprovalLetter(batch)}
+              onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
+            />
           )}
           {batch.workflow.stageId === 'declined' && (
             <Button

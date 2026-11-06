@@ -6,7 +6,8 @@ export const MODULES_VISIBLE_TO_ALL_ROLES: string[] = ['qasa-status'];
 
 // 09-visibility-matrix.md Table A (external portal). SDP additions beyond the existing
 // CR-018 instrument-validation hide: qsa-addendum, eisa-confirmation, site-visits,
-// approval-of-results, rpl-toolkit. QP additions: eisa-registration, fisa.
+// rpl-toolkit (approval-of-results was hidden too until QCTO feedback 3.14). QP additions:
+// eisa-registration, fisa.
 export const EXTERNAL_MODULE_HIDDEN_FOR_ROLE: Record<string, Role[]> = {
   'qsa-addendum': ['SDP'],
   'instrument-validation': ['SDP'], // CR-018
@@ -19,9 +20,18 @@ export const EXTERNAL_MODULE_HIDDEN_FOR_ROLE: Record<string, Role[]> = {
   // Shared visit outcomes: the QP's read-only list of visits shared with them. Separate from
   // site-visits above, which stays hidden and blocked for the QP.
   'visit-outcomes': ['SDP'],
-  'approval-of-results': ['SDP'],
+  // QCTO feedback 3.14: the SDP now opens Approval of Results too, but only its FISA tab
+  // (APPROVAL_OF_RESULTS_EXTERNAL_TABS below).
   fisa: ['QP'],
   'rpl-toolkit': ['SDP'],
+};
+
+// QCTO feedback 3.14: Approval of Results has an EISA tab and a FISA tab. On the external
+// portal each role sees only the track it submits: the QP submits EISA results, the SDP
+// submits FISA results (FISA has no QP). Every internal role that can open the module sees both.
+export const APPROVAL_OF_RESULTS_EXTERNAL_TABS: Partial<Record<Role, ('eisa' | 'fisa')[]>> = {
+  QP: ['eisa'],
+  SDP: ['fisa'],
 };
 
 // 09-visibility-matrix.md Table B (internal portal) — a role sees an internal module if the

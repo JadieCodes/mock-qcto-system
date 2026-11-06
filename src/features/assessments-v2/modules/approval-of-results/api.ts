@@ -177,23 +177,27 @@ interface ResultsActionParams {
   note?: string;
 }
 
-const NEXT_APPROVER: Partial<Record<string, Role>> = {
+export const NEXT_APPROVER: Partial<Record<string, Role>> = {
   'ad-advance': 'Deputy Director',
   'dd-advance': 'Director',
   'director-advance': 'Chief Director',
 };
 
+// CR-059: the ASD's three-part review must be complete before the batch goes to the Deputy
+// Director. One check for EISA and FISA batches (QCTO feedback 3.14).
+export function assertAsdReviewComplete(review: Pick<ResultsBatch, 'complianceReviewNotes' | 'evidenceEvaluationNotes' | 'complianceChecklist'>): void {
+  if (!review.complianceReviewNotes.trim()) throw new Error('Complete the compliance review notes before advancing.');
+  if (!review.evidenceEvaluationNotes.trim()) throw new Error('Complete the evidence evaluation notes before advancing.');
+  if (!isChecklistComplete(review.complianceChecklist, true)) {
+    throw new Error('Every folder compliance line needs an answer and a comment before advancing.');
+  }
+}
+
 export async function performResultsAction(params: ResultsActionParams): Promise<ResultsBatch> {
   const all = loadAll();
   const batch = getOrThrow(all, params.batchId);
 
-  if (params.actionId === 'ad-advance') {
-    if (!batch.complianceReviewNotes.trim()) throw new Error('Complete the compliance review notes before advancing.');
-    if (!batch.evidenceEvaluationNotes.trim()) throw new Error('Complete the evidence evaluation notes before advancing.');
-    if (!isChecklistComplete(batch.complianceChecklist, true)) {
-      throw new Error('Every folder compliance line needs an answer and a comment before advancing.');
-    }
-  }
+  if (params.actionId === 'ad-advance') assertAsdReviewComplete(batch);
 
   if (params.actionId === 'batch-resubmit') {
     const nextWorkflow = performAction({

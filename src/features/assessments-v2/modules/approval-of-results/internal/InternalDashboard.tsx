@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import type { Role } from '../../../types';
 import { PageHeader } from '../../../shared/ui/PageHeader';
@@ -8,10 +9,12 @@ import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
+import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
 import { competencyRatePercent, RESULTS_WORKFLOW } from '../workflow';
+import { FisaResultsTab } from './FisaResultsTab';
 import { ResultsBatchWorkspace } from './ResultsBatchWorkspace';
 import type { ResultsBatch } from '../types';
 
@@ -60,14 +63,11 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
   );
 }
 
-// CR-059/CR-060: "Approval of Results" is a brand-new module name — CR-060 is satisfied by
-// construction, since this name was never used for anything else anywhere in v2's nav
-// (config/nav.ts), only placeholders flagged for Phase 6 (see progress.md).
-export function InternalDashboard() {
+// The EISA tab: the QP's results batches, as before QCTO feedback 3.14.
+function EisaResultsTab({ scope }: { scope: ListScope }) {
   const { role, person } = useV2Role();
   const { data: allBatches = [] } = useResultsBatches();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [scope, setScope] = useState<ListScope>('mine');
   const batches = filterByScope(allBatches, scope, person.id, (b) => [b.workflow.submittedById], (b) => isUnassignedActionable(b, role));
 
   const pending = batches.filter((b) => PENDING_STAGES.has(b.workflow.stageId));
@@ -76,12 +76,6 @@ export function InternalDashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Approval of Results"
-        description="QP results-batch submissions, checked through ASD → Deputy Director → Director → Chief Director."
-        actions={<ScopeToggle scope={scope} onChange={setScope} />}
-      />
-
       <StatTileGrid>
         <StatTile label="Total Batches" value={batches.length} />
         <StatTile label="Pending Review" value={pending.length} />
@@ -95,11 +89,41 @@ export function InternalDashboard() {
 
       <SectionCard title="Recent Activity">
         <div className="p-4 max-h-80 overflow-y-auto">
-          <AuditTrailView recordTypes={['results-batch']} />
+          <AuditTrailView recordTypes={[EISA_RESULTS_RECORD_TYPE]} />
         </div>
       </SectionCard>
 
       <ResultsBatchWorkspace batchId={selectedId} onClose={() => setSelectedId(null)} />
+    </div>
+  );
+}
+
+// CR-059/CR-060: "Approval of Results" is a brand-new module name — CR-060 is satisfied by
+// construction, since this name was never used for anything else anywhere in v2's nav
+// (config/nav.ts), only placeholders flagged for Phase 6 (see progress.md).
+// QCTO feedback 3.14: an EISA tab and a FISA tab, both through the same internal chain.
+export function InternalDashboard() {
+  const [scope, setScope] = useState<ListScope>('mine');
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Approval of Results"
+        description="EISA results from the QP and FISA results from the SDP, checked through ASD → Deputy Director → Director → Chief Director."
+        actions={<ScopeToggle scope={scope} onChange={setScope} />}
+      />
+      <Tabs defaultValue="eisa">
+        <TabsList>
+          <TabsTrigger value="eisa">EISA</TabsTrigger>
+          <TabsTrigger value="fisa">FISA</TabsTrigger>
+        </TabsList>
+        <TabsContent value="eisa" className="pt-4">
+          <EisaResultsTab scope={scope} />
+        </TabsContent>
+        <TabsContent value="fisa" className="pt-4">
+          <FisaResultsTab scope={scope} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

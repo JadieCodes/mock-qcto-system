@@ -38,7 +38,9 @@ export function writeStore<T>(key: string, value: T): void {
 // visit Domain (2.5), and two visits shared with the QP Nomvula Dlamini (Visit Outcomes).
 // 'A9.1' = 3.10: FISA Instrument Validations on QCTO's "FISA Validation of Instrument Report"
 // form, plus a sixth record (Approved with conditions, with "No" answers and findings).
-export const SEED_VERSION = 'A9.1';
+// 'A10' = 3.14: FISA results batches in Approval of Results — awaiting submission, with the ASD,
+// with the DD, and approved with the approval letter sent to the SDP.
+export const SEED_VERSION = 'A10';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

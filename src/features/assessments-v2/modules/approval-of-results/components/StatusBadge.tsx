@@ -1,9 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { resultsStatusLabel, resultsStatusTone, type ResultsStatusTone } from '../workflow';
-import type { ResultsBatch } from '../types';
+import { resultsStatusLabel, resultsStatusTone, type ResultsStatusSource, type ResultsStatusTone } from '../workflow';
 
 const TONE_CLASSES: Record<ResultsStatusTone, string> = {
+  gray: 'bg-gray-50 text-gray-700 border-gray-200',
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
   blue: 'bg-blue-50 text-blue-700 border-blue-200',
   indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
@@ -12,7 +12,8 @@ const TONE_CLASSES: Record<ResultsStatusTone, string> = {
   red: 'bg-red-50 text-red-700 border-red-200',
 };
 
-export function ResultsBatchStatusBadge({ batch }: { batch: ResultsBatch }) {
+// Used for EISA and FISA results batches alike.
+export function ResultsBatchStatusBadge({ batch }: { batch: ResultsStatusSource }) {
   const tone = resultsStatusTone(batch);
   return (
     <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>

@@ -15,7 +15,21 @@ import {
   submitResultsBatch,
   uploadEvidenceDocument,
 } from './api';
-import type { NewResultsBatchInput, ResultsBatch } from './types';
+import {
+  createFisaResultsBatch,
+  getFisaResultsBatch,
+  listFisaResultsBatches,
+  listFisaStandardsForResults,
+  listLearnersForSdp,
+  performFisaResultsAction,
+  saveFisaComplianceChecklist,
+  saveFisaComplianceReviewNotes,
+  saveFisaEvidenceEvaluationNotes,
+  saveFisaResultsDraft,
+  submitFisaResultsBatch,
+  uploadFisaReviewEvidence,
+} from './fisaApi';
+import type { FisaResultsBatch, FisaResultsDraftPatch, NewFisaResultsBatchInput, NewResultsBatchInput, ResultsBatch } from './types';
 
 const LIST_KEY = ['approval-of-results', 'batches'] as const;
 const detailKey = (id: string) => ['approval-of-results', 'batches', id] as const;
@@ -97,6 +111,82 @@ export function useResultsAction() {
     },
     onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });
+}
+
+// ---------------------------------------------------------------------------
+// QCTO feedback 3.14: FISA results batches (fisaApi.ts).
+// ---------------------------------------------------------------------------
+
+const FISA_LIST_KEY = ['approval-of-results', 'fisa-batches'] as const;
+const fisaDetailKey = (id: string) => ['approval-of-results', 'fisa-batches', id] as const;
+
+export function useFisaResultsBatches() {
+  return useQuery({ queryKey: FISA_LIST_KEY, queryFn: listFisaResultsBatches });
+}
+
+export function useFisaResultsBatch(id: string | null) {
+  return useQuery({ queryKey: fisaDetailKey(id ?? 'none'), queryFn: () => getFisaResultsBatch(id as string), enabled: !!id });
+}
+
+export function useFisaStandardsForResults() {
+  return useQuery({ queryKey: ['approval-of-results', 'fisa-standards'], queryFn: listFisaStandardsForResults });
+}
+
+export function useLearnersForSdp(sdpName: string) {
+  return useQuery({ queryKey: ['approval-of-results', 'sdp-learners', sdpName], queryFn: () => listLearnersForSdp(sdpName) });
+}
+
+function useFisaResultsBatchMutation<TArgs>(mutationFn: (args: TArgs) => Promise<FisaResultsBatch>, successMessage?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(fisaDetailKey(updated.id), updated);
+      queryClient.invalidateQueries({ queryKey: FISA_LIST_KEY });
+      if (successMessage) toast.success(successMessage);
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
+}
+
+export function useCreateFisaResultsBatch() {
+  return useFisaResultsBatchMutation((input: NewFisaResultsBatchInput) => createFisaResultsBatch(input), 'Results batch created.');
+}
+
+export function useSaveFisaResultsDraft() {
+  return useFisaResultsBatchMutation((args: { id: string; sdpId: string; patch: FisaResultsDraftPatch }) =>
+    saveFisaResultsDraft(args.id, args.sdpId, args.patch),
+  );
+}
+
+export function useSubmitFisaResultsBatch() {
+  return useFisaResultsBatchMutation(
+    (args: { id: string; actor: { role: Role; id: string; name: string }; declarationAccepted: boolean }) =>
+      submitFisaResultsBatch(args.id, args.actor, args.declarationAccepted),
+    'Results batch submitted.',
+  );
+}
+
+export function useSaveFisaComplianceChecklist() {
+  return useFisaResultsBatchMutation((args: { id: string; sections: ChecklistSection[] }) => saveFisaComplianceChecklist(args.id, args.sections));
+}
+
+export function useSaveFisaComplianceReviewNotes() {
+  return useFisaResultsBatchMutation((args: { id: string; notes: string }) => saveFisaComplianceReviewNotes(args.id, args.notes));
+}
+
+export function useSaveFisaEvidenceEvaluationNotes() {
+  return useFisaResultsBatchMutation((args: { id: string; notes: string }) => saveFisaEvidenceEvaluationNotes(args.id, args.notes));
+}
+
+export function useUploadFisaReviewEvidence() {
+  return useFisaResultsBatchMutation((args: { id: string; file: { fileName: string; fileSize: number; fileType: string } }) =>
+    uploadFisaReviewEvidence(args.id, args.file),
+  );
+}
+
+export function useFisaResultsAction() {
+  return useFisaResultsBatchMutation(performFisaResultsAction);
 }
 
 export function useCreatePemVisitForBatch() {

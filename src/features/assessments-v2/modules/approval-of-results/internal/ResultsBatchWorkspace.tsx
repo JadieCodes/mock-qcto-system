@@ -1,14 +1,12 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
-import { availableActions, canActInStage } from '../../../shared/workflow/engine';
-import type { WorkflowAction } from '../../../shared/workflow/types';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
@@ -17,8 +15,11 @@ import { isModuleVisible } from '../../../shared/visibility/moduleAccess';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT, visibilityScopeForRole } from '../../site-visits/config';
 import { useSiteVisit } from '../../site-visits/hooks';
 import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
-import { RESULTS_AD_ROLE } from '../config';
+import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
+import { BatchDownloads } from '../components/BatchDownloads';
 import { DeadlineBadge } from '../components/DeadlineBadge';
+import { ResultsActionBar } from '../components/ResultsActionBar';
+import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import {
   useCreatePemVisitForBatch,
@@ -32,78 +33,6 @@ import {
 } from '../hooks';
 import { competencyRatePercent, competentCountOf, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
 import type { ResultsBatch } from '../types';
-import type { Role } from '../../../types';
-
-// A single generic button that opens an inline mandatory-reason box for decline actions, and
-// fires immediately for ones that don't need one. Same shape as the QSA Addendum workspace's
-// ActionButton — duplicated locally rather than shared, matching this codebase's existing
-// per-module convention.
-function ActionButton({ action, onRun, disabled }: { action: WorkflowAction; onRun: (note?: string) => void; disabled?: boolean }) {
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [note, setNote] = useState('');
-  const variant = action.kind === 'reject' ? 'destructive' : 'default';
-
-  if (!action.requiresNote) {
-    return (
-      <Button size="sm" variant={variant} disabled={disabled} onClick={() => onRun()}>
-        {action.label}
-      </Button>
-    );
-  }
-  if (!noteOpen) {
-    return (
-      <Button size="sm" variant={variant} disabled={disabled} onClick={() => setNoteOpen(true)}>
-        {action.label}
-      </Button>
-    );
-  }
-  return (
-    <div className="space-y-2 rounded-xl border p-3 bg-gray-50 w-full">
-      <p className="text-xs font-medium text-gray-600">{action.label} — a reason is required</p>
-      <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Explain why..." />
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant={variant}
-          disabled={!note.trim() || disabled}
-          onClick={() => {
-            onRun(note);
-            setNoteOpen(false);
-            setNote('');
-          }}
-        >
-          Confirm
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => { setNoteOpen(false); setNote(''); }}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ActionBar({
-  stageId,
-  role,
-  onRun,
-  disabledActionIds,
-}: {
-  stageId: string;
-  role: Role;
-  onRun: (actionId: string, note?: string) => void;
-  disabledActionIds?: string[];
-}) {
-  if (!canActInStage(RESULTS_WORKFLOW, stageId, role)) return null;
-  const actions = availableActions(RESULTS_WORKFLOW, stageId);
-  if (actions.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-2 pt-2">
-      {actions.map((action) => (
-        <ActionButton key={action.id} action={action} disabled={disabledActionIds?.includes(action.id)} onRun={(note) => onRun(action.id, note)} />
-      ))}
-    </div>
-  );
-}
 
 // QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit
 // automatically (approval-of-results/api.ts). The button is only a fallback for an approved
@@ -343,7 +272,8 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
       {batch.workflow.stageId === 'ad-review' && (
         <>
           <ValidationSummary issues={advanceIssues} title="Complete these before advancing to the Deputy Director:" />
-          <ActionBar
+          <ResultsActionBar
+            definition={RESULTS_WORKFLOW}
             stageId={batch.workflow.stageId}
             role={role}
             disabledActionIds={!(checklistComplete && notesComplete) ? ['ad-advance'] : []}
@@ -381,7 +311,8 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
       </div>
 
       {batch.workflow.stageId !== 'ad-review' && batch.workflow.stageId !== 'declined' && batch.workflow.stageId !== 'approved' && (
-        <ActionBar
+        <ResultsActionBar
+          definition={RESULTS_WORKFLOW}
           stageId={batch.workflow.stageId}
           role={role}
           onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
@@ -397,10 +328,16 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
       )}
 
       {batch.workflow.stageId === 'approved' && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Approved by the Chief Director.
-          {batch.recommendation && ' Recommended to the Certification domain for certificate printing.'}
-        </div>
+        <>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            Approved by the Chief Director.
+            {batch.recommendation && ' Recommended to the Certification domain for certificate printing.'}
+          </div>
+          <BatchDownloads
+            onDownloadLetter={() => downloadEisaApprovalLetter(batch)}
+            onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
+          />
+        </>
       )}
     </div>
   );

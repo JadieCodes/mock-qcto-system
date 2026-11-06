@@ -204,3 +204,13 @@ This replaces the EISA Calendar cells in Table A (QP) and Table B (ASD, Deputy D
 - **Different person:** nobody acts twice on the same request — the person who raises or recommends it can never decide it (person ids, `changeRequests.ts` `hasActedOnRequest()`).
 - **Section 2 addition — EISA sitting change request:** owner = the QP or DD who raised it; unit `eisa-calendar`; approvers: postponement DD → Director; cancellation DD → Director → CEO; belongs to the sitting's QP by `qpId`.
 - **SDP:** unchanged (published, postponed and cancelled sittings, view only; notified when a sitting is postponed or cancelled).
+
+### QCTO feedback 3.14 — FISA results in Approval of Results (answered 29 Oct 2026, built 5 Nov 2026)
+
+QCTO: Approval of Results covers EISA and FISA. EISA is centralised (the QP submits); FISA is decentralised (no QP — the SDP conducts the assessment and submits the results). This replaces the SDP's **None** for Approval of Results in Table A.
+
+- **Tabs:** Approval of Results has an "EISA" tab and a "FISA" tab on both portals.
+- **SDP (external): See own, FISA tab only** — creates and submits FISA results batches for an Approved FISA Standard, resubmits after a decline, downloads the approval letter and verification report of its approved batches. Only its own batches (`sdpId`). Granted in `src/features/assessments-v2/shared/visibility/config.ts`: `'approval-of-results'` is no longer in `EXTERNAL_MODULE_HIDDEN_FOR_ROLE` for the SDP, and `APPROVAL_OF_RESULTS_EXTERNAL_TABS.SDP = ['fisa']`. `[ASSUMPTION]` the SDP sees the FISA tab only.
+- **QP (external): unchanged, EISA tab only** (`APPROVAL_OF_RESULTS_EXTERNAL_TABS.QP = ['eisa']`), plus the two downloads on approved batches. The QP stays **None** on FISA.
+- **Internal:** every role that already sees Approval of Results (ASD, Deputy Director, Director, Chief Director) sees both tabs and acts on FISA batches at the same stages as on EISA batches. A FISA batch the SDP has not submitted is not shown internally.
+- **Section 2 addition — FISA results batch:** owner = the SDP (submitter); unit `approval-of-results`; approvers ASD → Deputy Director → Director → Chief Director (the same as an EISA batch, `[ASSUMPTION]`); belongs to the SDP by `sdpId`. On final approval the approval letter is generated and sent to the SDP, and the batch is recommended to Certification (simulated). No Post-EISA Monitoring visit.
