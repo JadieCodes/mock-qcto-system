@@ -1,5 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ASSESSMENT_COMPONENT_TYPE_LABELS, componentsOf, sittingsPerYearText, totalWeighting } from '../assessmentDetails';
+import { ASSESSMENT_COMPONENT_TYPE_LABELS, CERTIFICATION_NOTIFIED_LABEL, componentsOf, qasaValidityText, sittingsPerYearText, totalWeighting } from '../assessmentDetails';
 import type { QsaAddendumApplication } from '../types';
 
 // QCTO feedback 3.3: the QASA's assessment details on the Details tab (both portals), read-only.
@@ -21,10 +21,9 @@ export function AssessmentDetailsCard({ application }: { application: QsaAddendu
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-400 uppercase">Validity period</p>
-            <p className="text-sm font-medium">
-              {application.validityPeriodYears != null ? `${application.validityPeriodYears} year${application.validityPeriodYears === 1 ? '' : 's'}` : 'Not recorded'}
-            </p>
+            {/* QCTO feedback 05.2: no number of years — valid for the qualification's lifespan. */}
+            <p className="text-xs text-gray-400 uppercase">Validity</p>
+            <p className="text-sm font-medium">{qasaValidityText(application)}</p>
           </div>
         </div>
 
@@ -61,7 +60,7 @@ export function AssessmentDetailsCard({ application }: { application: QsaAddendu
 
         {handoff && (
           <p className="text-sm text-emerald-700">
-            Recommended to Certification on {new Date(handoff.recommendedAt).toLocaleDateString('en-ZA')} by {handoff.recommendedBy}, with these assessment details.
+            {CERTIFICATION_NOTIFIED_LABEL} on {new Date(handoff.notifiedAt).toLocaleDateString('en-ZA')} by {handoff.notifiedBy}.
           </p>
         )}
       </div>

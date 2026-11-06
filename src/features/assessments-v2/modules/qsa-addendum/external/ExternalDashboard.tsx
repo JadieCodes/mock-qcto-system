@@ -8,7 +8,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
-import { isApprovalLetterFinal } from '../workflow';
+import { isQasaApproved } from '../workflow';
 import { ApplicationDetail } from './ApplicationDetail';
 import { NewApplicationForm } from './NewApplicationForm';
 
@@ -22,10 +22,10 @@ export function ExternalDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const correctionsCount = applications.filter((a) => a.evalState.stageId === 'qp-corrections').length;
-  const underReviewCount = applications.filter((a) =>
-    ['asd-evaluation', 'dd-review', 'director-office-review', 'iac-review'].includes(a.evalState.stageId),
+  const underReviewCount = applications.filter(
+    (a) => !isQasaApproved(a) && ['asd-evaluation', 'dd-review', 'director-office-review', 'iac-review'].includes(a.evalState.stageId),
   ).length;
-  const approvedCount = applications.filter((a) => isApprovalLetterFinal(a.approvalState)).length;
+  const approvedCount = applications.filter(isQasaApproved).length;
 
   return (
     <div className="space-y-6">
@@ -42,7 +42,7 @@ export function ExternalDashboard() {
       <StatTileGrid>
         <StatTile label="Total Submitted" value={applications.length} />
         <StatTile label="Under Review" value={underReviewCount} />
-        <StatTile label="Corrections Requested" value={correctionsCount} />
+        <StatTile label="Remediation Requested" value={correctionsCount} />
         <StatTile label="Approved" value={approvedCount} />
       </StatTileGrid>
 

@@ -2,8 +2,8 @@ import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE, hasActedInRoles } from '../../shared/iac/differentPerson';
 import {
   buildCertificationHandoff,
+  CERTIFICATION_NOTIFIED_LABEL,
   componentsOf,
-  RECOMMENDED_TO_CERTIFICATION_LABEL,
   validateAssessmentDetails,
   type AssessmentDetailsInput,
 } from './assessmentDetails';
@@ -16,10 +16,13 @@ import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
 import { QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from './config';
-import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from './workflow';
-import type { ApprovalLetterDraft, EvaluationReport, IacMinutesFile, NewApplicationInput, QsaAddendumApplication } from './types';
+import { REVIEW_COMPLETED_LABEL, withReviewStarted } from './review';
+import { EVAL_WORKFLOW, isQasaApproved, isQasaUnderReview, OUTCOME_WORKFLOW } from './workflow';
+import type { EvaluationReport, IacMinutesFile, NewApplicationInput, QsaAddendumApplication } from './types';
 
 export const KEY = 'qsaAddendum:applications';
+
+export const ACK_ISSUED_LABEL = 'Acknowledgement letter issued on submission';
 
 function loadAll(): QsaAddendumApplication[] {
   return readStore<QsaAddendumApplication[]>(KEY, []);
@@ -47,16 +50,16 @@ export async function getApplication(id: string): Promise<QsaAddendumApplication
   return loadAll().find((a) => a.id === id);
 }
 
+// QCTO feedback 05.5: the acknowledgement letter goes out at the point of submission, to
+// acknowledge receipt — no ASD preview or DD review. Evaluation starts straight away.
 export async function createApplication(input: NewApplicationInput): Promise<QsaAddendumApplication> {
   const app: QsaAddendumApplication = {
     id: crypto.randomUUID(),
     ...input,
-    ackState: { stageId: 'asd-preview' },
+    acknowledgementIssuedAt: new Date().toISOString(),
     evalState: { stageId: 'asd-evaluation' },
     outcomeState: { stageId: 'ceo-signature' },
-    approvalState: null,
-    approvalLetterDraft: null,
-    approvalLetterSignedBy: null,
+    review: null,
     qsaChecklist: buildQsaAddendumChecklist(),
     ddReviewChecklist: buildDdReviewChecklist(),
     evaluationReport: { findings: '', recommendation: '', approvedEisaSittingsPerYear: null },
@@ -65,6 +68,19 @@ export async function createApplication(input: NewApplicationInput): Promise<Qsa
   };
   const all = loadAll();
   saveAll([app, ...all]);
+  appendAuditEntry({
+    recordType: 'qsa-addendum-acknowledgement',
+    recordId: app.id,
+    actorRole: 'QP',
+    actorId: input.qpId,
+    actorName: input.qpName,
+    action: ACK_ISSUED_LABEL,
+  });
+  addNotification({
+    recipientRole: 'QP',
+    title: 'Acknowledgement letter issued',
+    body: `We received your QASA for "${app.qualificationTitle}". Your acknowledgement letter is ready to view.`,
+  });
   return app;
 }
 
@@ -75,32 +91,6 @@ interface ActionParams {
   actorId: string;
   actorName: string;
   note?: string;
-}
-
-export async function performAckAction(params: ActionParams): Promise<QsaAddendumApplication> {
-  const all = loadAll();
-  const app = getOrThrow(all, params.applicationId);
-  const nextState = performAction({
-    definition: ACK_WORKFLOW,
-    record: app.ackState,
-    actionId: params.actionId,
-    actorRole: params.actorRole,
-    actorId: params.actorId,
-    actorName: params.actorName,
-    note: params.note,
-    recordType: 'qsa-addendum-acknowledgement',
-    recordId: app.id,
-  });
-  const updated = { ...app, ackState: nextState };
-  saveAll(replace(all, updated));
-  if (nextState.stageId === 'acknowledged') {
-    addNotification({
-      recipientRole: 'QP',
-      title: 'Acknowledgement letter ready',
-      body: `Your acknowledgement letter for "${app.qualificationTitle}" is ready to view.`,
-    });
-  }
-  return updated;
 }
 
 export async function performEvaluationAction(params: ActionParams): Promise<QsaAddendumApplication> {
@@ -120,7 +110,7 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
     if (app.evaluationReport.approvedEisaSittingsPerYear == null && !app.evaluationReport.eisaSittingsOnDemand) {
       throw new Error('Record the approved EISA sittings per year (or mark them as on demand) before the evaluation outcome can be generated.');
     }
-    const detailIssues = validateAssessmentDetails({ components: componentsOf(app), validityPeriodYears: app.validityPeriodYears ?? null });
+    const detailIssues = validateAssessmentDetails({ components: componentsOf(app) });
     if (detailIssues.length > 0) {
       throw new Error(detailIssues.map((i) => i.message).join(' '));
     }
@@ -142,6 +132,9 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
   ) {
     throw new Error(DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE);
   }
+  if (params.actionId === 'eval-start-review' && (!isQasaApproved(app) || isQasaUnderReview(app))) {
+    throw new Error('A review can only be started on an approved QASA (feedback letter signed by the CEO) that is not already under review.');
+  }
 
   const nextState = performAction({
     definition: EVAL_WORKFLOW,
@@ -154,9 +147,30 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
     recordType: 'qsa-addendum-evaluation',
     recordId: app.id,
   });
-  const updated = { ...app, evalState: nextState };
+  const updated =
+    params.actionId === 'eval-start-review'
+      ? withReviewStarted(app, nextState, {
+          startedAt: new Date().toISOString(),
+          startedBy: params.actorName,
+          startedById: params.actorId,
+          reason: params.note ?? '',
+        })
+      : { ...app, evalState: nextState };
   saveAll(replace(all, updated));
 
+  if (params.actionId === 'eval-start-review') {
+    // QCTO feedback 05.8: the QP sees the stage, not the DD's internal reason.
+    addNotification({
+      recipientRole: 'QP',
+      title: 'Approved QASA under review',
+      body: `Your approved QASA for "${app.qualificationTitle}" is being reviewed. It stays approved while the review runs. Follow it on the Progress tab.`,
+    });
+    addNotification({
+      recipientRole: 'ASD',
+      title: 'Approved QASA sent for review',
+      body: `The Deputy Director started a review of the approved QASA for "${app.qualificationTitle}". It is back at ASD evaluation.`,
+    });
+  }
   if (nextState.stageId === 'qp-corrections') {
     addNotification(
       params.actionId === 'eval-iac-remediation'
@@ -174,11 +188,11 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
           },
     );
   }
-  if (nextState.stageId === 'approved' || nextState.stageId === 'declined') {
+  if (params.actionId === 'eval-iac-approve') {
     addNotification({
       recipientRole: 'QP',
       title: 'QASA decision reached',
-      body: `The IAC has reached a decision on "${app.qualificationTitle}". The feedback letter is being prepared.`,
+      body: `The IAC has approved "${app.qualificationTitle}". The feedback letter is with the CEO for signature.`,
     });
   }
   return updated;
@@ -187,8 +201,9 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
 export async function performOutcomeAction(params: ActionParams): Promise<QsaAddendumApplication> {
   const all = loadAll();
   const app = getOrThrow(all, params.applicationId);
-  if (app.evalState.stageId !== 'approved' && app.evalState.stageId !== 'declined') {
-    throw new Error('The feedback letter is only ready once the IAC has reached a decision.');
+  // QCTO feedback 05.7: the feedback letter is only reached when the IAC approves.
+  if (app.evalState.stageId !== 'approved') {
+    throw new Error('The feedback letter is only ready once the IAC has approved the QASA.');
   }
 
   const nextState = performAction({
@@ -204,76 +219,28 @@ export async function performOutcomeAction(params: ActionParams): Promise<QsaAdd
   });
 
   let updated: QsaAddendumApplication = { ...app, outcomeState: nextState };
-  if (nextState.stageId === 'signed' && app.evalState.stageId === 'approved' && !updated.approvalState) {
-    // Row 13: the approval letter now starts as an ASD draft, not straight at the signer.
-    updated = { ...updated, approvalState: { stageId: 'asd-draft' }, approvalLetterDraft: { notes: '' } };
-  }
-  // QCTO feedback 3.3: simulated hand-off — the Certification domain has no role in this build,
-  // so it is recorded on the QASA and in the audit trail, as Approval of Results does.
-  if (nextState.stageId === 'signed' && app.evalState.stageId === 'approved' && !updated.certificationHandoff) {
+  // QCTO feedback 3.3 / 05.1: simulated hand-off — the Certification domain has no role in this
+  // build, so it is recorded on the QASA and in the audit trail, as Approval of Results does. A
+  // completed review (05.2) notifies Certification again, with the reviewed details.
+  if (nextState.stageId === 'signed') {
+    const entry = { recordType: 'qsa-addendum-outcome-letter', recordId: app.id, actorRole: params.actorRole, actorId: params.actorId, actorName: params.actorName };
     updated = { ...updated, certificationHandoff: buildCertificationHandoff(updated, new Date().toISOString(), params.actorName) };
-    appendAuditEntry({
-      recordType: 'qsa-addendum-outcome-letter',
-      recordId: app.id,
-      actorRole: params.actorRole,
-      actorId: params.actorId,
-      actorName: params.actorName,
-      action: RECOMMENDED_TO_CERTIFICATION_LABEL,
-    });
+    appendAuditEntry({ ...entry, action: CERTIFICATION_NOTIFIED_LABEL });
+    if (isQasaUnderReview(app)) {
+      updated = { ...updated, review: null };
+      appendAuditEntry({ ...entry, action: REVIEW_COMPLETED_LABEL });
+    }
   }
   saveAll(replace(all, updated));
 
   if (nextState.stageId === 'signed') {
+    // QCTO feedback 05.6: one letter only — the CEO-signed feedback letter is the approval.
     addNotification({
       recipientRole: 'QP',
-      title: 'Feedback letter signed',
-      body: `The feedback letter for "${app.qualificationTitle}" has been signed and is ready to view.`,
+      title: 'QASA approved — feedback letter signed',
+      body: `The CEO has signed the feedback letter for "${app.qualificationTitle}". Your QASA is approved: the signed feedback letter is your approval. It is now available to EISA Instrument Validation and the EISA Calendar.`,
     });
   }
-  return updated;
-}
-
-export async function performApprovalLetterAction(params: ActionParams): Promise<QsaAddendumApplication> {
-  const all = loadAll();
-  const app = getOrThrow(all, params.applicationId);
-  if (!app.approvalState) {
-    throw new Error('The approval letter is only ready once the feedback letter has been signed.');
-  }
-
-  const nextState = performAction({
-    definition: APPROVAL_LETTER_WORKFLOW,
-    record: app.approvalState,
-    actionId: params.actionId,
-    actorRole: params.actorRole,
-    actorId: params.actorId,
-    actorName: params.actorName,
-    note: params.note,
-    recordType: 'qsa-addendum-approval-letter',
-    recordId: app.id,
-  });
-  let updated = { ...app, approvalState: nextState };
-  // The Deputy Director's name needs to survive the later "send to QP" step, which
-  // overwrites `approvalState.submittedBy` with the ASD's name.
-  if (params.actionId === 'approval-sign') {
-    updated = { ...updated, approvalLetterSignedBy: nextState.submittedBy ?? null };
-  }
-  saveAll(replace(all, updated));
-
-  if (nextState.stageId === 'sent-to-qp') {
-    addNotification({
-      recipientRole: 'QP',
-      title: 'Approval letter sent',
-      body: `The signed approval letter for "${app.qualificationTitle}" has been sent to you. It is now approved and available to EISA Instrument Validation and the EISA Calendar.`,
-    });
-  }
-  return updated;
-}
-
-export async function saveApprovalLetterDraft(applicationId: string, draft: ApprovalLetterDraft): Promise<QsaAddendumApplication> {
-  const all = loadAll();
-  const app = getOrThrow(all, applicationId);
-  const updated = { ...app, approvalLetterDraft: draft };
-  saveAll(replace(all, updated));
   return updated;
 }
 
@@ -318,7 +285,7 @@ export async function saveAssessmentDetails(applicationId: string, input: Assess
   }
   const issues = validateAssessmentDetails(input);
   if (issues.length > 0) throw new Error(issues.map((i) => i.message).join(' '));
-  const updated = { ...app, assessmentComponents: input.components, validityPeriodYears: input.validityPeriodYears };
+  const updated = { ...app, assessmentComponents: input.components };
   saveAll(replace(all, updated));
   return updated;
 }
@@ -336,8 +303,9 @@ export async function saveIacMinutes(applicationId: string, file: IacMinutesFile
   return updated;
 }
 
-// CR: once approved, the QSA Addendum is available to EISA Instrument Validation and the
-// EISA Calendar (built in later phases) — they will read this list instead of all applications.
+// CR: once approved, the QASA is available to EISA Instrument Validation and the EISA Calendar.
+// QCTO feedback 05.6: "approved" means isQasaApproved — IAC Approved and the CEO's signature on
+// the feedback letter (still true while under review, 05.2).
 export async function listApprovedQsaAddenda(): Promise<QsaAddendumApplication[]> {
-  return loadAll().filter((a) => isApprovalLetterFinal(a.approvalState));
+  return loadAll().filter(isQasaApproved);
 }

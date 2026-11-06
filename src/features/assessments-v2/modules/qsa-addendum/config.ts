@@ -1,8 +1,8 @@
 import type { Role } from '../../types';
 
-// CR-007/CR-008 follow-up — answered (row 13, test findings): the Deputy Director signs the
-// approval letter. Kept as a constant to change if QCTO ever names someone else.
-export const APPROVAL_LETTER_SIGNER_ROLE: Role = 'Deputy Director';
+// QCTO feedback 05.2: an approved QASA can be reviewed at any time. Assumption (progress.md,
+// Batch K): the Deputy Director starts the review. Change here if QCTO names someone else.
+export const QASA_REVIEW_STARTER_ROLE: Role = 'Deputy Director';
 
 // QCTO feedback 2.1: the Director Office quality-assures moderated QASAs and decides which go
 // to the IAC. It is the same role (label "Director Office") that moderates RPL Toolkits.

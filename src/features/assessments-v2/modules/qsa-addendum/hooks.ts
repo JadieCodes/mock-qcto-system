@@ -6,11 +6,8 @@ import {
   createApplication,
   getApplication,
   listApplications,
-  performAckAction,
-  performApprovalLetterAction,
   performEvaluationAction,
   performOutcomeAction,
-  saveApprovalLetterDraft,
   saveAssessmentDetails,
   saveDdReviewChecklist,
   saveEvaluationReport,
@@ -18,7 +15,7 @@ import {
   saveIacPresentation,
   saveQsaChecklist,
 } from './api';
-import type { ApprovalLetterDraft, EvaluationReport, IacMinutesFile, NewApplicationInput, QsaAddendumApplication } from './types';
+import type { EvaluationReport, IacMinutesFile, NewApplicationInput, QsaAddendumApplication } from './types';
 
 const LIST_KEY = ['qsa-addendum', 'applications'] as const;
 const detailKey = (id: string) => ['qsa-addendum', 'applications', id] as const;
@@ -58,16 +55,12 @@ export function useCreateQsaAddendumApplication() {
     mutationFn: (input: NewApplicationInput) => createApplication(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LIST_KEY });
-      toast.success('QASA submitted for evaluation.');
+      toast.success('QASA submitted. Your acknowledgement letter has been issued.');
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Something went wrong.');
     },
   });
-}
-
-export function useAckAction() {
-  return useQsaAddendumMutation(performAckAction);
 }
 
 export function useEvaluationAction() {
@@ -76,10 +69,6 @@ export function useEvaluationAction() {
 
 export function useOutcomeAction() {
   return useQsaAddendumMutation(performOutcomeAction);
-}
-
-export function useApprovalLetterAction() {
-  return useQsaAddendumMutation(performApprovalLetterAction);
 }
 
 export function useSaveQsaChecklist() {
@@ -115,11 +104,5 @@ export function useSaveAssessmentDetails() {
 export function useSaveIacMinutes() {
   return useQsaAddendumMutation((args: { applicationId: string; file: IacMinutesFile | null }) =>
     saveIacMinutes(args.applicationId, args.file),
-  );
-}
-
-export function useSaveApprovalLetterDraft() {
-  return useQsaAddendumMutation((args: { applicationId: string; draft: ApprovalLetterDraft }) =>
-    saveApprovalLetterDraft(args.applicationId, args.draft),
   );
 }

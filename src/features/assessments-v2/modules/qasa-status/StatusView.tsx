@@ -25,7 +25,7 @@ export function QasaStatusView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Qualification', 'QP', 'Status'].map((h) => (
+                  {['Qualification', 'SAQA ID', 'QP', 'Status'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
                   ))}
                 </TableRow>
@@ -34,6 +34,7 @@ export function QasaStatusView() {
                 {qasaRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.qualificationTitle}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.saqaId}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.qpName}</TableCell>
                     <TableCell>{row.status}</TableCell>
                   </TableRow>
@@ -52,7 +53,7 @@ export function QasaStatusView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Qualification', 'Validation date', 'Conditions'].map((h) => (
+                  {['Qualification', 'SAQA ID', 'Validation date', 'Conditions'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
                   ))}
                 </TableRow>
@@ -61,6 +62,7 @@ export function QasaStatusView() {
                 {instrumentRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.qualificationTitle}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.saqaId || '—'}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.validationDate || '—'}</TableCell>
                     <TableCell className="whitespace-pre-wrap">{row.conditions ?? 'None'}</TableCell>
                   </TableRow>

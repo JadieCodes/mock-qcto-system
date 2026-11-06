@@ -11,30 +11,28 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { QsaStatusBadge } from '../components/StatusBadge';
 import { useQsaAddendumApplications } from '../hooks';
 import type { QsaAddendumApplication } from '../types';
-import { ACK_WORKFLOW, APPROVAL_LETTER_WORKFLOW, EVAL_WORKFLOW, isApprovalLetterFinal, OUTCOME_WORKFLOW } from '../workflow';
+import { EVAL_WORKFLOW, isQasaApproved, OUTCOME_WORKFLOW } from '../workflow';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 
 function myItemIds(app: QsaAddendumApplication): (string | null | undefined)[] {
-  return [app.ackState.submittedById, app.evalState.submittedById, app.outcomeState.submittedById, app.approvalState?.submittedById];
+  return [app.evalState.submittedById, app.outcomeState.submittedById];
 }
 
 // A brand-new submission nobody has personally touched yet still belongs under "My items" for
 // whichever role can act on its current stage (09-visibility-matrix.md "Approved corrections").
 function isUnassignedActionable(app: QsaAddendumApplication, role: Role): boolean {
+  // An approved QASA is not "work to do" just because the DD may start a review of it (05.2).
   return (
-    canActInStage(ACK_WORKFLOW, app.ackState.stageId, role) ||
-    canActInStage(EVAL_WORKFLOW, app.evalState.stageId, role) ||
-    canActInStage(OUTCOME_WORKFLOW, app.outcomeState.stageId, role) ||
-    (app.approvalState != null && canActInStage(APPROVAL_LETTER_WORKFLOW, app.approvalState.stageId, role))
+    (app.evalState.stageId !== 'approved' && canActInStage(EVAL_WORKFLOW, app.evalState.stageId, role)) ||
+    canSignOutcomeNow(app, role)
   );
 }
 
-// Every QASA is created with its outcome letter already at `ceo-signature`, so the stage alone
-// doesn't mean it can be signed — the IAC must have decided first (same check as the Outcome
+// Every QASA is created with its feedback letter already at `ceo-signature`, so the stage alone
+// doesn't mean it can be signed — the IAC must have approved first (same check as the Feedback
 // Letter tab in ApplicationWorkspace).
 function canSignOutcomeNow(app: QsaAddendumApplication, role: Role): boolean {
-  const decided = app.evalState.stageId === 'approved' || app.evalState.stageId === 'declined';
-  return decided && canActInStage(OUTCOME_WORKFLOW, app.outcomeState.stageId, role);
+  return app.evalState.stageId === 'approved' && canActInStage(OUTCOME_WORKFLOW, app.outcomeState.stageId, role);
 }
 
 export function InternalDashboard() {
@@ -54,11 +52,11 @@ export function InternalDashboard() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const asdCount = applications.filter((a) => a.evalState.stageId === 'asd-evaluation' || a.ackState.stageId === 'asd-preview').length;
-  const ddCount = applications.filter((a) => a.evalState.stageId === 'dd-review' || a.ackState.stageId === 'dd-review').length;
+  const asdCount = applications.filter((a) => a.evalState.stageId === 'asd-evaluation').length;
+  const ddCount = applications.filter((a) => a.evalState.stageId === 'dd-review').length;
   const directorOfficeCount = applications.filter((a) => a.evalState.stageId === 'director-office-review').length;
   const iacCount = applications.filter((a) => a.evalState.stageId === 'iac-review').length;
-  const approvedCount = applications.filter((a) => isApprovalLetterFinal(a.approvalState)).length;
+  const approvedCount = applications.filter(isQasaApproved).length;
 
   return (
     <div className="space-y-6">
@@ -70,7 +68,7 @@ export function InternalDashboard() {
               Roles: ASD evaluates · DD moderates · Director Office quality-assures and approves for tabling · DD presents at the IAC and records the outcome · CEO signs the feedback letter.
             </span>
             {isCeoQueue
-              ? 'Feedback letters you can sign now — the IAC has approved or declined these QASAs.'
+              ? 'Feedback letters you can sign now — the IAC has approved these QASAs. Your signature is the approval.'
               : 'Open one to act on it — only the actions your current role may perform are shown.'}
           </>
         }
@@ -90,7 +88,7 @@ export function InternalDashboard() {
           isCeoQueue ? (
             <EmptyState
               title="Nothing to sign"
-              description="A feedback letter appears here once the IAC has approved or declined a QASA."
+              description="A feedback letter appears here once the IAC has approved a QASA."
             />
           ) : (
             <EmptyState title="No submissions yet" description="QASAs submitted by a QP in the external portal will appear here." />

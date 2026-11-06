@@ -2,16 +2,15 @@ import { type ComponentType, type ReactNode } from 'react';
 import { Award, BookOpen, Calendar, Hash, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { Modal } from '../../../shared/ui/Modal';
 import { AssessmentDetailsCard } from '../components/AssessmentDetailsCard';
-import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
+import { QpProgress } from '../components/QpProgress';
 import { QsaStatusBadge } from '../components/StatusBadge';
-import { FEEDBACK_LETTER_TITLE } from '../config';
 import { useQsaAddendumApplication } from '../hooks';
+import { acknowledgementLetterOf, feedbackLetterOf } from '../letters';
 
 function DetailRow({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: ReactNode }) {
   return (
@@ -27,9 +26,9 @@ function DetailRow({ icon: Icon, label, value }: { icon: ComponentType<{ classNa
   );
 }
 
-// Row 14 (test findings): on the QP view, each letter (acknowledgement, outcome, approval)
-// gets its own tab, and the audit trail moves out of the Details tab into its own tab too —
-// same pattern as the internal workspace.
+// Row 14 (test findings): on the QP view, each letter gets its own tab. QCTO feedback 05.6:
+// only two letters (acknowledgement and the CEO-signed feedback letter). 05.8: the QP gets a
+// Progress tab (stage and status) instead of the audit trail.
 export function ApplicationDetail({ applicationId, onClose }: { applicationId: string | null; onClose: () => void }) {
   const { data: application } = useQsaAddendumApplication(applicationId);
 
@@ -47,8 +46,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="acknowledgement">Acknowledgement</TabsTrigger>
                 <TabsTrigger value="outcome">Feedback Letter</TabsTrigger>
-                <TabsTrigger value="approval">Approval Letter</TabsTrigger>
-                <TabsTrigger value="audit">Audit Trail</TabsTrigger>
+                <TabsTrigger value="progress">Progress</TabsTrigger>
               </TabsList>
 
               <TabsContent value="details" className="space-y-4">
@@ -77,64 +75,22 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                 {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}
               </TabsContent>
 
+              {/* QCTO feedback 05.5: issued at submission, so it is always there. */}
               <TabsContent value="acknowledgement" className="space-y-2">
-                {application.ackState.stageId === 'acknowledged' ? (
-                  <LetterView
-                    letter={generateLetter('acknowledgement', application.id, {
-                      qpName: application.qpName,
-                      qualificationTitle: application.qualificationTitle,
-                      saqaId: application.saqaId,
-                      nqfLevel: application.nqfLevel,
-                      date: application.submissionDate,
-                    })}
-                  />
-                ) : (
-                  <p className="text-sm text-gray-400">Not yet available — the acknowledgement letter is still being reviewed internally.</p>
-                )}
+                <LetterView letter={acknowledgementLetterOf(application)} />
               </TabsContent>
 
+              {/* QCTO feedback 05.6: the QP sees the feedback letter once the CEO has signed it — it is the approval. */}
               <TabsContent value="outcome" className="space-y-2">
-                {application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined' ? (
-                  <LetterView
-                    letter={generateLetter('outcome', application.id, {
-                      qpName: application.qpName,
-                      qualificationTitle: application.qualificationTitle,
-                      saqaId: application.saqaId,
-                      nqfLevel: application.nqfLevel,
-                      date: new Date().toISOString().split('T')[0],
-                      notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
-                      signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
-                      signatoryTitle: 'CEO',
-                    }, FEEDBACK_LETTER_TITLE)}
-                  />
+                {application.evalState.stageId === 'approved' && application.outcomeState.stageId === 'signed' ? (
+                  <LetterView letter={feedbackLetterOf(application)} />
                 ) : (
-                  <p className="text-sm text-gray-400">Not yet available — the IAC has not reached a decision.</p>
+                  <p className="text-sm text-gray-400">Not yet available — the feedback letter is issued once the IAC has approved the QASA and the CEO has signed it.</p>
                 )}
               </TabsContent>
 
-              <TabsContent value="approval" className="space-y-2">
-                {/* Row 13: the QP only ever sees this once the ASD has sent the signed letter —
-                    the drafting/signing steps happen internally first. */}
-                {application.approvalState?.stageId === 'sent-to-qp' ? (
-                  <LetterView
-                    letter={generateLetter('approval', application.id, {
-                      qpName: application.qpName,
-                      qualificationTitle: application.qualificationTitle,
-                      saqaId: application.saqaId,
-                      nqfLevel: application.nqfLevel,
-                      date: new Date().toISOString().split('T')[0],
-                      notes: application.approvalLetterDraft?.notes,
-                      signatoryName: application.approvalLetterSignedBy ?? undefined,
-                      signatoryTitle: 'Deputy Director',
-                    })}
-                  />
-                ) : (
-                  <p className="text-sm text-gray-400">Not yet available — the approval letter is still being drafted and signed internally.</p>
-                )}
-              </TabsContent>
-
-              <TabsContent value="audit" className="space-y-2">
-                <QsaAuditTrail applicationId={application.id} />
+              <TabsContent value="progress" className="space-y-2">
+                <QpProgress application={application} />
               </TabsContent>
             </Tabs>
         )}

@@ -19,27 +19,25 @@ interface ComponentRow {
 
 interface FormValues {
   components: ComponentRow[];
-  validityPeriodYears: string;
 }
 
 function toNumber(value: string): number {
   return value.trim() === '' ? Number.NaN : Number(value);
 }
 
-// QCTO feedback 3.3: optional assessment components and validity period, captured by the ASD
-// on the Evaluation tab. Saved together, only when the weightings add up to 100%.
+// QCTO feedback 3.3: optional assessment components, captured by the ASD on the Evaluation tab.
+// Saved only when the weightings add up to 100%. QCTO feedback 05.2: no validity period field —
+// an approved QASA is valid for the lifespan of the qualification.
 export function AssessmentDetailsEditor({ application }: { application: QsaAddendumApplication }) {
   const saveDetails = useSaveAssessmentDetails();
   const { control, register, handleSubmit, formState } = useForm<FormValues>({
     defaultValues: {
       components: componentsOf(application).map((c) => ({ ...c, weightingPercent: String(c.weightingPercent), days: String(c.days) })),
-      validityPeriodYears: application.validityPeriodYears != null ? String(application.validityPeriodYears) : '',
     },
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'components', keyName: 'fieldKey' });
 
   const watchedComponents = useWatch({ control, name: 'components' });
-  const watchedValidity = useWatch({ control, name: 'validityPeriodYears' });
   const input = {
     components: watchedComponents.map((c) => ({
       id: c.id,
@@ -48,7 +46,6 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
       weightingPercent: toNumber(c.weightingPercent),
       days: toNumber(c.days),
     })),
-    validityPeriodYears: watchedValidity.trim() === '' ? null : toNumber(watchedValidity),
   };
   const issues = validateAssessmentDetails(input);
 
@@ -59,11 +56,6 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
   return (
     <form className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleSubmit(onSubmit)}>
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessment Details (optional)</p>
-
-      <div className="space-y-2 max-w-xs">
-        <Label htmlFor={`validity-${application.id}`}>Validity period (years)</Label>
-        <Input id={`validity-${application.id}`} type="number" min={1} step={1} {...register('validityPeriodYears')} />
-      </div>
 
       <div className="space-y-2">
         <p className="text-sm font-medium text-gray-700">Assessment components</p>

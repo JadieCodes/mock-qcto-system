@@ -9,12 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import { Checklist } from '../../../shared/checklist/Checklist';
-import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { autoEvaluateQsaChecklist } from '../../../mock/integrations/aiValidation';
 import { canActInStage, availableActions } from '../../../shared/workflow/engine';
 import type { WorkflowAction, WorkflowDefinition } from '../../../shared/workflow/types';
 import { Modal } from '../../../shared/ui/Modal';
+import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { FieldError, ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
@@ -25,28 +25,27 @@ import { QsaAuditTrail } from '../components/AuditTrail';
 import { CorrectionsPanel } from '../components/CorrectionsPanel';
 import { DocumentsList } from '../components/DocumentsList';
 import { QsaStatusBadge } from '../components/StatusBadge';
-import { APPROVAL_LETTER_SIGNER_ROLE, FEEDBACK_LETTER_TITLE, QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from '../config';
+import { QASA_REVIEW_STARTER_ROLE, QSA_AUTO_EVALUATION_MANDATORY_ITEM_IDS } from '../config';
 import {
-  useAckAction,
-  useApprovalLetterAction,
   useEvaluationAction,
   useOutcomeAction,
   useQsaAddendumApplication,
-  useSaveApprovalLetterDraft,
   useSaveDdReviewChecklist,
   useSaveEvaluationReport,
   useSaveIacMinutes,
   useSaveIacPresentation,
   useSaveQsaChecklist,
 } from '../hooks';
+import { acknowledgementLetterOf, feedbackLetterOf } from '../letters';
 import {
-  ACK_WORKFLOW,
-  APPROVAL_LETTER_WORKFLOW,
   APPROVE_FOR_TABLING_LABEL,
   EVAL_WORKFLOW,
   IAC_OUTCOME_OPTIONS,
   IAC_REMEDIATION_LABEL,
+  isQasaApproved,
+  isQasaUnderReview,
   OUTCOME_WORKFLOW,
+  QASA_UNDER_REVIEW_LABEL,
   RETURN_TO_DD_LABEL,
 } from '../workflow';
 import { IacMinutesFileLine, IacOutcomeForm } from '../../../shared/iac/IacOutcomeForm';
@@ -142,16 +141,14 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
   const actorName = person.name;
   const actorId = person.id;
 
-  const ackAction = useAckAction();
   const evaluationAction = useEvaluationAction();
   const outcomeAction = useOutcomeAction();
-  const approvalAction = useApprovalLetterAction();
   const saveChecklist = useSaveQsaChecklist();
   const saveDdChecklist = useSaveDdReviewChecklist();
   const saveReport = useSaveEvaluationReport();
   const savePresentation = useSaveIacPresentation();
   const saveMinutes = useSaveIacMinutes();
-  const saveApprovalDraft = useSaveApprovalLetterDraft();
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
 
   const checklistComplete = isChecklistComplete(application.qsaChecklist, true);
   const reportIssues: ValidationIssue[] = [];
@@ -167,7 +164,11 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
   }
   const reportComplete = reportIssues.length === 0;
   const ddChecklistComplete = isChecklistComplete(application.ddReviewChecklist, true);
-  const decided = application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined';
+  // QCTO feedback 05.7: the IAC either approves or requests remediation — never declines.
+  const decided = application.evalState.stageId === 'approved';
+  const approved = isQasaApproved(application);
+  const underReview = isQasaUnderReview(application);
+  const canStartReview = approved && !underReview && role === QASA_REVIEW_STARTER_ROLE;
   const asdEditable = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
   const ddEditable = role === 'Deputy Director' && application.evalState.stageId === 'dd-review';
 
@@ -197,16 +198,6 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
     ? evalTrailNewestFirst.find((entry) => EVAL_WORKFLOW.actions.some((a) => a.label === entry.action && IAC_OUTCOME_OPTIONS.some((o) => o.actionId === a.id)))
     : undefined;
 
-  // Row 10 (test finding B-08): the DD's reason for sending the acknowledgement letter back
-  // must be captured and shown to the ASD, not just silently bounced.
-  const latestAckSendBackNote =
-    application.ackState.stageId === 'asd-preview'
-      ? getAuditTrail('qsa-addendum-acknowledgement', application.id)
-          .slice()
-          .reverse()
-          .find((entry) => entry.action === 'Send back to ASD')?.note
-      : undefined;
-
   const latestDdReturnNote =
     application.evalState.stageId === 'asd-evaluation'
       ? getAuditTrail('qsa-addendum-evaluation', application.id)
@@ -222,14 +213,6 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           .find((entry) => entry.action === IAC_REMEDIATION_LABEL)?.note
       : undefined;
 
-  const latestApprovalDeclineNote =
-    application.approvalState?.stageId === 'asd-draft'
-      ? getAuditTrail('qsa-addendum-approval-letter', application.id)
-          .slice()
-          .reverse()
-          .find((entry) => entry.action === 'Decline')?.note
-      : undefined;
-
   return (
     <Tabs defaultValue="details">
       <TabsList>
@@ -237,7 +220,6 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
         <TabsTrigger value="acknowledgement">Acknowledgement</TabsTrigger>
         <TabsTrigger value="evaluation">Evaluation</TabsTrigger>
         <TabsTrigger value="outcome">Feedback Letter</TabsTrigger>
-        <TabsTrigger value="approval">Approval Letter</TabsTrigger>
         <TabsTrigger value="audit">Audit Trail</TabsTrigger>
       </TabsList>
 
@@ -265,41 +247,47 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           </div>
         )}
         <AssessmentDetailsCard application={application} />
+        {/* QCTO feedback 05.2: an approved QASA can be reviewed at any time; it stays approved meanwhile. */}
+        {underReview && application.review && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 space-y-1">
+            <p className="font-semibold">{QASA_UNDER_REVIEW_LABEL}</p>
+            <p className="text-xs">
+              Review started by {application.review.startedBy} on {new Date(application.review.startedAt).toLocaleDateString('en-ZA')}. It goes through ASD
+              evaluation, Deputy Director moderation, the Director Office, the IAC and the CEO again, and stays approved for every other module meanwhile.
+            </p>
+            <p className="whitespace-pre-wrap"><span className="font-medium">Reason:</span> {application.review.reason}</p>
+          </div>
+        )}
+        {canStartReview && (
+          <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Review</p>
+            <p className="text-sm text-gray-600">
+              Start a review if there is a need. The QASA goes back through the normal route and stays approved until the review is approved.
+            </p>
+            <Button size="sm" variant="outline" disabled={evaluationAction.isPending} onClick={() => setReviewDialogOpen(true)}>
+              Start review
+            </Button>
+            <ReasonDialog
+              open={reviewDialogOpen}
+              title="Start review"
+              description="The QASA goes back to ASD evaluation. A reason is required; it is recorded in the audit trail."
+              confirmLabel="Start review"
+              onOpenChange={setReviewDialogOpen}
+              onConfirm={(reason) =>
+                evaluationAction.mutate({ applicationId: application.id, actionId: 'eval-start-review', actorRole: role, actorId, actorName, note: reason })
+              }
+            />
+          </div>
+        )}
         <DocumentsList documents={application.documents} />
       </TabsContent>
 
+      {/* QCTO feedback 05.5: issued automatically at submission — no ASD preview or DD review. */}
       <TabsContent value="acknowledgement" className="space-y-4">
-        <LetterView
-          letter={generateLetter('acknowledgement', application.id, {
-            qpName: application.qpName,
-            qualificationTitle: application.qualificationTitle,
-            saqaId: application.saqaId,
-            nqfLevel: application.nqfLevel,
-            date: application.submissionDate,
-          })}
-        />
-        {application.ackState.stageId === 'acknowledged' ? (
-          <p className="text-sm text-emerald-700 font-medium">Acknowledged by {application.ackState.submittedBy}.</p>
-        ) : (
-          <>
-            {latestAckSendBackNote && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-                  Deputy Director — reason for sending back
-                </p>
-                <p className="whitespace-pre-wrap">{latestAckSendBackNote}</p>
-              </div>
-            )}
-            <ActionBar
-              definition={ACK_WORKFLOW}
-              stageId={application.ackState.stageId}
-              role={role}
-              onRun={(actionId, note) =>
-                ackAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
-              }
-            />
-          </>
-        )}
+        <LetterView letter={acknowledgementLetterOf(application)} />
+        <p className="text-sm text-emerald-700 font-medium">
+          Issued to the QP on submission, {new Date(application.acknowledgementIssuedAt || application.submissionDate).toLocaleDateString('en-ZA')}.
+        </p>
       </TabsContent>
 
       <TabsContent value="evaluation" className="space-y-6">
@@ -402,8 +390,14 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
             let the ASD see the Deputy Director's checklist and button ahead of time. */}
         {application.evalState.stageId === 'asd-evaluation' && (
           <div className="space-y-2">
-            {(latestDdReturnNote || latestIacRemediationNote) && (
+            {(latestDdReturnNote || latestIacRemediationNote || (underReview && application.review)) && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+                {underReview && application.review && (
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Deputy Director — reason for review</p>
+                    <p className="whitespace-pre-wrap">{application.review.reason}</p>
+                  </div>
+                )}
                 {latestDdReturnNote && (
                   <div>
                     <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Deputy Director — reason for returning</p>
@@ -550,8 +544,8 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
             )}
             {decided && (
               <div className="space-y-1">
-                <p className={`text-sm font-semibold ${application.evalState.stageId === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>
-                  {application.evalState.stageId === 'approved' ? 'IAC outcome: Approved' : 'IAC outcome: Declined'}
+                <p className="text-sm font-semibold text-emerald-700">
+                  IAC outcome: Approved
                   {iacOutcomeEntry && <span className="font-normal text-gray-500"> — recorded by {iacOutcomeEntry.actorName}</span>}
                 </p>
                 {iacOutcomeEntry?.note && <p className="text-sm text-gray-700 whitespace-pre-wrap">{iacOutcomeEntry.note}</p>}
@@ -561,103 +555,23 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
         )}
       </TabsContent>
 
+      {/* QCTO feedback 05.6/05.7: reached only when the IAC approves; the CEO-signed feedback letter is the approval. */}
       <TabsContent value="outcome" className="space-y-4">
         {!decided ? (
-          <p className="text-sm text-gray-400">Not yet available — the IAC has not reached a decision.</p>
+          <p className="text-sm text-gray-400">Not yet available — the feedback letter is only reached once the IAC has approved the QASA.</p>
         ) : (
           <>
-            <LetterView
-              letter={generateLetter('outcome', application.id, {
-                qpName: application.qpName,
-                qualificationTitle: application.qualificationTitle,
-                saqaId: application.saqaId,
-                nqfLevel: application.nqfLevel,
-                date: new Date().toISOString().split('T')[0],
-                notes: application.evalState.stageId === 'approved' ? 'Outcome: Approved.' : 'Outcome: Declined.',
-                signatoryName: application.outcomeState.stageId === 'signed' ? application.outcomeState.submittedBy : undefined,
-                signatoryTitle: 'CEO',
-              }, FEEDBACK_LETTER_TITLE)}
-            />
+            <LetterView letter={feedbackLetterOf(application)} />
             {application.outcomeState.stageId === 'signed' ? (
-              <p className="text-sm text-emerald-700 font-medium">Signed by {application.outcomeState.submittedBy}.</p>
+              <p className="text-sm text-emerald-700 font-medium">
+                Signed by {application.outcomeState.submittedBy}. This QASA is approved and available to EISA Instrument Validation and the EISA Calendar.
+              </p>
             ) : (
               <ActionBar
                 definition={OUTCOME_WORKFLOW}
                 stageId={application.outcomeState.stageId}
                 role={role}
                 onRun={(actionId) => outcomeAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })}
-              />
-            )}
-          </>
-        )}
-      </TabsContent>
-
-      {/* Row 13 (test findings): ASD drafts and edits -> submits to DD -> DD signs or declines
-          (with a mandatory note, back to the ASD to edit and resubmit) -> once signed, the ASD
-          (not the DD) is the one who sends it on to the QP — no DD -> QP shortcut. */}
-      <TabsContent value="approval" className="space-y-4">
-        {!application.approvalState || !application.approvalLetterDraft ? (
-          <p className="text-sm text-gray-400">Not yet available — the approval letter is only ready once the feedback letter is signed and the decision was "Approved".</p>
-        ) : (
-          <>
-            {latestApprovalDeclineNote && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Deputy Director — reason for declining</p>
-                <p className="whitespace-pre-wrap">{latestApprovalDeclineNote}</p>
-              </div>
-            )}
-
-            {application.approvalState.stageId === 'asd-draft' && role === 'ASD' && (
-              <div className="space-y-2">
-                <Label>Notes to include in the letter</Label>
-                <Textarea
-                  rows={3}
-                  value={application.approvalLetterDraft.notes}
-                  onChange={(e) =>
-                    saveApprovalDraft.mutate({ applicationId: application.id, draft: { notes: e.target.value } })
-                  }
-                />
-              </div>
-            )}
-
-            <LetterView
-              letter={generateLetter('approval', application.id, {
-                qpName: application.qpName,
-                qualificationTitle: application.qualificationTitle,
-                saqaId: application.saqaId,
-                nqfLevel: application.nqfLevel,
-                date: new Date().toISOString().split('T')[0],
-                notes: application.approvalLetterDraft.notes,
-                signatoryName: application.approvalLetterSignedBy ?? undefined,
-                signatoryTitle: APPROVAL_LETTER_SIGNER_ROLE,
-              })}
-            />
-
-            {application.approvalState.stageId === 'sent-to-qp' ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                Signed by {application.approvalLetterSignedBy}. This QASA is now <strong>Approved</strong> and sent to the
-                QP, and available to EISA Instrument Validation and the EISA Calendar.
-              </div>
-            ) : application.approvalState.stageId === 'signed' ? (
-              <>
-                <p className="text-sm text-emerald-700 font-medium">Signed by {application.approvalLetterSignedBy}. Ready to send to the QP.</p>
-                <ActionBar
-                  definition={APPROVAL_LETTER_WORKFLOW}
-                  stageId={application.approvalState.stageId}
-                  role={role}
-                  onRun={(actionId) =>
-                    approvalAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName })
-                  }
-                />
-              </>
-            ) : (
-              <ActionBar
-                definition={APPROVAL_LETTER_WORKFLOW}
-                stageId={application.approvalState.stageId}
-                role={role}
-                onRun={(actionId, note) =>
-                  approvalAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })
-                }
               />
             )}
           </>

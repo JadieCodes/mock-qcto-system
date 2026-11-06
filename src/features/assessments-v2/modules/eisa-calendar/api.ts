@@ -4,6 +4,7 @@ import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { performAction } from '../../shared/workflow/engine';
 import { listQualificationsWithAccreditedSdps } from '../../mock/api/accreditation';
 import { listApplications, listApprovedQsaAddenda } from '../qsa-addendum/api';
+import { approvedSittingsOf } from '../qsa-addendum/assessmentDetails';
 import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listRegisteredSittingIds } from '../eisa-registration/api';
 import type { Role } from '../../types';
 import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR } from './config';
@@ -36,8 +37,9 @@ function saveSittings(sittings: EisaSitting[]): void {
 
 // QCTO feedback 1.8: every qualification with accredited SDPs must have an EISA date, so no
 // approved QASA is needed. CR-030: the sittings-per-year count still comes from the approved
-// QASA (evaluationReport.approvedEisaSittingsPerYear) when one exists for that QP and
-// qualification; otherwise DEFAULT_SITTINGS_PER_YEAR.
+// QASA when one exists for that QP and qualification; otherwise DEFAULT_SITTINGS_PER_YEAR.
+// QCTO feedback 05.2/05.6: "approved" is isQasaApproved, and the count is the approved one
+// (approvedSittingsOf), which a running review does not change.
 export async function listEligibleQualifications(): Promise<EligibleQualification[]> {
   const [qualifications, approved, allQasa] = await Promise.all([
     listQualificationsWithAccreditedSdps(),
@@ -46,14 +48,17 @@ export async function listEligibleQualifications(): Promise<EligibleQualificatio
   ]);
   return qualifications.map((q) => {
     const anyQasa = allQasa.find((a) => a.qpId === q.qpId && a.qualificationTitle.trim().toLowerCase() === q.qualificationName.toLowerCase());
-    const qasa = approved.find(
-      (a) =>
+    const qasa = approved.find((a) => {
+      const sittings = approvedSittingsOf(a);
+      return (
         a.qpId === q.qpId &&
         a.qualificationTitle.trim().toLowerCase() === q.qualificationName.toLowerCase() &&
-        (a.evaluationReport.approvedEisaSittingsPerYear != null || a.evaluationReport.eisaSittingsOnDemand === true),
-    );
-    const onDemand = qasa?.evaluationReport.eisaSittingsOnDemand === true;
-    const fromQasa = qasa?.evaluationReport.approvedEisaSittingsPerYear ?? null;
+        (sittings.sittingsPerYear != null || sittings.onDemand)
+      );
+    });
+    const sittings = qasa ? approvedSittingsOf(qasa) : null;
+    const onDemand = sittings?.onDemand === true;
+    const fromQasa = sittings?.sittingsPerYear ?? null;
     return {
       qualificationId: q.qualificationId,
       qualificationTitle: q.qualificationName,

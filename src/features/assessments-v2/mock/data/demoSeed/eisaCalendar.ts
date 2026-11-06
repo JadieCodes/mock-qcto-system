@@ -58,7 +58,8 @@ import {
   SITTING_LIFECYCLE_WORKFLOW,
 } from '../../../modules/eisa-calendar/workflow';
 import type { ChangeRequestKind, EisaSitting, EisaSittingBatch, EisaSittingChangeRequest } from '../../../modules/eisa-calendar/types';
-import { isApprovalLetterFinal } from '../../../modules/qsa-addendum/workflow';
+import { approvedSittingsOf } from '../../../modules/qsa-addendum/assessmentDetails';
+import { isQasaApproved } from '../../../modules/qsa-addendum/workflow';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import {
   audit,
@@ -96,14 +97,14 @@ function calendarQualification(name: string, qasa: QsaAddendumApplication[]): Ca
   const q = findQualification(name);
   if (!q) throw new Error(`Demo seed: "${name}" is not in mock/data/accreditedQualifications.ts.`);
   const approved = qasa.find(
-    (a) => isApprovalLetterFinal(a.approvalState) && a.qpId === q.qpId && a.qualificationTitle.toLowerCase() === name.toLowerCase(),
+    (a) => isQasaApproved(a) && a.qpId === q.qpId && a.qualificationTitle.toLowerCase() === name.toLowerCase(),
   );
   return {
     qualificationId: q.qualificationId,
     qualificationTitle: q.qualificationName,
     qpId: q.qpId,
     qpName: q.qpName,
-    sittingsPerYear: approved?.evaluationReport.approvedEisaSittingsPerYear ?? DEFAULT_SITTINGS_PER_YEAR,
+    sittingsPerYear: (approved ? approvedSittingsOf(approved).sittingsPerYear : null) ?? DEFAULT_SITTINGS_PER_YEAR,
   };
 }
 

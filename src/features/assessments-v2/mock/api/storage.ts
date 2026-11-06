@@ -40,7 +40,10 @@ export function writeStore<T>(key: string, value: T): void {
 // form, plus a sixth record (Approved with conditions, with "No" answers and findings).
 // 'A10' = 3.14: FISA results batches in Approval of Results — awaiting submission, with the ASD,
 // with the DD, and approved with the approval letter sent to the SDP.
-export const SEED_VERSION = 'A10';
+// 'A11' = Batch K (QCTO 5 Nov review): no Declined QASA (Boilermaker is now Remediation
+// requested), no approval-letter state, acknowledgements issued on submission, and Plumbing is
+// "Approved — under review".
+export const SEED_VERSION = 'A11';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

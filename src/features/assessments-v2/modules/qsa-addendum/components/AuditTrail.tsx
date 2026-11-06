@@ -1,14 +1,12 @@
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 
-// Row 14 (test findings): the audit trail lives in its own tab on both the internal and
-// external views, instead of being buried in the Details tab — one component so both sides
-// show exactly the same history.
+// Row 14 (test findings): the audit trail lives in its own tab. QCTO feedback 05.8: internal
+// only — the QP sees the Progress tab (components/QpProgress.tsx) instead.
 export function QsaAuditTrail({ applicationId }: { applicationId: string }) {
   const entries = [
     ...getAuditTrail('qsa-addendum-acknowledgement', applicationId),
     ...getAuditTrail('qsa-addendum-evaluation', applicationId),
     ...getAuditTrail('qsa-addendum-outcome-letter', applicationId),
-    ...getAuditTrail('qsa-addendum-approval-letter', applicationId),
   ].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
   if (entries.length === 0) return <p className="text-xs text-gray-400">No actions recorded yet.</p>;

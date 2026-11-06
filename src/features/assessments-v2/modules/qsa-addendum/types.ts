@@ -36,22 +36,25 @@ export interface AssessmentComponent {
   days: number;
 }
 
-// QCTO feedback 3.3: the simulated "Recommended to Certification" hand-off, recorded when the
-// CEO signs the feedback letter on an approved QASA. A snapshot of the details at that moment.
+// QCTO feedback 3.3 / 05.1: the simulated "Certification notified of the assessment details"
+// hand-off, recorded when the CEO signs the feedback letter on an approved QASA. A snapshot of
+// the details at that moment — other modules read the approved sittings from here.
 export interface QasaCertificationHandoff {
-  recommendedAt: string;
-  recommendedBy: string;
+  notifiedAt: string;
+  notifiedBy: string;
   components: AssessmentComponent[];
   approvedEisaSittingsPerYear: number | null;
   eisaSittingsOnDemand: boolean;
-  validityPeriodYears: number | null;
 }
 
-// Row 13 (test findings): the ASD's editable content for the approval letter, before it goes
-// to the Deputy Director for signature. `notes` is the one free-text field LetterData exposes
-// — see the "editable fields" assumption in progress.md.
-export interface ApprovalLetterDraft {
-  notes: string;
+// QCTO feedback 05.2: a review of an approved QASA, started by the DD with a reason. While it
+// is set, the QASA stays approved for every other module; it is cleared when the CEO signs the
+// new feedback letter.
+export interface QasaReview {
+  startedAt: string;
+  startedBy: string;
+  startedById: string;
+  reason: string;
 }
 
 export type { IacMinutesFile };
@@ -74,20 +77,14 @@ export interface QsaAddendumApplication {
   saqaGateOutcome: SaqaGateOutcome;
   documents: RequiredDocument[];
 
-  // CR-005/CR-007: acknowledgement letter — stops at DD level.
-  ackState: WorkflowRecordState;
-  // CR-014 Flow 1: evaluation approval — ASD -> DD -> IAC.
+  // QCTO feedback 05.5: the acknowledgement letter is issued at the moment of submission —
+  // no internal preview or review step.
+  acknowledgementIssuedAt: string;
+  // CR-014 Flow 1: evaluation approval — ASD -> DD -> Director Office -> IAC.
   evalState: WorkflowRecordState;
-  // CR-014 Flow 2: outcome letter — CEO signature only.
+  // CR-014 Flow 2: feedback letter — CEO signature only. QCTO feedback 05.6: the signed
+  // feedback letter is the approval; there is no separate approval letter.
   outcomeState: WorkflowRecordState;
-  // Approval letter — only exists once the outcome is approved.
-  approvalState: WorkflowRecordState | null;
-  // Row 13: the ASD's draft content, editable until it's submitted to the Deputy Director.
-  approvalLetterDraft: ApprovalLetterDraft | null;
-  // The Deputy Director's name is captured here the moment they sign — `approvalState.submittedBy`
-  // gets overwritten by the ASD's name on the later "send to QP" step, so the signatory's name
-  // needs its own home to still show correctly on the letter after that.
-  approvalLetterSignedBy: string | null;
 
   qsaChecklist: ChecklistSection[];
   ddReviewChecklist: ChecklistSection[];
@@ -99,8 +96,8 @@ export interface QsaAddendumApplication {
   // QCTO feedback 3.3: optional and additive — read them through assessmentDetails.ts, which
   // treats a missing value as "not captured".
   assessmentComponents?: AssessmentComponent[];
-  validityPeriodYears?: number | null;
   certificationHandoff?: QasaCertificationHandoff | null;
+  review?: QasaReview | null;
 }
 
 export interface NewApplicationInput {
