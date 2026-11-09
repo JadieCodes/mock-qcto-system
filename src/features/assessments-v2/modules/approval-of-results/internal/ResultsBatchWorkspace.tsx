@@ -18,6 +18,8 @@ import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from
 import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
 import { BatchDownloads } from '../components/BatchDownloads';
 import { DeadlineBadge } from '../components/DeadlineBadge';
+import { EisaBatchFigures } from '../components/EisaBatchFigures';
+import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
 import { ResultsActionBar } from '../components/ResultsActionBar';
 import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
@@ -31,7 +33,7 @@ import {
   useSaveEvidenceEvaluationNotes,
   useUploadEvidenceDocument,
 } from '../hooks';
-import { competencyRatePercent, competentCountOf, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
+import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
 import type { ResultsBatch } from '../types';
 
 // QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit
@@ -97,7 +99,6 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
   // invented for this screen.
   const canSeeReportDetails = visibilityScopeForRole(role) === 'all';
 
-  const rate = competencyRatePercent(batch);
   const belowThreshold = isBelowPostEisaThreshold(batch);
 
   return (
@@ -116,7 +117,8 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
           <p className="text-sm font-medium">{batch.qualificationTitle}</p>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Sitting Date</Label>
+          {/* QCTO feedback 29.32: "EISA date", not "Sitting date". */}
+          <Label className="text-xs text-gray-400 uppercase">EISA Date</Label>
           <p className="text-sm font-medium">{batch.sittingDate}</p>
         </div>
         <div className="space-y-1">
@@ -125,27 +127,12 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Competency Rate</p>
-        <p className="text-2xl font-bold text-gray-900">{rate}%</p>
-        <p className="text-xs text-gray-500">
-          {competentCountOf(batch)} of {batch.learnerCount} learners found competent.
-        </p>
-        {/* Row 40: the rate above is calculated from these per-learner results, not typed in by
-            hand (H-05/H-11/H-12/G-24) — shown here so the number is traceable. */}
-        <details className="text-xs text-gray-500">
-          <summary className="cursor-pointer select-none text-gray-600">View per-learner results</summary>
-          <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-            {batch.learnerResults.map((r) => (
-              <li key={r.learnerId} className="flex items-center justify-between gap-3 border-b last:border-b-0 py-1">
-                <span className="truncate">{r.fullName}</span>
-                <span className={r.outcome === 'competent' ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
-                  {r.outcome === 'competent' ? 'Competent' : 'Not yet competent'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
+      {/* QCTO feedback 29.31: the batch figures and every learner's marks per component, the
+          result per component, the weighted score and the final result (calculation.ts). */}
+      <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Results</p>
+        <EisaBatchFigures batch={batch} />
+        <EisaLearnerResultsTable batch={batch} />
         {belowThreshold && <PemVisitBanner batch={batch} />}
       </div>
 

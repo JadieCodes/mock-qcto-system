@@ -3,22 +3,28 @@
 // saveEvidenceEvaluationNotes, saveComplianceChecklist, uploadEvidenceDocument,
 // performResultsAction), with the audit entries and notifications each step implies. Every
 // batch is for a past sitting with a Confirmed EISA Confirmation (eisaConfirmation.ts), has a
-// result per learner on that confirmation, and was submitted about 20 days after the sitting
+// result per learner on that confirmation, and was submitted about 20 days after the EISA date
 // (inside the 21-working-day deadline). Days are "days ago".
 //
-//  #    Qualification      Sitting      QP                   Rate   Stage
-//  —    Electrical Trades  today - 15   Nomvula Dlamini      —      Awaiting submission (QP side) — no batch yet
-//  A2   Plumbing           today - 30   Johan van der Merwe  75%    Submitted — with the ASD, review not started
-//  A3   Welding            today - 45   Precious Mahlangu    75%    ASD: compliance review (notes + first folder done)
-//  A4   Electrical Trades  today - 60   Nomvula Dlamini      100%   ASD: evidence evaluation (both notes, 3 of 4 folders, evidence uploaded)
-//  A5   Plumbing           today - 75   Johan van der Merwe  66.7%  With the Deputy Director
-//  A6   Welding            today - 90   Precious Mahlangu    100%   With the Director
-//  A7   Electrical Trades  today - 105  Nomvula Dlamini      75%    With the Chief Director (final approval pending)
-//  A8   Plumbing           today - 130  Johan van der Merwe  80%    Approved — recommended to Certification
-//  A9   Welding            today - 150  Precious Mahlangu    40%    Approved, below the 45% threshold — its Post-EISA Monitoring
-//                                                                   visit was created automatically at final approval (siteVisits.ts SV3)
-//  A10  Electrical Trades  today - 170  Nomvula Dlamini      50%    Approved, above the 45% threshold — no Post-EISA Monitoring visit
-//  A11  Plumbing           today - 50   Johan van der Merwe  66.7%  Declined by the Deputy Director with a reason — QP can resubmit
+// QCTO feedback 29.31 (Batch L1): each batch snapshots the components of the approved QASA for
+// its QP and qualification (qasa.ts: Electrical Trades, Welding, Plumbing — two components each)
+// and every learner has a mark per component, or is Absent. The pattern is per learner, in
+// confirmation order: C = Competent (every mark at least the pass mark), N = Not yet competent
+// (one component below its pass mark), A = Absent. Rate = competent / wrote.
+//
+//  #    Qualification      EISA date    QP                   Pattern  Rate   Stage
+//  —    Electrical Trades  today - 15   Nomvula Dlamini      —        —      Awaiting submission (QP side) — no batch yet
+//  A2   Plumbing           today - 30   Johan van der Merwe  CCCN     75%    Submitted — with the ASD, review not started
+//  A3   Welding            today - 45   Precious Mahlangu    CCCN     75%    ASD: compliance review (notes + first folder done)
+//  A4   Electrical Trades  today - 60   Nomvula Dlamini      CCA      100%   ASD: evidence evaluation (both notes, 3 of 4 folders, evidence uploaded)
+//  A5   Plumbing           today - 75   Johan van der Merwe  CCN      66.7%  With the Deputy Director
+//  A6   Welding            today - 90   Precious Mahlangu    CAC      100%   With the Director
+//  A7   Electrical Trades  today - 105  Nomvula Dlamini      CCCN     75%    With the Chief Director (final approval pending)
+//  A8   Plumbing           today - 130  Johan van der Merwe  CCNCA    75%    Approved — recommended to Certification (was 80%; one learner now absent)
+//  A9   Welding            today - 150  Precious Mahlangu    CNCNN    40%    Approved, below the 45% threshold — its Post-EISA Monitoring
+//                                                                          visit was created automatically at final approval (siteVisits.ts SV3)
+//  A10  Electrical Trades  today - 170  Nomvula Dlamini      CNCN     50%    Approved, above the 45% threshold — no Post-EISA Monitoring visit
+//  A11  Plumbing           today - 50   Johan van der Merwe  CNC      66.7%  Declined by the Deputy Director with a reason — QP can resubmit
 //
 // Officials: ASD Lindiwe Khumalo (Electrical Trades, Welding) / Riaan Pretorius
 // (Plumbing); Deputy Director Grace Mokoena (Nomvula's and Johan's) / Peter Botha (Precious's);
@@ -27,10 +33,14 @@
 import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
+import { calculateLearnerResult, type EisaLearnerOutcome } from '../../../modules/approval-of-results/calculation';
+import { snapshotResultsComponents } from '../../../modules/approval-of-results/componentSnapshot';
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
+import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
 import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
-import type { ResultsBatch } from '../../../modules/approval-of-results/types';
+import type { EisaLearnerResult, ResultsBatch, ResultsComponent } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
+import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
 
 const RESULTS_ID_GROUP = 7;
@@ -69,7 +79,33 @@ interface ResultsSeedBuilder {
   done: () => void;
 }
 
-export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[]): ResultsBatch[] {
+type OutcomeCode = 'C' | 'N' | 'A';
+
+const OUTCOME_OF_CODE: Record<OutcomeCode, EisaLearnerOutcome> = { C: 'competent', N: 'not-yet-competent', A: 'absent' };
+
+function isOutcomeCode(value: string): value is OutcomeCode {
+  return value === 'C' || value === 'N' || value === 'A';
+}
+
+// Deterministic, realistic marks for one learner. Competent: every mark between the pass mark
+// and the total. Not yet competent: one component (it alternates per learner) below its pass
+// mark, the other passed. Absent: no marks.
+function seedMarks(components: ResultsComponent[], code: OutcomeCode, learnerIndex: number): Record<string, number> {
+  if (code === 'A') return {};
+  const failing = learnerIndex % components.length;
+  return Object.fromEntries(
+    components.map((c, j) => {
+      const spread = ((learnerIndex * 37 + j * 53) % 80) / 100 + 0.1;
+      const mark =
+        code === 'N' && j === failing
+          ? Math.floor(c.passMark * (0.55 + ((learnerIndex * 13 + j * 7) % 35) / 100))
+          : Math.min(c.totalMarks, c.passMark + Math.round((c.totalMarks - c.passMark) * spread));
+      return [c.id, mark];
+    }),
+  );
+}
+
+export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[]): ResultsBatch[] {
   const batches: ResultsBatch[] = [];
 
   function confirmationFor(title: string, offsetDays: number): EisaConfirmationRecord {
@@ -79,9 +115,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     return found;
   }
 
-  // submitResultsBatch(): one batch per sitting, confirmation Confirmed, a result for every
-  // learner on it. The first `competent` learners are Competent, the rest Not yet competent.
-  function submit(n: number, title: string, offsetDays: number, competent: number, daysAgo: number): ResultsSeedBuilder {
+  // submitResultsBatch(): one batch per sitting, confirmation Confirmed, the approved QASA's
+  // components snapshotted (29.31), and marks or Absent for every learner on it, following
+  // `pattern` (one letter per learner, see the table above).
+  function submit(n: number, title: string, offsetDays: number, pattern: string, daysAgo: number): ResultsSeedBuilder {
     const confirmation = confirmationFor(title, offsetDays);
     const clock = createClock();
     const qp = seedPerson(confirmation.qpId);
@@ -89,7 +126,25 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     if (batches.some((b) => b.sittingId === confirmation.sittingId)) throw new Error(`Demo seed: ${confirmation.sittingDate} already has a results batch.`);
     if (confirmation.workflow.stageId !== 'confirmed') throw new Error('Demo seed: the sitting must be fully confirmed before results can be submitted.');
     if (!confirmation.moderationDate || dateOf(submittedAt) <= confirmation.moderationDate) throw new Error('Demo seed: results submitted before moderation.');
-    if (competent > confirmation.learners.length) throw new Error('Demo seed: more competent learners than learners.');
+    const codes = [...pattern].filter(isOutcomeCode);
+    if (codes.length !== pattern.length || codes.length !== confirmation.learners.length) {
+      throw new Error(`Demo seed: ${title} ${confirmation.sittingDate} pattern does not match its learners.`);
+    }
+    const components = snapshotResultsComponents(qasas, confirmation);
+    if (components.length === 0) throw new Error(`Demo seed: the approved QASA for ${title} has no assessment components.`);
+    const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => ({
+      learnerId: l.learnerId,
+      fullName: l.fullName,
+      absent: codes[i] === 'A',
+      marks: seedMarks(components, codes[i], i),
+    }));
+    // The seeded marks must give exactly the outcome the pattern asks for, and pass the QP's checks.
+    learnerResults.forEach((r, i) => {
+      if (calculateLearnerResult(components, r).outcome !== OUTCOME_OF_CODE[codes[i]]) {
+        throw new Error(`Demo seed: ${title} learner ${i + 1} marks do not give ${OUTCOME_OF_CODE[codes[i]]}.`);
+      }
+    });
+    if (markEntryIssues(components, learnerResults).length > 0) throw new Error(`Demo seed: ${title} ${confirmation.sittingDate} has invalid marks.`);
 
     const sittingDate = confirmation.sittingDate;
     const fileTitle = title.replace(/\s+/g, '_');
@@ -101,11 +156,8 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       qpId: confirmation.qpId,
       qpName: confirmation.qpName,
       learnerCount: confirmation.learners.length,
-      learnerResults: confirmation.learners.map((l, i) => ({
-        learnerId: l.learnerId,
-        fullName: l.fullName,
-        outcome: i < competent ? ('competent' as const) : ('not-yet-competent' as const),
-      })),
+      components,
+      learnerResults,
       evidenceDocuments: [
         { fileName: `${fileTitle}_EISA_Marksheet_${sittingDate}.xlsx`, fileSize: 98_304, uploadedAt: submittedAt },
         { fileName: `${fileTitle}_Moderation_Report_${sittingDate}.pdf`, fileSize: 1_258_291, uploadedAt: submittedAt },
@@ -126,7 +178,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     notify(log, submittedAt, {
       recipientRole: RESULTS_AD_ROLE,
       title: 'Results batch submitted',
-      body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (${sittingDate}).`,
+      body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (EISA date ${sittingDate}).`,
     });
 
     const api: ResultsSeedBuilder = {
@@ -165,7 +217,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
           notify(log, at, {
             recipientRole: nextApprover,
             title: 'Results batch awaiting your review',
-            body: `"${batch.qualificationTitle}" (${batch.sittingDate}) is awaiting your review.`,
+            body: `"${batch.qualificationTitle}" (EISA date ${batch.sittingDate}) is awaiting your review.`,
           });
         }
         if (actionId === 'chief-director-approve') {
@@ -193,41 +245,41 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
 
   const full = { evidenceNotes: true };
 
-  submit(2, 'Plumbing', -30, 3, 10).done();
-  submit(3, 'Welding', -45, 3, 25).adReview(LINDIWE, 22, { evidenceNotes: false, sectionIds: ['f1'] }).done();
-  submit(4, 'Electrical Trades', -60, 3, 40)
+  submit(2, 'Plumbing', -30, 'CCCN', 10).done();
+  submit(3, 'Welding', -45, 'CCCN', 25).adReview(LINDIWE, 22, { evidenceNotes: false, sectionIds: ['f1'] }).done();
+  submit(4, 'Electrical Trades', -60, 'CCA', 40)
     .adReview(LINDIWE, 36, { evidenceNotes: true, sectionIds: ['f1', 'f2', 'f3'], evidenceFile: 'Marking_Venue_Attendance_Register.pdf' })
     .done();
-  submit(5, 'Plumbing', -75, 2, 55).adReview(RIAAN, 50, full).act('ad-advance', RIAAN, 48).done();
-  submit(6, 'Welding', -90, 3, 70).adReview(LINDIWE, 65, full).act('ad-advance', LINDIWE, 63).act('dd-advance', PETER, 57).done();
-  submit(7, 'Electrical Trades', -105, 3, 85)
+  submit(5, 'Plumbing', -75, 'CCN', 55).adReview(RIAAN, 50, full).act('ad-advance', RIAAN, 48).done();
+  submit(6, 'Welding', -90, 'CAC', 70).adReview(LINDIWE, 65, full).act('ad-advance', LINDIWE, 63).act('dd-advance', PETER, 57).done();
+  submit(7, 'Electrical Trades', -105, 'CCCN', 85)
     .adReview(LINDIWE, 80, full)
     .act('ad-advance', LINDIWE, 78)
     .act('dd-advance', GRACE, 72)
     .act('director-advance', ZANELE, 66)
     .done();
-  submit(8, 'Plumbing', -130, 4, 110)
+  submit(8, 'Plumbing', -130, 'CCNCA', 110)
     .adReview(RIAAN, 105, full)
     .act('ad-advance', RIAAN, 103)
     .act('dd-advance', GRACE, 97)
     .act('director-advance', SARAH, 92)
     .act('chief-director-approve', BUSISIWE, 87)
     .done();
-  submit(9, 'Welding', -150, 2, 130)
+  submit(9, 'Welding', -150, 'CNCNN', 130)
     .adReview(LINDIWE, 125, full)
     .act('ad-advance', LINDIWE, 123)
     .act('dd-advance', PETER, 117)
     .act('director-advance', SARAH, 112)
     .act('chief-director-approve', FRANCOIS, 106)
     .done();
-  submit(10, 'Electrical Trades', -170, 2, 150)
+  submit(10, 'Electrical Trades', -170, 'CNCN', 150)
     .adReview(LINDIWE, 145, full)
     .act('ad-advance', LINDIWE, 143)
     .act('dd-advance', GRACE, 137)
     .act('director-advance', ZANELE, 132)
     .act('chief-director-approve', BUSISIWE, 126)
     .done();
-  submit(11, 'Plumbing', -50, 2, 30)
+  submit(11, 'Plumbing', -50, 'CNC', 30)
     .adReview(RIAAN, 26, full)
     .act('ad-advance', RIAAN, 24)
     .act(

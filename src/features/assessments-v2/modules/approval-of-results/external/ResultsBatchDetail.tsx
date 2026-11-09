@@ -5,13 +5,14 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { BatchDownloads } from '../components/BatchDownloads';
 import { DeadlineBadge } from '../components/DeadlineBadge';
+import { EisaBatchFigures } from '../components/EisaBatchFigures';
+import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
 import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsAction, useResultsBatch } from '../hooks';
-import { competencyRatePercent, competentCountOf } from '../workflow';
 
-// CR-059: QP-facing read-only summary — status, competency rate, the latest decline reason
-// (if any) and a resubmit action once declined.
+// CR-059: QP-facing read-only summary — status, the batch figures and per-component results
+// (29.31), the latest decline reason (if any) and a resubmit action once declined.
 export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | null; onClose: () => void }) {
   const { role, person } = useV2Role();
   const actorId = person.id;
@@ -23,7 +24,7 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
     <Modal
       open={!!batchId}
       onOpenChange={(open) => !open && onClose()}
-      size="md"
+      size="lg"
       title={batch?.qualificationTitle ?? ''}
       footer={<Button variant="outline" onClick={onClose}>Close</Button>}
     >
@@ -37,12 +38,14 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
             <span className="text-xs text-gray-500">Submission</span>
             <DeadlineBadge deadline={batch.submissionDeadline} submittedAt={batch.submittedAt} />
           </div>
+          {/* QCTO feedback 29.32: "EISA date", not "Sitting date". */}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">Competency Rate</span>
-            <span className="text-sm font-semibold">
-              {competencyRatePercent(batch)}% ({competentCountOf(batch)}/{batch.learnerCount})
-            </span>
+            <span className="text-xs text-gray-500">EISA Date</span>
+            <span className="text-sm font-medium">{batch.sittingDate}</span>
           </div>
+          {/* QCTO feedback 29.31: the batch figures and the results per learner and component. */}
+          <EisaBatchFigures batch={batch} />
+          <EisaLearnerResultsTable batch={batch} />
           {batch.declineHistory.length > 0 && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-1">
               <p className="text-xs font-semibold text-red-700 uppercase">Latest Decline Reason</p>

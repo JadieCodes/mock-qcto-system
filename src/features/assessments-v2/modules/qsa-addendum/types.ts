@@ -34,6 +34,9 @@ export interface AssessmentComponent {
   type: AssessmentComponentType;
   weightingPercent: number;
   days: number;
+  // QCTO feedback 05.3: needed to decide competence per component in Approval of Results.
+  totalMarks: number;
+  passMark: number;
 }
 
 // QCTO feedback 3.3 / 05.1: the simulated "Certification notified of the assessment details"

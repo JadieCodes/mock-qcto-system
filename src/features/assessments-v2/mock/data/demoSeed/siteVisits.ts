@@ -491,7 +491,7 @@ export function seedSiteVisits(
     notify(log, createdAt, {
       recipientRole: PLANNER_ROLE,
       title: 'Post-EISA Monitoring visit to be scheduled',
-      body: `"${batch.qualificationTitle}" (${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
+      body: `"${batch.qualificationTitle}" (EISA date ${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
     });
     audit(log, { recordType: 'results-batch', recordId: batch.id, actor, action: 'Post-EISA Monitoring visit created — waiting for a date', timestamp: createdAt });
     // The planning chain starts with the ASD (whoever picks the date), so the

@@ -43,7 +43,9 @@ export function writeStore<T>(key: string, value: T): void {
 // 'A11' = Batch K (QCTO 5 Nov review): no Declined QASA (Boilermaker is now Remediation
 // requested), no approval-letter state, acknowledgements issued on submission, and Plumbing is
 // "Approved — under review".
-export const SEED_VERSION = 'A11';
+// 'A12' = Batch L1 (05.3, 29.31, 29.32): QASA components carry total marks and pass marks; EISA
+// results batches snapshot the components, with a mark per component or Absent per learner.
+export const SEED_VERSION = 'A12';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

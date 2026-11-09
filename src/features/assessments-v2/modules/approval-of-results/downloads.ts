@@ -7,7 +7,8 @@ import { generateLetter } from '../../shared/letters/templates';
 import type { GeneratedLetter } from '../../shared/letters/types';
 import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
 import { fisaEvidenceTagLabel, RESULTS_CHIEF_DIRECTOR_ROLE } from './config';
-import { competencyRatePercent, competentCountOf, fisaCompetencyRatePercent, fisaCompetentCountOf, RESULTS_WORKFLOW, resultsStatusLabel } from './workflow';
+import { absenteeismText, batchFiguresOf, calculateLearnerResult, competenceRateText, EISA_OUTCOME_LABELS } from './calculation';
+import { fisaCompetencyRatePercent, fisaCompetentCountOf, RESULTS_WORKFLOW, resultsStatusLabel } from './workflow';
 import type { FisaResultsBatch, LearnerResult, ResultsBatch, ResultsDeclineEntry } from './types';
 
 interface ReportEvidence {
@@ -18,10 +19,16 @@ interface ReportEvidence {
   uploadedAt: string;
 }
 
+interface LearnerTable {
+  headers: string[];
+  rows: string[][];
+}
+
 interface VerificationReportInput {
   heading: string;
   details: { label: string; value: string }[];
-  learnerResults: LearnerResult[];
+  // FISA: Learner | Outcome. EISA (29.31): a column per component, the weighted score and the result.
+  learnerTable: LearnerTable;
   evidence: ReportEvidence[];
   declineHistory: ResultsDeclineEntry[];
   audit: AuditEntry[];
@@ -65,6 +72,31 @@ function escapeHtml(value: string): string {
 
 function outcomeLabel(outcome: LearnerResult['outcome']): string {
   return outcome === 'competent' ? 'Competent' : 'Not yet competent';
+}
+
+function fisaLearnerTable(results: LearnerResult[]): LearnerTable {
+  return { headers: ['Learner', 'Outcome'], rows: results.map((r) => [r.fullName, outcomeLabel(r.outcome)]) };
+}
+
+// QCTO feedback 29.31/29.32: each component column names its EISA date, total and pass mark.
+function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
+  return {
+    headers: [
+      'Learner',
+      ...batch.components.map((c) => `${c.name} (EISA date ${c.eisaDate}; out of ${c.totalMarks}, pass ${c.passMark})`),
+      'Weighted score',
+      'Result',
+    ],
+    rows: batch.learnerResults.map((learner) => {
+      const calc = calculateLearnerResult(batch.components, learner);
+      return [
+        learner.fullName,
+        ...calc.components.map((r) => (r.mark === null ? '—' : `${r.mark} (${r.competent ? 'C' : 'NYC'})`)),
+        calc.weightedScorePercent === null ? '—' : `${calc.weightedScorePercent}%`,
+        EISA_OUTCOME_LABELS[calc.outcome],
+      ];
+    }),
+  };
 }
 
 function table(headers: string[], rows: string[][]): string {
@@ -129,7 +161,7 @@ export function verificationReportToHtml(input: VerificationReportInput): string
 <h2>Batch details</h2>
 ${definitionList(input.details)}
 <h2>Learner results</h2>
-${table(['Learner', 'Outcome'], input.learnerResults.map((r) => [r.fullName, outcomeLabel(r.outcome)]))}
+${table(input.learnerTable.headers, input.learnerTable.rows)}
 <h2>Evidence</h2>
 ${table(
   ['File', 'Tag', 'Type', 'Size', 'Uploaded'],
@@ -170,6 +202,13 @@ function approvedOn(batch: { recommendation: { recommendedAt: string } | null })
 
 // ----- EISA -----
 
+// QCTO feedback 29.31/29.32: the EISA date and the batch figures (competency rate = competent ÷ wrote).
+function eisaApprovalNotes(batch: ResultsBatch): string {
+  const f = batchFiguresOf(batch);
+  const absent = f.absent > 0 ? ` ${f.absent} of the ${f.registered} registered learners were absent.` : '';
+  return `EISA date ${batch.sittingDate}: ${f.competent} of the ${f.wrote} learners who wrote were found competent (${f.competenceRatePercent}%).${absent} The results have been recommended to the Certification domain for certificate printing.`;
+}
+
 export function eisaApprovalLetter(batch: ResultsBatch): GeneratedLetter {
   return generateLetter(
     'approval',
@@ -180,7 +219,7 @@ export function eisaApprovalLetter(batch: ResultsBatch): GeneratedLetter {
       date: approvedOn(batch),
       signatoryName: batch.recommendation?.recommendedBy,
       signatoryTitle: RESULTS_CHIEF_DIRECTOR_ROLE,
-      notes: `EISA sitting of ${batch.sittingDate}: ${competentCountOf(batch)} of ${batch.learnerCount} learners were found competent. The results have been recommended to the Certification domain for certificate printing.`,
+      notes: eisaApprovalNotes(batch),
     },
     'Approval Letter',
     'eisa-results',
@@ -192,19 +231,24 @@ export function downloadEisaApprovalLetter(batch: ResultsBatch): void {
 }
 
 export function downloadEisaVerificationReport(batch: ResultsBatch, audit: AuditEntry[]): void {
+  const figures = batchFiguresOf(batch);
   const html = verificationReportToHtml({
     heading: 'Verification Report — EISA Results',
     details: [
       { label: 'Qualification', value: batch.qualificationTitle },
       { label: 'QP', value: batch.qpName },
-      { label: 'Sitting date', value: batch.sittingDate },
+      { label: 'EISA date', value: batch.sittingDate },
       { label: 'Submitted', value: batch.submittedAt.slice(0, 10) },
       { label: 'Submission deadline', value: batch.submissionDeadline },
-      { label: 'Competency rate', value: `${competencyRatePercent(batch)}% (${competentCountOf(batch)} of ${batch.learnerCount})` },
+      { label: 'Registered', value: String(figures.registered) },
+      { label: 'Wrote', value: String(figures.wrote) },
+      { label: 'Competent / Not yet competent', value: `${figures.competent} / ${figures.notYetCompetent}` },
+      { label: 'Competency rate', value: competenceRateText(figures) },
+      { label: 'Absenteeism', value: absenteeismText(figures) },
       { label: 'Status', value: resultsStatusLabel(batch) },
       { label: 'Cycle', value: String(batch.cycleCount) },
     ],
-    learnerResults: batch.learnerResults,
+    learnerTable: eisaLearnerTable(batch),
     evidence: batch.evidenceDocuments,
     declineHistory: batch.declineHistory,
     audit,
@@ -252,7 +296,7 @@ export function downloadFisaVerificationReport(batch: FisaResultsBatch, audit: A
       { label: 'Cycle', value: String(batch.cycleCount) },
       { label: 'Approval letter', value: batch.approvalLetter ? `Sent to the SDP on ${batch.approvalLetter.sentToSdpAt.slice(0, 10)}` : '—' },
     ],
-    learnerResults: batch.learnerResults,
+    learnerTable: fisaLearnerTable(batch.learnerResults),
     evidence: batch.evidenceDocuments.map((d) => ({ ...d, tag: fisaEvidenceTagLabel(d.tag) })),
     declineHistory: batch.declineHistory,
     audit,

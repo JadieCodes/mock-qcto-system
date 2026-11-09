@@ -15,6 +15,8 @@ interface ComponentRow {
   type: AssessmentComponentType;
   weightingPercent: string;
   days: string;
+  totalMarks: string;
+  passMark: string;
 }
 
 interface FormValues {
@@ -32,7 +34,13 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
   const saveDetails = useSaveAssessmentDetails();
   const { control, register, handleSubmit, formState } = useForm<FormValues>({
     defaultValues: {
-      components: componentsOf(application).map((c) => ({ ...c, weightingPercent: String(c.weightingPercent), days: String(c.days) })),
+      components: componentsOf(application).map((c) => ({
+        ...c,
+        weightingPercent: String(c.weightingPercent),
+        days: String(c.days),
+        totalMarks: String(c.totalMarks),
+        passMark: String(c.passMark),
+      })),
     },
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'components', keyName: 'fieldKey' });
@@ -45,6 +53,8 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
       type: c.type,
       weightingPercent: toNumber(c.weightingPercent),
       days: toNumber(c.days),
+      totalMarks: toNumber(c.totalMarks),
+      passMark: toNumber(c.passMark),
     })),
   };
   const issues = validateAssessmentDetails(input);
@@ -61,7 +71,7 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
         <p className="text-sm font-medium text-gray-700">Assessment components</p>
         {fields.length === 0 && <p className="text-xs text-gray-400">No components added.</p>}
         {fields.map((field, index) => (
-          <div key={field.fieldKey} className="grid gap-2 rounded-xl border bg-gray-50 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-end">
+          <div key={field.fieldKey} className="grid gap-2 rounded-xl border bg-gray-50 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] sm:items-end">
             <div className="space-y-1">
               <Label htmlFor={`component-name-${field.id}`}>Name</Label>
               <Input id={`component-name-${field.id}`} {...register(`components.${index}.name`)} />
@@ -91,6 +101,15 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
               <Label htmlFor={`component-days-${field.id}`}>Days</Label>
               <Input id={`component-days-${field.id}`} type="number" min={1} step={1} {...register(`components.${index}.days`)} />
             </div>
+            {/* QCTO feedback 05.3: needed to decide competence per component. */}
+            <div className="space-y-1">
+              <Label htmlFor={`component-total-${field.id}`}>Total marks</Label>
+              <Input id={`component-total-${field.id}`} type="number" min={1} step={1} {...register(`components.${index}.totalMarks`)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`component-pass-${field.id}`}>Pass mark</Label>
+              <Input id={`component-pass-${field.id}`} type="number" min={1} step={1} {...register(`components.${index}.passMark`)} />
+            </div>
             <Button type="button" variant="ghost" size="sm" aria-label={`Remove component ${index + 1}`} onClick={() => remove(index)}>
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -102,7 +121,7 @@ export function AssessmentDetailsEditor({ application }: { application: QsaAdden
             variant="outline"
             size="sm"
             className="gap-1"
-            onClick={() => append({ id: crypto.randomUUID(), name: '', type: 'written', weightingPercent: '', days: '1' })}
+            onClick={() => append({ id: crypto.randomUUID(), name: '', type: 'written', weightingPercent: '', days: '1', totalMarks: '', passMark: '' })}
           >
             <Plus className="h-4 w-4" />Add component
           </Button>

@@ -13,7 +13,8 @@ import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
-import { competencyRatePercent, RESULTS_WORKFLOW } from '../workflow';
+import { absenteeismText, batchFiguresOf, competenceRateText } from '../calculation';
+import { RESULTS_WORKFLOW } from '../workflow';
 import { FisaResultsTab } from './FisaResultsTab';
 import { ResultsBatchWorkspace } from './ResultsBatchWorkspace';
 import type { ResultsBatch } from '../types';
@@ -35,7 +36,8 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
       <Table>
         <TableHeader>
           <TableRow>
-            {['Qualification', 'QP', 'Sitting Date', 'Competency Rate', 'Status', 'Submission'].map((h) => (
+            {/* QCTO feedback 29.31/29.32: EISA date, and the rate (competent ÷ wrote) with absenteeism. */}
+            {['Qualification', 'QP', 'EISA Date', 'Competency Rate', 'Absent', 'Status', 'Submission'].map((h) => (
               <TableHead key={h} className="whitespace-nowrap">
                 {h}
               </TableHead>
@@ -43,20 +45,24 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
           </TableRow>
         </TableHeader>
         <TableBody>
-          {batches.map((b) => (
-            <TableRow key={b.id} className="cursor-pointer hover:bg-gray-50" onClick={() => onSelect(b.id)}>
-              <TableCell className="max-w-[200px] truncate">{b.qualificationTitle}</TableCell>
-              <TableCell className="max-w-[160px] truncate">{b.qpName}</TableCell>
-              <TableCell className="whitespace-nowrap">{b.sittingDate}</TableCell>
-              <TableCell>{competencyRatePercent(b)}%</TableCell>
-              <TableCell>
-                <ResultsBatchStatusBadge batch={b} />
-              </TableCell>
-              <TableCell>
-                <DeadlineBadge deadline={b.submissionDeadline} submittedAt={b.submittedAt} />
-              </TableCell>
-            </TableRow>
-          ))}
+          {batches.map((b) => {
+            const figures = batchFiguresOf(b);
+            return (
+              <TableRow key={b.id} className="cursor-pointer hover:bg-gray-50" onClick={() => onSelect(b.id)}>
+                <TableCell className="max-w-[200px] truncate">{b.qualificationTitle}</TableCell>
+                <TableCell className="max-w-[160px] truncate">{b.qpName}</TableCell>
+                <TableCell className="whitespace-nowrap">{b.sittingDate}</TableCell>
+                <TableCell className="whitespace-nowrap">{competenceRateText(figures)}</TableCell>
+                <TableCell className="whitespace-nowrap">{absenteeismText(figures)}</TableCell>
+                <TableCell>
+                  <ResultsBatchStatusBadge batch={b} />
+                </TableCell>
+                <TableCell>
+                  <DeadlineBadge deadline={b.submissionDeadline} submittedAt={b.submittedAt} />
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

@@ -6,7 +6,8 @@
 //   instrumentValidation.ts  4 EISA Instrument Validations (phase C1)
 //   eisaRegistration.ts      20 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
 //   eisaConfirmation.ts      12 EISA Confirmations — 1 ready to confirm, 11 confirmed (phase C2)
-//   approvalOfResults.ts     10 results batches at every stage, 1 sitting awaiting submission (phase C2)
+//   approvalOfResults.ts     10 results batches at every stage, 1 sitting awaiting submission (phase C2);
+//                            marks per component from the approved QASAs, some learners absent (Batch L1)
 //   fisaResults.ts           4 FISA results batches: awaiting submission, with the ASD, with the DD,
 //                            approved with the letter sent (QCTO feedback 3.14)
 //   siteVisits.ts            16 site visits — every type, every planning and report stage (phase C3, Batch G)
@@ -18,7 +19,7 @@
 // Order matters: the calendar reads the approved QASAs' sittings per year; Instrument
 // Validation needs approved QASAs and the published sittings; Registration needs published
 // sittings; Confirmation needs Registered registrations; Approval of Results needs Confirmed
-// confirmations; Site Visits needs the sittings, the RPL/ARPL monitoring items from
+// confirmations and the approved QASAs' components; Site Visits needs the sittings, the RPL/ARPL monitoring items from
 // Registration and the low-competency results batch (it sets that batch's pemVisitId).
 import { KEY as RESULTS_KEY } from '../../../modules/approval-of-results/api';
 import { FISA_RESULTS_KEY } from '../../../modules/approval-of-results/fisaApi';
@@ -54,7 +55,7 @@ export function seedDemoData(): void {
   const validations = seedInstrumentValidations(log, qasa, calendar.sittings);
   const { registrations, monitoringItems } = seedEisaRegistrations(log, calendar.sittings);
   const confirmations = seedEisaConfirmations(log, calendar.sittings, registrations);
-  const siteVisits = seedSiteVisits(log, calendar.sittings, registrations, monitoringItems, seedResultsBatches(log, confirmations));
+  const siteVisits = seedSiteVisits(log, calendar.sittings, registrations, monitoringItems, seedResultsBatches(log, confirmations, qasa));
   const fisaValidations = seedFisaValidations(log);
   const fisaResults = seedFisaResultsBatches(log);
   const rplToolkits = seedRplToolkits(log);

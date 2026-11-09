@@ -10,9 +10,12 @@ import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
 import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
+import { listApplications } from '../qsa-addendum/api';
+import { NO_COMPONENTS_MESSAGE, snapshotResultsComponents } from './componentSnapshot';
 import { RESULTS_AD_ROLE } from './config';
+import { markEntryIssues } from './markEntry';
 import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
-import type { EvidenceDocument, LearnerResult, NewResultsBatchInput, ResultsBatch } from './types';
+import type { EvidenceDocument, NewResultsBatchInput, ResultsBatch, ResultsComponent } from './types';
 
 export const KEY = 'approvalOfResults:batches';
 
@@ -34,46 +37,22 @@ function replace(batches: ResultsBatch[], updated: ResultsBatch): ResultsBatch[]
   return batches.map((b) => (b.id === updated.id ? updated : b));
 }
 
-// Row 40: older seed/demo data (and anything saved before this fix) only ever carried a single
-// hand-typed `competentCount`/`learnerCount`, with no per-learner breakdown. Migrated the same
-// way Fix 1B-i/Fix 2C migrate old localStorage shapes — on read, not destructively — so old
-// data keeps working instead of crashing the per-learner UI. The roster comes from the
-// sitting's EISA Confirmation record where it still exists; the first `competentCount` learners
-// (in that roster's order) are read as Competent so the competency rate is unchanged by the
-// migration itself.
-function needsLegacyMigration(batch: ResultsBatch): boolean {
-  return !Array.isArray(batch.learnerResults);
-}
-
-async function migrateLegacyBatches(batches: ResultsBatch[]): Promise<ResultsBatch[]> {
-  if (!batches.some(needsLegacyMigration)) return batches;
-  const confirmations = await listConfirmationRecords();
-  const migrated = batches.map((batch) => {
-    if (!needsLegacyMigration(batch)) return batch;
-    const legacyCompetentCount = (batch as unknown as { competentCount?: number }).competentCount ?? 0;
-    const outcomeFor = (index: number): LearnerResult['outcome'] => (index < legacyCompetentCount ? 'competent' : 'not-yet-competent');
-    const roster = confirmations.find((c) => c.sittingId === batch.sittingId)?.learners ?? [];
-    const learnerResults: LearnerResult[] =
-      roster.length > 0
-        ? roster.map((learner, index) => ({ learnerId: learner.learnerId, fullName: learner.fullName, outcome: outcomeFor(index) }))
-        : Array.from({ length: batch.learnerCount }, (_, index) => ({
-            learnerId: `legacy-${batch.id}-${index}`,
-            fullName: `Learner ${index + 1}`,
-            outcome: outcomeFor(index),
-          }));
-    return { ...batch, learnerResults, learnerCount: learnerResults.length };
-  });
-  saveAll(migrated);
-  return migrated;
-}
-
+// QCTO feedback 29.31: batches stored before results were per component are cleared by the
+// SEED_VERSION bump to 'A12' (mock/api/storage.ts), so no shape migration is needed here.
 export async function listBatches(): Promise<ResultsBatch[]> {
-  return migrateLegacyBatches(loadAll());
+  return loadAll();
 }
 
 export async function getBatch(id: string): Promise<ResultsBatch | undefined> {
-  const all = await migrateLegacyBatches(loadAll());
-  return all.find((b) => b.id === id);
+  return loadAll().find((b) => b.id === id);
+}
+
+// QCTO feedback 29.31: the components a new batch for this sitting would get, so the QP's
+// submit dialog can ask for a mark per component (empty = blocked, NO_COMPONENTS_MESSAGE).
+export async function listComponentsForSitting(sittingId: string): Promise<ResultsComponent[]> {
+  const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
+  if (!confirmation) return [];
+  return snapshotResultsComponents(await listApplications(), confirmation);
 }
 
 // CR-059: only sittings with a fully CONFIRMED EISA Confirmation, and without an existing
@@ -98,12 +77,18 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   if (confirmation.workflow.stageId !== 'confirmed') {
     throw new Error('The sitting must be fully confirmed before results can be submitted.');
   }
+  // QCTO feedback 29.31: the components are snapshotted from the approved QASA now; without
+  // them there is nothing to mark against, so the batch is blocked.
+  const components = snapshotResultsComponents(await listApplications(), confirmation);
+  if (components.length === 0) throw new Error(NO_COMPONENTS_MESSAGE);
   // Row 40: a result per learner, not a hand-typed count — every learner on the sitting's
-  // confirmed registration needs a result before the batch can be submitted at all.
+  // confirmed registration needs a mark per component (or Absent) before the batch is submitted.
   const rosterIds = new Set(confirmation.learners.map((l) => l.learnerId));
   if (input.learnerResults.length !== confirmation.learners.length || input.learnerResults.some((r) => !rosterIds.has(r.learnerId))) {
-    throw new Error('Every registered learner needs a result (Competent or Not yet competent) before the batch can be submitted.');
+    throw new Error('Every registered learner needs marks (or Absent) before the batch can be submitted.');
   }
+  const markIssues = markEntryIssues(components, input.learnerResults);
+  if (markIssues.length > 0) throw new Error(markIssues[0].message);
 
   const batch: ResultsBatch = {
     id: crypto.randomUUID(),
@@ -113,7 +98,8 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     qpId: confirmation.qpId,
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
-    learnerResults: input.learnerResults,
+    components,
+    learnerResults: input.learnerResults.map((r) => (r.absent ? { ...r, marks: {} } : r)),
     evidenceDocuments: input.evidenceDocuments,
     complianceReviewNotes: '',
     evidenceEvaluationNotes: '',
@@ -132,7 +118,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   addNotification({
     recipientRole: RESULTS_AD_ROLE,
     title: 'Results batch submitted',
-    body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (${confirmation.sittingDate}).`,
+    body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (EISA date ${confirmation.sittingDate}).`,
   });
 
   return batch;
@@ -264,7 +250,7 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     addNotification({
       recipientRole: nextApprover,
       title: 'Results batch awaiting your review',
-      body: `"${batch.qualificationTitle}" (${batch.sittingDate}) is awaiting your review.`,
+      body: `"${batch.qualificationTitle}" (EISA date ${batch.sittingDate}) is awaiting your review.`,
     });
   }
 
@@ -354,7 +340,7 @@ async function ensurePemVisitForBatch(batchId: string, actor: PemActor, how: 'au
     addNotification({
       recipientRole: PLANNER_ROLE,
       title: 'Post-EISA Monitoring visit to be scheduled',
-      body: `"${batch.qualificationTitle}" (${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
+      body: `"${batch.qualificationTitle}" (EISA date ${batch.sittingDate}) had a ${rate}% competency rate. Pick a date for the Post-EISA Monitoring visit in Site Visits & Monitoring.`,
     });
   }
 

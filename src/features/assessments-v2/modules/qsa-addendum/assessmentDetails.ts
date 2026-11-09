@@ -28,7 +28,8 @@ export interface AssessmentDetailsInput {
   components: AssessmentComponent[];
 }
 
-// The list is optional: an empty list is valid. Once any component is listed, every component needs its fields and the weightings must add up to 100%.
+// The list is optional: an empty list is valid. Once any component is listed, every component
+// needs its fields (05.3: including total marks and pass mark) and the weightings must add up to 100%.
 export function validateAssessmentDetails(input: AssessmentDetailsInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   input.components.forEach((c, i) => {
@@ -39,6 +40,16 @@ export function validateAssessmentDetails(input: AssessmentDetailsInput): Valida
     }
     if (!Number.isInteger(c.days) || c.days < 1) {
       issues.push({ field: `components.${i}.days`, message: `Component ${n}: the number of days must be a whole number of at least 1.` });
+    }
+    // QCTO feedback 05.3: total marks and pass mark are required on every listed component.
+    const totalOk = Number.isInteger(c.totalMarks) && c.totalMarks >= 1;
+    if (!totalOk) {
+      issues.push({ field: `components.${i}.totalMarks`, message: `Component ${n}: the total marks must be a whole number of at least 1.` });
+    }
+    if (!Number.isInteger(c.passMark) || c.passMark < 1) {
+      issues.push({ field: `components.${i}.passMark`, message: `Component ${n}: the pass mark must be a whole number of at least 1.` });
+    } else if (totalOk && c.passMark > c.totalMarks) {
+      issues.push({ field: `components.${i}.passMark`, message: `Component ${n}: the pass mark (${c.passMark}) cannot be more than the total marks (${c.totalMarks}).` });
     }
   });
   if (input.components.length > 0) {
@@ -58,6 +69,13 @@ export function buildCertificationHandoff(app: QsaAddendumApplication, notifiedA
     approvedEisaSittingsPerYear: app.evaluationReport.approvedEisaSittingsPerYear,
     eisaSittingsOnDemand: app.evaluationReport.eisaSittingsOnDemand ?? false,
   };
+}
+
+// QCTO feedback 29.31: the components Approval of Results snapshots onto a results batch — the
+// ones Certification was notified of at approval, so a running review (05.2) changes nothing
+// until it is approved.
+export function approvedComponentsOf(app: QsaAddendumApplication): AssessmentComponent[] {
+  return app.certificationHandoff?.components ?? componentsOf(app);
 }
 
 // The sittings other modules (the EISA Calendar) must use: the ones Certification was notified

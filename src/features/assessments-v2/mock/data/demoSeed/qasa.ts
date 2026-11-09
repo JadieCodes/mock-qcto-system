@@ -22,7 +22,9 @@
 // tabling) → the DD records the IAC outcome. The Director Office is Elsabe Steyn or Johannes Pretorius.
 //
 // QCTO feedback 3.3: the five IAC-approved QASAs (01–05) carry assessment components; Gas
-// Practitioner (04) sits on demand. When the CEO signs the feedback letter on an approved QASA
+// Practitioner (04) sits on demand. QCTO feedback 05.3: every component has total marks and a
+// pass mark; pass marks differ per qualification (Electrical 50/100, Welding 60/100 and 90/150,
+// Plumbing 60/100 and 160/200, Gas 80/100, Millwright 60/120 and 90/150). When the CEO signs the feedback letter on an approved QASA
 // (01–04), "Certification notified of the assessment details" is recorded.
 //
 // Batch K (QCTO 5 Nov review): every acknowledgement letter is issued on submission (05.5); no
@@ -81,8 +83,9 @@ interface SubmissionSpec {
   notRegisteredWithSaqa?: boolean;
 }
 
-// [name, type, weighting %, days]
-type ComponentSpec = [string, AssessmentComponentType, number, number];
+// [name, type, weighting %, days, total marks, pass mark] — QCTO feedback 05.3: the pass mark
+// differs per qualification.
+type ComponentSpec = [string, AssessmentComponentType, number, number, number, number];
 
 type ChecklistOverrides = Record<string, { answer: 'yes' | 'no'; comment: string }>;
 
@@ -279,13 +282,18 @@ function qasaBuilder(log: SeedLog, spec: SubmissionSpec): QasaBuilder {
     assessmentDetails(components, options) {
       const total = components.reduce((sum, [, , weighting]) => sum + weighting, 0);
       if (total !== 100) throw new Error(`Demo seed: "${app.qualificationTitle}" component weightings add up to ${total}%.`);
+      if (components.some(([, , , , totalMarks, passMark]) => passMark < 1 || passMark > totalMarks)) {
+        throw new Error(`Demo seed: "${app.qualificationTitle}" has a pass mark outside 1 to the total marks.`);
+      }
       builder.patch({
-        assessmentComponents: components.map(([name, type, weightingPercent, days], i) => ({
+        assessmentComponents: components.map(([name, type, weightingPercent, days, totalMarks, passMark], i) => ({
           id: seedId(QASA_ID_GROUP + 100, spec.n * 10 + i),
           name,
           type,
           weightingPercent,
           days,
+          totalMarks,
+          passMark,
         })),
       });
       if (options?.onDemand) {
@@ -324,14 +332,14 @@ export function seedQasaSubmissions(log: SeedLog): QsaAddendumApplication[] {
 
   const electrical = b({ n: 1, qpId: NOMVULA, qualificationTitle: 'Electrical Trades', saqaId: '91761', registeredYearsAgo: 6, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 160 })
     .toIacDecision(SIPHO, GRACE, ELSABE, 140, 133, 'All 44 lines met. The assessment model (written and practical) matches the external assessment specifications and the component weightings add up to 100%.', 3)
-    .assessmentDetails([['Knowledge assessment', 'written', 60, 1], ['Practical assessment', 'practical', 40, 1]])
+    .assessmentDetails([['Knowledge assessment', 'written', 60, 1, 100, 50], ['Practical assessment', 'practical', 40, 1, 100, 50]])
     .iacPresentation()
     .recordIacOutcome('eval-iac-approve', GRACE, 120)
     .signFeedbackLetter(ANGELA, 115);
 
   const welding = b({ n: 2, qpId: PRECIOUS, qualificationTitle: 'Welding', saqaId: '91845', registeredYearsAgo: 5, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 150 })
     .toIacDecision(THANDEKA, PETER, JOHANNES, 128, 121, 'Meets every requirement. Practical tasks are clearly mapped to the exit level outcomes and the marking guidelines are complete.', 2)
-    .assessmentDetails([['Knowledge assessment', 'written', 30, 1], ['Welding practical tasks', 'practical', 70, 2]])
+    .assessmentDetails([['Knowledge assessment', 'written', 30, 1, 100, 60], ['Welding practical tasks', 'practical', 70, 2, 150, 90]])
     .iacPresentation()
     .recordIacOutcome('eval-iac-approve', PETER, 108)
     .signFeedbackLetter(DAVID, 104);
@@ -340,7 +348,7 @@ export function seedQasaSubmissions(log: SeedLog): QsaAddendumApplication[] {
   // Instrument Validation and the EISA Calendar while it goes through the route again.
   const plumbing = b({ n: 3, qpId: JOHAN, qualificationTitle: 'Plumbing', saqaId: '91802', registeredYearsAgo: 6, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 130 })
     .toIacDecision(SIPHO, GRACE, JOHANNES, 105, 97, 'Meets every requirement. Security and distribution arrangements for the EISA are clearly described.', 2)
-    .assessmentDetails([['Knowledge assessment', 'written', 40, 1], ['Installation and repair practical', 'practical', 60, 2]])
+    .assessmentDetails([['Knowledge assessment', 'written', 40, 1, 100, 60], ['Installation and repair practical', 'practical', 60, 2, 200, 160]])
     .iacPresentation()
     .recordIacOutcome('eval-iac-approve', GRACE, 85)
     .signFeedbackLetter(ANGELA, 80)
@@ -352,7 +360,7 @@ export function seedQasaSubmissions(log: SeedLog): QsaAddendumApplication[] {
 
   const gas = b({ n: 4, qpId: JOHAN, qualificationTitle: 'Gas Practitioner', saqaId: '101941', registeredYearsAgo: 3, nqfLevel: 'Level 4', credits: '240', submittedDaysAgo: 110 })
     .toIacDecision(SIPHO, GRACE, ELSABE, 62, 50, 'Meets every requirement. The safety-critical practical tasks carry the required minimum weighting.', 2)
-    .assessmentDetails([['Knowledge assessment', 'written', 40, 1], ['Safety-critical practical tasks', 'practical', 60, 1]], { onDemand: true })
+    .assessmentDetails([['Knowledge assessment', 'written', 40, 1, 100, 80], ['Safety-critical practical tasks', 'practical', 60, 1, 100, 80]], { onDemand: true })
     .iacPresentation()
     .recordIacOutcome('eval-iac-approve', GRACE, 30)
     .signFeedbackLetter(DAVID, 24);
@@ -360,7 +368,7 @@ export function seedQasaSubmissions(log: SeedLog): QsaAddendumApplication[] {
   // Item 1.4: IAC has approved — the outcome (feedback) letter now waits for the CEO.
   const millwright = b({ n: 5, qpId: NOMVULA, qualificationTitle: 'Millwright', saqaId: '91890', registeredYearsAgo: 4, nqfLevel: 'Level 4', credits: '360', submittedDaysAgo: 75 })
     .toIacDecision(SIPHO, GRACE, ELSABE, 40, 30, 'Meets every requirement. Mechanical and electrical components are both covered in the practical EISA.', 2)
-    .assessmentDetails([['Knowledge assessment', 'written', 50, 1], ['Mechanical and electrical practical', 'practical', 50, 2]])
+    .assessmentDetails([['Knowledge assessment', 'written', 50, 1, 120, 60], ['Mechanical and electrical practical', 'practical', 50, 2, 150, 90]])
     .iacPresentation()
     .recordIacOutcome('eval-iac-approve', GRACE, 6);
 

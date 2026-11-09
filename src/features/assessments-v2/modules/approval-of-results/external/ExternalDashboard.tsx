@@ -12,11 +12,12 @@ import { FisaResultsView } from './FisaResultsView';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches, useSittingsAwaitingSubmission } from '../hooks';
-import { competencyRatePercent, submissionDeadlineFor } from '../workflow';
+import { absenteeismText, batchFiguresOf, competenceRateText } from '../calculation';
+import { submissionDeadlineFor } from '../workflow';
 import { ResultsBatchDetail } from './ResultsBatchDetail';
 import { SubmitResultsBatchDialog } from './SubmitResultsBatchDialog';
 
-// CR-059: the QP submits a results batch within 21 working days of the sitting — matched
+// CR-059: the QP submits a results batch within 21 working days of the EISA date (29.32) — matched
 // against the acting QP's identity.
 function QpResultsView() {
   const { person } = useV2Role();
@@ -38,7 +39,7 @@ function QpResultsView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Qualification', 'Sitting Date', 'Learners', 'Deadline', ''].map((h) => (
+                  {['Qualification', 'EISA Date', 'Learners', 'Deadline', ''].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -75,7 +76,7 @@ function QpResultsView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Qualification', 'Sitting Date', 'Competency Rate', 'Status', 'Submission'].map((h) => (
+                  {['Qualification', 'EISA Date', 'Competency Rate', 'Absent', 'Status', 'Submission'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -87,7 +88,8 @@ function QpResultsView() {
                   <TableRow key={b.id} className="cursor-pointer hover:bg-gray-50" onClick={() => setSelectedId(b.id)}>
                     <TableCell className="max-w-[200px] truncate">{b.qualificationTitle}</TableCell>
                     <TableCell className="whitespace-nowrap">{b.sittingDate}</TableCell>
-                    <TableCell>{competencyRatePercent(b)}%</TableCell>
+                    <TableCell className="whitespace-nowrap">{competenceRateText(batchFiguresOf(b))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{absenteeismText(batchFiguresOf(b))}</TableCell>
                     <TableCell>
                       <ResultsBatchStatusBadge batch={b} />
                     </TableCell>
@@ -125,7 +127,7 @@ function NotApplicableView() {
 }
 
 const HEADER_DESCRIPTION: Record<ResultsTrack, string> = {
-  eisa: 'Submit your exam results batch within 21 working days of the sitting.',
+  eisa: 'Submit your EISA results batch — a mark per component for every learner — within 21 working days of the EISA date.',
   fisa: 'Submit the results of the FISA assessments you conducted, for an approved skills programme.',
 };
 

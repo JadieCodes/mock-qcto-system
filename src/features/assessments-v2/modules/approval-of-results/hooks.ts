@@ -6,6 +6,7 @@ import {
   createPemVisitForBatch,
   getBatch,
   listBatches,
+  listComponentsForSitting,
   listMarkingModerationVisitsForSitting,
   listSittingsAwaitingSubmission,
   performResultsAction,
@@ -46,6 +47,15 @@ export function useResultsBatch(id: string | null) {
 
 export function useSittingsAwaitingSubmission() {
   return useQuery({ queryKey: AWAITING_KEY, queryFn: listSittingsAwaitingSubmission });
+}
+
+// QCTO feedback 29.31: the approved QASA's components a new batch for this sitting would get.
+export function useComponentsForSitting(sittingId: string | null) {
+  return useQuery({
+    queryKey: ['approval-of-results', 'components-for-sitting', sittingId ?? 'none'],
+    queryFn: () => listComponentsForSitting(sittingId as string),
+    enabled: !!sittingId,
+  });
 }
 
 export function useMarkingModerationStatus(sittingId: string | null) {

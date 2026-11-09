@@ -2,6 +2,7 @@ import { addWorkingDays, toIsoDate, workingDaysBetween } from '../../shared/date
 import type { ValidationIssue } from '../../shared/validation/types';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
+import { batchFiguresOf } from './calculation';
 import {
   FISA_RESULTS_SUBMITTER_ROLE,
   RESULTS_AD_ROLE,
@@ -113,16 +114,16 @@ export function resultsStatusTone(batch: ResultsStatusSource): ResultsStatusTone
 }
 
 // Row 40: the competent count is derived from the per-learner results, not stored as its own
-// hand-typed number.
+// hand-typed number. QCTO feedback 29.31: from the per-component marks (calculation.ts).
 export function competentCountOf(batch: ResultsBatch): number {
-  return batch.learnerResults.filter((r) => r.outcome === 'competent').length;
+  return batchFiguresOf(batch).competent;
 }
 
 // CR-059: the batch competency rate, shown to QCTO and checked against the Post-EISA
-// Monitoring threshold (QCTO feedback 2.8).
+// Monitoring threshold (QCTO feedback 2.8). QCTO feedback 29.31: competent ÷ wrote (absent
+// learners are left out), from calculation.ts.
 export function competencyRatePercent(batch: ResultsBatch): number {
-  if (batch.learnerCount === 0) return 0;
-  return Math.round((competentCountOf(batch) / batch.learnerCount) * 1000) / 10;
+  return batchFiguresOf(batch).competenceRatePercent;
 }
 
 // QCTO feedback 2.8: the one comparison against the threshold, used by the api, the screen and the seed.

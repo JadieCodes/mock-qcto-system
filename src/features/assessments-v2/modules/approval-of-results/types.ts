@@ -1,5 +1,6 @@
 import type { ChecklistSection } from '../../shared/checklist/types';
 import type { WorkflowRecordState } from '../../shared/workflow/types';
+import type { AssessmentComponentType } from '../qsa-addendum/types';
 
 export interface EvidenceDocument {
   fileName: string;
@@ -7,14 +8,38 @@ export interface EvidenceDocument {
   uploadedAt: string;
 }
 
-// Row 40 (H-05/H-11/H-12/G-24): one result per learner, not a single hand-typed count — the
-// batch competency rate is calculated from these, not entered directly.
+// Row 40 (H-05/H-11/H-12/G-24): one result per learner, not a single hand-typed count.
+// FISA results keep one outcome per learner (QCTO feedback 3.14); EISA results are per
+// component since 29.31 (EisaLearnerResult below).
 export type LearnerResultOutcome = 'competent' | 'not-yet-competent';
 
 export interface LearnerResult {
   learnerId: string;
   fullName: string;
   outcome: LearnerResultOutcome;
+}
+
+// QCTO feedback 29.31: a component of the EISA, snapshotted from the approved QASA when the
+// results batch is created, so later QASA changes do not move a batch's results.
+export interface ResultsComponent {
+  id: string;
+  name: string;
+  type: AssessmentComponentType;
+  weightingPercent: number;
+  totalMarks: number;
+  passMark: number;
+  // QCTO feedback 29.32: each component has its own EISA date (componentDates.ts).
+  eisaDate: string;
+}
+
+// QCTO feedback 29.31: a mark per component, or Absent. The result, the weighted score and the
+// batch figures are always calculated (calculation.ts), never stored.
+export interface EisaLearnerResult {
+  learnerId: string;
+  fullName: string;
+  absent: boolean;
+  // Component id -> mark. Empty when the learner was absent.
+  marks: Record<string, number>;
 }
 
 export interface ResultsDeclineEntry {
@@ -35,16 +60,19 @@ export interface CertificationRecommendation {
 export interface ResultsBatch {
   id: string;
   sittingId: string;
+  // QCTO feedback 29.32: shown as the "EISA date" (the date of the first component).
   sittingDate: string;
   qualificationTitle: string;
   qpId: string;
   qpName: string;
 
   learnerCount: number;
-  // Row 40: a result per learner, listing the learners from the sitting's EISA Confirmation
-  // registrations. The batch competency rate (workflow.ts's competencyRatePercent) is derived
-  // from these, not stored separately.
-  learnerResults: LearnerResult[];
+  // QCTO feedback 29.31: the approved QASA's components at the time the batch was created.
+  components: ResultsComponent[];
+  // Row 40 / 29.31: a result per learner on the sitting's EISA Confirmation, with a mark per
+  // component or Absent. The batch figures (calculation.ts batchFiguresOf) are derived from
+  // these, not stored separately.
+  learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
 
   // CR-059: the ASD's three-part review before the batch can advance.
@@ -69,7 +97,7 @@ export interface ResultsBatch {
 
 export interface NewResultsBatchInput {
   sittingId: string;
-  learnerResults: LearnerResult[];
+  learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
   submittedBy: string;
   submittedById: string;
