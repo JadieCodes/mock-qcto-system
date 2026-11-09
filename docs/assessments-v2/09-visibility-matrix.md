@@ -180,6 +180,17 @@ This replaces the QP acknowledgement default in the 2.12 section above (the QP n
 - **Visit Domain (2.5):** every visit carries a Domain (default Assessment). **No role's access changed** — Table B's Site Visits & Monitoring column stands as written. `[OPEN]` which roles outside Assessment may plan or run visits for the other domains.
 - **Section 2, Site Visit Report:** "QP sees it only once shared (`outcome-shared` stage)" now reads: the QP sees the visit type, date, outcome summary and report file, on Visit Outcomes, only while the visit is shared with them.
 
+### Batch V1 — remediation on Site Visits (change request doc v14, row 05.14; built 9 Nov 2026)
+
+Table A's Site Visits & Monitoring cell stays **None** for the QP and the SDP. The QP's only Site Visits action is on the **Visit Outcomes** page.
+
+- **QP, Visit Outcomes: See own, read only — plus respond to remediation on their own visit.** When the Deputy Director chooses **Approved with remediation** on a visit that names this QP (`qpId`), the visit appears on Visit Outcomes **without the share Yes/No** (the report and items are shared automatically, and the share cannot be switched off afterwards). The QP sees the status, the qualifications, the remediation items and the history of rounds, and while the status is "Approved with remediation — awaiting QP" can **upload evidence** (empty files refused), **add a response** (required) and click **Submit remediation**. The api checks that the actor is the QP named on the visit (`actorId === visit.qpId`); another QP and the ASD are refused. The QP still has no scheduling, no checklist, no audit trail and no acknowledgement. `[ASSUMPTION]` a response needs text; evidence is optional.
+- **Deputy Director:** chooses **Approved (final)** or **Approved with remediation** (items required) on a submitted report (self-approval check unchanged), then reviews a submitted remediation: **Approved (final)** or **Further remediation needed** (items required). Complete Visit only after Approved (final).
+- **ASD:** for a visit with **no QP** (RPL/ARPL at an SDP or assessment centre) the ASD **records the stakeholder's response and evidence on the visit** until a later batch gives SDPs their own view; the SDP role still has no Site Visits access (it only receives an in-app notification, as for Post-EISA Monitoring). For a visit with a QP the ASD cannot respond.
+- **SDP:** unchanged — None on Site Visits and on Visit Outcomes. `[OPEN]` the SDP's own remediation view is for a later batch.
+- **Notifications:** the QP when remediation is requested (each round); the ASD instead for a visit without a QP; the DD when remediation is submitted.
+- **Several qualifications (05.13):** Visit Outcomes also lists every qualification of the shared visit with its EISA date. No role's access changed.
+
 ### QCTO feedback 3.11 — "ASD" and "Assistant Director" are one role (answered 29 Oct 2026, built 4 Nov 2026)
 
 QCTO: "ASD" and "Assistant Director" are the same role, and the DD allocates work to the ASDs. This replaces the separate ASD and Assistant Director rows in Table B (see the merged ASD row) and the Assistant Director entries in Sections 2 and 3.

@@ -17,6 +17,8 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
+import { QualificationList } from '../components/QualificationList';
+import { RemediationHistory, RemediationResponseForm } from '../components/RemediationSection';
 import { hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE } from '../evidence';
 import { getScriptVerificationIssues } from '../scriptVerification';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
@@ -27,12 +29,26 @@ import {
   PLAN_RECOMMENDER_ROLE,
   PLANNER_ROLE,
   REPORT_APPROVER_ROLE,
+  APPROVED_FINAL_LABEL,
+  APPROVED_WITH_REMEDIATION_LABEL,
   COMPLETE_VISIT_LABEL,
+  FURTHER_REMEDIATION_LABEL,
   REPORT_SUBMITTER_ROLE,
   STAKEHOLDER_SHARE_ROLE,
 } from '../config';
 import { usePlanningAction, useReportAction, useSetStakeholderShare, useSiteVisit, useUpdateVisitDetails } from '../hooks';
-import { isSharedWithStakeholder, SHARE_WITH_STAKEHOLDER_LABEL, visitCanBeShared } from '../stakeholderShare';
+import {
+  COMPLETE_VISIT_BLOCKED_MESSAGE,
+  isRemediationStage,
+  remediationRecordedByAsd,
+  remediationRoundsOf,
+  remediationStakeholderName,
+  REMEDIATION_AWAITING_STAGE,
+  REMEDIATION_REVIEW_STAGE,
+  visitCanHaveRemediation,
+} from '../remediation';
+import { isSharedWithStakeholder, SHARE_WITH_STAKEHOLDER_LABEL, shareIsLockedByRemediation, visitCanBeShared } from '../stakeholderShare';
+import { isMultiQualificationVisit } from '../visitQualifications';
 import { PLAN_SEND_BACK_TO_PLANNER_LABEL, PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
 import {
@@ -49,7 +65,7 @@ import {
 import type { SiteVisit, VisitDomain } from '../types';
 import type { Role } from '../../../types';
 
-type ReportDialogAction = 'report-send-back' | 'report-reject' | null;
+type ReportDialogAction = 'report-send-back' | 'report-reject' | 'report-approve-remediation' | 'remediation-further' | null;
 
 // CR-055: re-route to a named colleague holding the same role — a separate dialog from the
 // plain-reason ReasonDialog (also used by send-back/reject) since this one also needs a
@@ -180,7 +196,7 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
             <p className="text-sm font-medium pt-2">{visitSiteName(visit) || '—'}</p>
           </div>
         )}
-        {isPerQualificationVisit(visit.visitType) && (
+        {isPerQualificationVisit(visit.visitType) && !isMultiQualificationVisit(visit.visitType) && (
           <div className="space-y-1">
             <Label className="text-xs text-gray-400 uppercase">Qualification</Label>
             <Input
@@ -221,6 +237,7 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
           </p>
         </div>
       </div>
+      <QualificationList visit={visit} />
       {visitHasPurpose(visit.visitType) && (
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Purpose</Label>
@@ -278,6 +295,9 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
         <p className="font-semibold">Automatically created — planning chain skipped</p>
         <p className="mt-1">{visit.planNote}</p>
+        <div className="mt-3 text-gray-900">
+          <QualificationList visit={visit} />
+        </div>
       </div>
     );
   }
@@ -325,6 +345,8 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
         <span className="text-xs text-gray-500">Planning status</span>
         <span className="text-sm font-medium">{stage}</span>
       </div>
+
+      <QualificationList visit={visit} />
 
       <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase">ASD planning</p>
@@ -454,7 +476,8 @@ function StakeholderShareCard({ visit }: { visit: SiteVisit }) {
   const setShare = useSetStakeholderShare();
   const [summaryOpen, setSummaryOpen] = useState(false);
   const shared = isSharedWithStakeholder(visit);
-  const canDecide = role === STAKEHOLDER_SHARE_ROLE;
+  const locked = shareIsLockedByRemediation(visit);
+  const canDecide = role === STAKEHOLDER_SHARE_ROLE && !locked;
   const change = visit.stakeholderShare;
   const actor = { visitId: visit.id, actorRole: role, actorId: person.id, actorName: person.name };
 
@@ -483,6 +506,11 @@ function StakeholderShareCard({ visit }: { visit: SiteVisit }) {
         </RadioGroup>
       ) : (
         <p className="text-sm text-gray-700">{shared ? `Shared with ${visit.qpName}.` : 'Not shared.'}</p>
+      )}
+      {locked && (
+        <p className="text-xs text-amber-700">
+          Shared automatically because remediation was requested. The report and the remediation items stay shared with {visit.qpName}.
+        </p>
       )}
       {change && (
         <p className="text-xs text-gray-500">
@@ -524,6 +552,10 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
   const stage = visit.reportWorkflow.stageId;
   const canExecute = role === REPORT_SUBMITTER_ROLE && stage === 'awaiting-execution';
   const canReview = role === REPORT_APPROVER_ROLE && stage === 'dd-report-review';
+  // Batch V1 (05.14): the DD's review of a submitted remediation.
+  const canReviewRemediation = role === REPORT_APPROVER_ROLE && stage === REMEDIATION_REVIEW_STAGE;
+  const canRecordResponse = role === REPORT_SUBMITTER_ROLE && stage === REMEDIATION_AWAITING_STAGE && remediationRecordedByAsd(visit);
+  const rounds = remediationRoundsOf(visit);
   // Item 2 (module audit): the Submit button had no completeness gate at all, letting the ASD
   // submit a report with a blank checklist (CR-011).
   const checklistComplete = isChecklistComplete(visit.checklist, true);
@@ -539,9 +571,25 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       ]
     : [];
 
-  const dialogCopy: Record<Exclude<ReportDialogAction, null>, { title: string; confirmLabel: string; destructive?: boolean; actionId: string }> = {
+  const dialogCopy: Record<Exclude<ReportDialogAction, null>, { title: string; confirmLabel: string; destructive?: boolean; actionId: string; description?: string; fieldLabel?: string; placeholder?: string }> = {
     'report-send-back': { title: 'Send back for clarification', confirmLabel: 'Send back', actionId: 'report-send-back' },
     'report-reject': { title: 'Reject report', confirmLabel: 'Reject', destructive: true, actionId: 'report-reject' },
+    'report-approve-remediation': {
+      title: APPROVED_WITH_REMEDIATION_LABEL,
+      confirmLabel: APPROVED_WITH_REMEDIATION_LABEL,
+      actionId: 'report-approve-remediation',
+      description: `The report and these items are shared with ${remediationStakeholderName(visit)} automatically, whatever the share choice says.`,
+      fieldLabel: 'Remediation items *',
+      placeholder: 'List what must be fixed...',
+    },
+    'remediation-further': {
+      title: FURTHER_REMEDIATION_LABEL,
+      confirmLabel: FURTHER_REMEDIATION_LABEL,
+      actionId: 'remediation-further',
+      description: 'Another round: the stakeholder is asked to address these items.',
+      fieldLabel: 'Remediation items *',
+      placeholder: 'List what is still outstanding...',
+    },
   };
 
   return (
@@ -579,8 +627,14 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
             onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'report-approve', actorRole: role, actorId, actorName })}
           >
             <CheckCircle2 className="h-4 w-4" />
-            Approve Report
+            {APPROVED_FINAL_LABEL}
           </Button>
+          {visitCanHaveRemediation(visit) && (
+            <Button size="sm" variant="outline" className="gap-2" disabled={reportAction.isPending} onClick={() => setDialogAction('report-approve-remediation')}>
+              <CheckCircle2 className="h-4 w-4" />
+              {APPROVED_WITH_REMEDIATION_LABEL}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => setDialogAction('report-send-back')}>
             Send back for clarification
           </Button>
@@ -594,6 +648,32 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
           </Button>
         </div>
       )}
+
+      <RemediationHistory rounds={rounds} />
+
+      {canRecordResponse && <RemediationResponseForm visit={visit} />}
+      {isRemediationStage(stage) && !canRecordResponse && stage === REMEDIATION_AWAITING_STAGE && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Waiting for {remediationRecordedByAsd(visit) ? `the ASD to record the response of ${remediationStakeholderName(visit)}` : `${visit.qpName} to respond`}.
+        </div>
+      )}
+      {canReviewRemediation && (
+        <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
+          <Button
+            size="sm"
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+            disabled={reportAction.isPending}
+            onClick={() => reportAction.mutate({ visitId: visit.id, actionId: 'remediation-approve-final', actorRole: role, actorId, actorName })}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {APPROVED_FINAL_LABEL}
+          </Button>
+          <Button size="sm" variant="outline" disabled={reportAction.isPending} onClick={() => setDialogAction('remediation-further')}>
+            {FURTHER_REMEDIATION_LABEL}
+          </Button>
+        </div>
+      )}
+      {isRemediationStage(stage) && role === REPORT_APPROVER_ROLE && <p className="text-xs text-gray-500">{COMPLETE_VISIT_BLOCKED_MESSAGE}</p>}
 
       {visitCanBeShared(visit) && <StakeholderShareCard visit={visit} />}
 
@@ -611,7 +691,7 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       {(stage === 'approved' || stage === 'outcome-shared' || stage === 'closed') && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
           {/* 'outcome-shared' only remains on visits stored before Batch A3. */}
-          Report approved{stage === 'approved' ? '' : ' — visit completed'}.
+          {APPROVED_FINAL_LABEL}{stage === 'approved' ? '' : ' — visit completed'}.
         </div>
       )}
 
@@ -620,10 +700,13 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
           open={!!dialogAction}
           onOpenChange={(open) => !open && setDialogAction(null)}
           title={dialogCopy[dialogAction].title}
+          description={dialogCopy[dialogAction].description}
+          fieldLabel={dialogCopy[dialogAction].fieldLabel}
+          placeholder={dialogCopy[dialogAction].placeholder}
           confirmLabel={dialogCopy[dialogAction].confirmLabel}
           destructive={dialogCopy[dialogAction].destructive}
           onConfirm={(note) => {
-            reportAction.mutate({ visitId: visit.id, actionId: dialogCopy[dialogAction].actionId as 'report-send-back' | 'report-reject', actorRole: role, actorId, actorName, note });
+            reportAction.mutate({ visitId: visit.id, actionId: dialogAction, actorRole: role, actorId, actorName, note });
             setDialogAction(null);
           }}
         />

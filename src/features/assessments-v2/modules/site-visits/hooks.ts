@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChecklistSection } from '../../shared/checklist/types';
 import {
+  addRemediationEvidence,
   createVisit,
   getVisit,
   listSchedulableSittings,
@@ -81,7 +82,16 @@ export function usePlanningAction() {
 }
 
 export function useReportAction() {
-  return useSiteVisitMutation(performReportAction);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: performReportAction,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(detailKey(updated.id), updated);
+      queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      queryClient.invalidateQueries({ queryKey: ['site-visits', 'shared-outcomes'] });
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
 }
 
 export function useSaveChecklist() {
@@ -130,4 +140,18 @@ export function useSharedVisitOutcomes(qpId: string | undefined) {
 
 export function useSetResultsApprovedForSitting() {
   return useSiteVisitMutation((args: { id: string; approved: boolean }) => setResultsApprovedForSitting(args.id, args.approved));
+}
+
+// Batch V1 (05.14): refreshes the QP's Visit Outcomes list too, since that is where they respond.
+export function useAddRemediationEvidence() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: Parameters<typeof addRemediationEvidence>) => addRemediationEvidence(...args),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(detailKey(updated.id), updated);
+      queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      queryClient.invalidateQueries({ queryKey: ['site-visits', 'shared-outcomes'] });
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
 }

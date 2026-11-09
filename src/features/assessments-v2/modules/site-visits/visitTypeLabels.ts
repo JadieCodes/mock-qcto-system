@@ -1,4 +1,5 @@
 import type { SiteVisit, VisitType } from './types';
+import { qualificationsSummary } from './visitQualifications';
 
 // PM-04/CR-048: labels for the four visit types this hub schedules. "EISA Readiness" and
 // "Marking & Moderation" still need their official notification names agreed with QCTO
@@ -76,8 +77,9 @@ export function visitPartyName(visit: SiteVisit): string {
   return (visitHasQp(visit.visitType) ? visit.qpName : visitSiteName(visit)) || '—';
 }
 
+// Batch V1 (05.13): the first qualification, then "and N more".
 export function qualificationDisplay(visit: SiteVisit): string {
-  return visit.qualificationTitle || '—';
+  return qualificationsSummary(visit);
 }
 
 // Used in titles and notification text: a readiness visit has no qualification, so it is
@@ -86,7 +88,8 @@ export function visitSubject(visit: SiteVisit): string {
   if (visitIsMeeting(visit.visitType)) return visit.meetingTitle?.trim() || VISIT_TYPE_LABELS[visit.visitType];
   if (!visitHasQp(visit.visitType)) {
     const site = visitSiteName(visit);
-    return site ? `${visit.qualificationTitle} at ${site}` : visit.qualificationTitle;
+    const qualifications = visit.qualificationTitle ? qualificationsSummary(visit) : '';
+    return site && qualifications ? `${qualifications} at ${site}` : qualifications || site;
   }
-  return visit.qualificationTitle || visit.qpName;
+  return visit.qualificationTitle ? qualificationsSummary(visit) : visit.qpName;
 }

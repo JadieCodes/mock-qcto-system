@@ -13,6 +13,7 @@ import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
 import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
+import { visitSittingIdsOf } from '../site-visits/visitQualifications';
 import { listApplications } from '../qsa-addendum/api';
 import { resultsRulesIssue, snapshotResultsRules, type ResultsRules } from './componentSnapshot';
 import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from './config';
@@ -377,7 +378,8 @@ export async function performResultsAction(params: ResultsActionParams): Promise
 // review screen.
 export async function listMarkingModerationVisitsForSitting(sittingId: string): Promise<SiteVisit[]> {
   const visits = await listVisits();
-  return visits.filter((v) => v.visitType === 'marking-moderation' && v.sittingId === sittingId);
+  // Batch V1 (05.13): a Marking & Moderation visit can cover several sittings.
+  return visits.filter((v) => v.visitType === 'marking-moderation' && visitSittingIdsOf(v).includes(sittingId));
 }
 
 interface PemActor {

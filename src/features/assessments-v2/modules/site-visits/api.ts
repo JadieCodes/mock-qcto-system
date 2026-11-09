@@ -1,4 +1,5 @@
 import { LABELS } from '../../config/labels';
+import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { addNotification } from '../../shared/notifications/store';
@@ -12,6 +13,7 @@ import { buildMarkingGuidelineDiscussionSections, buildMarkingModerationVisitSec
 import { buildRplArplMonitoringVisitSections } from '../../mock/data/rplArplVisitSections';
 import type { Role } from '../../types';
 import { listPublishedSittings } from '../eisa-calendar/api';
+import { qualificationIdOf } from '../eisa-calendar/sittingDetails';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api';
 import {
@@ -26,10 +28,23 @@ import {
   STAKEHOLDER_SHARE_ROLE,
 } from './config';
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory, type VisitEvidenceFile } from './evidence';
+import { bookedVisitNotificationBody, remediationRequestedNotification, remediationSubmittedNotification } from './notificationText';
+import {
+  COMPLETE_VISIT_BLOCKED_MESSAGE,
+  MISSING_REMEDIATION_ITEMS_MESSAGE,
+  MISSING_REMEDIATION_RESPONSE_MESSAGE,
+  openRemediationRound,
+  remediationRecordedByAsd,
+  remediationRoundsOf,
+  remediationStakeholderName,
+  REMEDIATION_AWAITING_STAGE,
+  visitCanHaveRemediation,
+} from './remediation';
 import { getScriptVerificationIssues } from './scriptVerification';
-import { isSharedWithStakeholder, visitCanBeShared } from './stakeholderShare';
-import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from './workflow';
-import type { NewVisitInput, ScriptVerification, SiteVisit, VisitType } from './types';
+import { isSharedWithStakeholder, shareIsLockedByRemediation, visitCanBeShared } from './stakeholderShare';
+import { PLANNING_WORKFLOW, REPORT_WORKFLOW, overallStatusLabel } from './workflow';
+import type { NewVisitInput, RemediationRound, ScriptVerification, SiteVisit, VisitQualification, VisitType } from './types';
+import { isMultiQualificationVisit, qualificationEntriesHaveSitting, qualificationListIssues, saqaIdForQualification, visitQualificationsOf } from './visitQualifications';
 import { DEFAULT_VISIT_DOMAIN } from './visitDomains';
 import { visitHasPurpose, visitHasQp, visitHasSdp, visitHasSiteSelection, visitHasSittingLink, visitIsMeeting, visitSubject } from './visitTypeLabels';
 
@@ -99,6 +114,7 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
     qpId: '',
     qpName: '',
     qualificationTitle: item.qualificationTitle,
+    qualifications: [{ id: crypto.randomUUID(), qualificationTitle: item.qualificationTitle, saqaId: saqaIdForQualification(item.qualificationTitle), sittingId: null, eisaDate: '' }],
     sdpId: item.sdpId,
     sdpName: item.sdpName,
     assessmentCentreName: null,
@@ -168,6 +184,26 @@ export async function listSdpsForSitting(sittingId: string): Promise<{ sdpId: st
   return [...seen.entries()].map(([sdpId, sdpName]) => ({ sdpId, sdpName }));
 }
 
+// Batch V1 (05.13): the checks every new Marking & Moderation / RPL/ARPL list goes through. A
+// Marking & Moderation entry takes its title, SAQA ID and EISA date from its published sitting, so
+// they cannot disagree with the Calendar.
+async function resolveQualifications(visitType: VisitType, entries: VisitQualification[]): Promise<VisitQualification[]> {
+  const issue = qualificationListIssues(visitType, entries)[0];
+  if (issue) throw new Error(issue);
+  const sittings = qualificationEntriesHaveSitting(visitType) ? await listPublishedSittings() : [];
+  const resolved = entries.map((entry): VisitQualification => {
+    if (!qualificationEntriesHaveSitting(visitType)) {
+      return { id: entry.id || crypto.randomUUID(), qualificationTitle: entry.qualificationTitle.trim(), saqaId: entry.saqaId || saqaIdForQualification(entry.qualificationTitle), sittingId: null, eisaDate: '' };
+    }
+    const sitting = sittings.find((s) => s.id === entry.sittingId);
+    if (!sitting) throw new Error(`"${entry.qualificationTitle}" needs a published EISA sitting.`);
+    return { id: entry.id || crypto.randomUUID(), qualificationTitle: sitting.qualificationTitle, saqaId: qualificationIdOf(sitting), sittingId: sitting.id, eisaDate: sitting.date };
+  });
+  const duplicate = qualificationListIssues(visitType, resolved)[0];
+  if (duplicate) throw new Error(duplicate);
+  return resolved;
+}
+
 export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assessmentCentreName'>): Promise<SiteVisit> {
   // QCTO feedback 2.7: an RPL/ARPL visit needs its SDP or assessment centre, and never has a
   // QP or a sitting link.
@@ -179,6 +215,8 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
   const isMeeting = visitIsMeeting(input.visitType);
   if (isMeeting && !input.meetingTitle?.trim()) throw new Error('Enter the title of the meeting.');
   if (visitHasPurpose(input.visitType) && !input.purpose?.trim()) throw new Error('Enter the purpose of the visit.');
+  // Batch V1 (05.13): Marking & Moderation and RPL/ARPL cover a list of qualifications.
+  const qualifications = isMultiQualificationVisit(input.visitType) ? await resolveQualifications(input.visitType, input.qualifications ?? []) : undefined;
   const visit: SiteVisit = {
     id: crypto.randomUUID(),
     visitType: input.visitType,
@@ -187,11 +225,12 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
     purpose: visitHasPurpose(input.visitType) ? input.purpose?.trim() : undefined,
     qpId: hasQp ? input.qpId : '',
     qpName: hasQp ? input.qpName : '',
-    qualificationTitle: input.qualificationTitle,
+    qualificationTitle: qualifications ? (qualifications[0]?.qualificationTitle ?? '') : input.qualificationTitle,
+    qualifications,
     sdpId: visitHasSdp(input.visitType) ? input.sdpId : null,
     sdpName: visitHasSdp(input.visitType) ? input.sdpName : null,
     assessmentCentreName: input.assessmentCentreName?.trim() || null,
-    sittingId: visitHasSittingLink(input.visitType) ? input.sittingId : null,
+    sittingId: qualifications ? (qualifications[0]?.sittingId ?? null) : visitHasSittingLink(input.visitType) ? input.sittingId : null,
     visitDate: input.visitDate,
     venue: input.venue,
     notificationFlag: input.notificationFlag,
@@ -303,7 +342,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
     addNotification({
       recipientRole: REPORT_SUBMITTER_ROLE,
       title: bookedVisitNotificationTitle(visit.visitType),
-      body: `"${visitSubject(visit)}" is booked for ${visit.visitDate}. The execution form is ready.`,
+      body: bookedVisitNotificationBody(visit),
     });
   }
 
@@ -322,18 +361,91 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
 
 interface ReportActionParams {
   visitId: string;
-  actionId: 'report-submit' | 'report-approve' | 'report-send-back' | 'report-reject' | 'report-reroute' | 'share-visit-outcome' | 'qp-acknowledge-outcome';
+  actionId:
+    | 'report-submit'
+    | 'report-approve'
+    | 'report-approve-remediation'
+    | 'remediation-submit'
+    | 'remediation-approve-final'
+    | 'remediation-further'
+    | 'report-send-back'
+    | 'report-reject'
+    | 'report-reroute'
+    | 'share-visit-outcome'
+    | 'qp-acknowledge-outcome';
   actorRole: Role;
   actorId: string;
   actorName: string;
+  // For report-approve-remediation and remediation-further this is the remediation items; for
+  // remediation-submit it is the response.
   note?: string;
   // CR-055: the named colleague (same role) a report is being re-routed to.
   targetPersonId?: string;
 }
 
+interface RemediationActor {
+  actorRole: Role;
+  actorId: string;
+  actorName: string;
+}
+
+// Batch V1 (05.14): the QP named on the visit answers the items; for a stakeholder without a QP
+// (RPL at an SDP or assessment centre) the ASD records the response until SDPs get their own view.
+function assertCanRespondToRemediation(visit: SiteVisit, actor: RemediationActor): void {
+  if (remediationRecordedByAsd(visit)) {
+    if (actor.actorRole !== REPORT_SUBMITTER_ROLE) throw new Error(`Only the ${REPORT_SUBMITTER_ROLE} records the response for this visit.`);
+    return;
+  }
+  if (actor.actorRole !== 'QP' || actor.actorId !== visit.qpId) throw new Error('Only the QP named on this visit can respond to the remediation.');
+}
+
+function newRemediationRound(visit: SiteVisit, items: string, actor: RemediationActor): RemediationRound {
+  return {
+    id: crypto.randomUUID(),
+    round: remediationRoundsOf(visit).length + 1,
+    items,
+    requestedBy: actor.actorName,
+    requestedById: actor.actorId,
+    requestedAt: new Date().toISOString(),
+    sharedWith: remediationStakeholderName(visit),
+    evidence: [],
+    response: '',
+    submittedBy: null,
+    submittedById: null,
+    submittedByRole: null,
+    submittedAt: null,
+    review: null,
+  };
+}
+
+// The QP is told when remediation is requested; for a stakeholder without a QP the ASD is told
+// instead, because the ASD records the response.
+function notifyRemediationRequested(visit: SiteVisit, round: RemediationRound): void {
+  const text = remediationRequestedNotification(visit, round.items, round.round);
+  if (remediationRecordedByAsd(visit)) {
+    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: `${text.title} — record the response`, body: `${text.body} Record the response of ${round.sharedWith} on the visit.` });
+    if (visit.sdpName) addNotification({ recipientRole: 'SDP', title: text.title, body: text.body });
+  } else {
+    addNotification({ recipientRole: 'QP', title: text.title, body: `${text.body} (${visit.qpName}). See Visit Outcomes.` });
+  }
+}
+
 export async function performReportAction(params: ReportActionParams): Promise<SiteVisit> {
   const all = loadAll();
   const visit = getOrThrow(all, params.visitId);
+  const items = params.note?.trim() ?? '';
+  const openRound = openRemediationRound(visit);
+
+  if (params.actionId === 'share-visit-outcome' && visit.reportWorkflow.stageId !== 'approved') throw new Error(COMPLETE_VISIT_BLOCKED_MESSAGE);
+  if (params.actionId === 'report-approve-remediation') {
+    if (!visitCanHaveRemediation(visit)) throw new Error('This visit has no QP, SDP or assessment centre to send remediation to. Use "Approved (final)".');
+    if (!items) throw new Error(MISSING_REMEDIATION_ITEMS_MESSAGE);
+  }
+  if (params.actionId === 'remediation-further' && !items) throw new Error(MISSING_REMEDIATION_ITEMS_MESSAGE);
+  if (params.actionId === 'remediation-submit') {
+    assertCanRespondToRemediation(visit, params);
+    if (!items) throw new Error(MISSING_REMEDIATION_RESPONSE_MESSAGE);
+  }
 
   if (params.actionId === 'report-submit') {
     if (!isChecklistComplete(visit.checklist, true)) {
@@ -408,8 +520,60 @@ export async function performReportAction(params: ReportActionParams): Promise<S
   // moves it straight on to 'closed', with its own audit entry. Whether the QP sees the report is
   // the separate per-visit choice in setStakeholderShare() below.
   const completed = params.actionId === 'share-visit-outcome';
-  const updated: SiteVisit = { ...visit, reportWorkflow: completed ? { ...nextWorkflow, stageId: 'closed' } : nextWorkflow };
+  let updated: SiteVisit = { ...visit, reportWorkflow: completed ? { ...nextWorkflow, stageId: 'closed' } : nextWorkflow };
+
+  // Batch V1 (05.14): keep the full history of rounds (items, response, evidence, who and when).
+  const now = new Date().toISOString();
+  const review = (decision: 'approved-final' | 'further-remediation') => ({ decision, reviewedBy: params.actorName, reviewedById: params.actorId, reviewedAt: now });
+  let newRound: RemediationRound | null = null;
+  if (params.actionId === 'report-approve-remediation' || params.actionId === 'remediation-further') {
+    const closed = remediationRoundsOf(visit).map((r) => (r.id === openRound?.id ? { ...r, review: review('further-remediation') } : r));
+    newRound = newRemediationRound(visit, items, params);
+    updated = { ...updated, remediationRounds: [...closed, newRound] };
+  }
+  if (params.actionId === 'remediation-submit' && openRound) {
+    updated = {
+      ...updated,
+      remediationRounds: remediationRoundsOf(visit).map((r) =>
+        r.id === openRound.id
+          ? { ...r, response: items, submittedBy: params.actorName, submittedById: params.actorId, submittedByRole: params.actorRole === 'QP' ? 'QP' : 'ASD', submittedAt: now }
+          : r,
+      ),
+    };
+  }
+  if (params.actionId === 'remediation-approve-final' && openRound) {
+    updated = { ...updated, remediationRounds: remediationRoundsOf(visit).map((r) => (r.id === openRound.id ? { ...r, review: review('approved-final') } : r)) };
+  }
+  // The report and the items go to the stakeholder automatically, whatever the share Yes/No says.
+  if (params.actionId === 'report-approve-remediation' && visitHasQp(visit.visitType) && !isSharedWithStakeholder(visit)) {
+    updated = {
+      ...updated,
+      stakeholderShare: {
+        shared: true,
+        outcomeSummary: visit.stakeholderShare?.outcomeSummary || 'Approved with remediation. The remediation items are listed with this report.',
+        changedAt: now,
+        changedBy: params.actorName,
+        changedById: params.actorId,
+      },
+    };
+  }
   saveAll(replace(all, updated));
+  if (newRound && params.actionId === 'report-approve-remediation') {
+    appendAuditEntry({
+      recordType: 'site-visit-report',
+      recordId: visit.id,
+      actorRole: params.actorRole,
+      actorId: params.actorId,
+      actorName: params.actorName,
+      action: `Report and remediation items shared with ${newRound.sharedWith}`,
+      note: newRound.items,
+    });
+  }
+  if (newRound) notifyRemediationRequested(updated, newRound);
+  if (params.actionId === 'remediation-submit') {
+    const text = remediationSubmittedNotification(visit);
+    addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: text.title, body: text.body });
+  }
 
   if (completed) {
     appendAuditEntry({
@@ -426,7 +590,10 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     addNotification({ recipientRole: REPORT_APPROVER_ROLE, title: 'Site visit report submitted', body: `"${visitSubject(visit)}" (${visit.visitType}) is awaiting your review.` });
   }
   if (params.actionId === 'report-approve') {
-    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved', body: `Your report for "${visitSubject(visit)}" was approved.` });
+    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved', body: `Your report for "${visitSubject(visit)}" was approved (final).` });
+  }
+  if (params.actionId === 'report-approve-remediation') {
+    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved with remediation', body: `Your report for "${visitSubject(visit)}" was approved with remediation.` });
   }
   if (params.actionId === 'report-send-back') {
     addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report sent back for clarification', body: params.note ?? '' });
@@ -476,6 +643,9 @@ export async function setStakeholderShare(params: {
   if (params.actorRole !== STAKEHOLDER_SHARE_ROLE) throw new Error(`Only the ${STAKEHOLDER_SHARE_ROLE} can choose whether a report is shared.`);
   if (!visitCanBeShared(visit)) throw new Error('This report cannot be shared yet.');
   if (params.shared === isSharedWithStakeholder(visit)) return visit;
+  if (!params.shared && shareIsLockedByRemediation(visit)) {
+    throw new Error('Sharing cannot be stopped: remediation was requested, so the report and items were shared automatically.');
+  }
   const outcomeSummary = params.outcomeSummary?.trim() ?? visit.stakeholderShare?.outcomeSummary ?? '';
   if (params.shared && !outcomeSummary) throw new Error('Enter the outcome summary the QP will see.');
 
@@ -503,8 +673,15 @@ export interface SharedVisitOutcome {
   id: string;
   visitType: VisitType;
   visitDate: string;
+  // Batch V1 (05.13): every qualification the visit covers, with its EISA date where it has one.
+  qualifications: VisitQualification[];
   outcomeSummary: string;
   reportFileNames: string[];
+  // Batch V1 (05.14): the status, and the rounds of remediation (oldest first).
+  statusLabel: string;
+  remediationRounds: RemediationRound[];
+  // True while the QP can add evidence and submit (the stage is "awaiting QP").
+  canRespond: boolean;
 }
 
 // The QP's read-only Visit Outcomes page: only visits shared with this QP, and only these
@@ -517,12 +694,47 @@ export async function listSharedVisitOutcomesForQp(qpId: string): Promise<Shared
       id: v.id,
       visitType: v.visitType,
       visitDate: v.visitDate,
+      qualifications: visitQualificationsOf(v),
       outcomeSummary: v.stakeholderShare?.outcomeSummary ?? '',
       reportFileNames: evidenceOf(v)
         .filter((f) => f.category === 'report')
         .map((f) => f.fileName),
+      statusLabel: overallStatusLabel(v),
+      remediationRounds: remediationRoundsOf(v),
+      canRespond: v.reportWorkflow.stageId === REMEDIATION_AWAITING_STAGE,
     }))
     .sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+}
+
+// Batch V1 (05.14): evidence for the open round, added by the QP (or by the ASD for a stakeholder
+// without a QP) before "Submit remediation". Empty files are refused with the shared helper.
+export async function addRemediationEvidence(
+  visitId: string,
+  file: { fileName: string; fileSize: number },
+  actor: RemediationActor,
+): Promise<SiteVisit> {
+  const all = loadAll();
+  const visit = getOrThrow(all, visitId);
+  const round = openRemediationRound(visit);
+  if (visit.reportWorkflow.stageId !== REMEDIATION_AWAITING_STAGE || !round) throw new Error('Evidence can only be added while the remediation is awaiting a response.');
+  assertCanRespondToRemediation(visit, actor);
+  assertFileNotEmpty(file);
+  const uploaded = { ...file, uploadedAt: new Date().toISOString(), uploadedBy: actor.actorName };
+  const updated: SiteVisit = {
+    ...visit,
+    remediationRounds: remediationRoundsOf(visit).map((r) => (r.id === round.id ? { ...r, evidence: [...r.evidence, uploaded] } : r)),
+  };
+  saveAll(replace(all, updated));
+  appendAuditEntry({
+    recordType: 'site-visit-report',
+    recordId: visit.id,
+    actorRole: actor.actorRole,
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    action: `Remediation evidence added (round ${round.round})`,
+    note: file.fileName,
+  });
+  return updated;
 }
 
 export async function saveChecklist(id: string, sections: ChecklistSection[]): Promise<SiteVisit> {

@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { listQualificationDirectory } from '../../../mock/api/accreditation';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { SDP_DIRECTORY } from '../../../mock/data/sdpDirectory';
 import { Modal } from '../../../shared/ui/Modal';
@@ -22,13 +24,24 @@ import {
   visitHasSittingLink,
   visitIsMeeting,
 } from '../visitTypeLabels';
-import type { NotificationFlag, VisitDomain, VisitType } from '../types';
+import { isMultiQualificationVisit, qualificationEntriesHaveSitting, qualificationListIssues, saqaIdForQualification } from '../visitQualifications';
+import type { NotificationFlag, VisitDomain, VisitQualification, VisitType } from '../types';
 
 const NO_SITTING = '__none__';
 
 // QCTO feedback 2.7: there is no assessment-centre directory in the mock data, so an RPL/ARPL
 // visit is held either at an SDP from the SDP directory or at an assessment centre typed in.
 type SiteKind = 'sdp' | 'assessment-centre';
+
+// Batch V1 (05.13): one row of the qualification list. Marking & Moderation picks a published
+// EISA sitting (which fixes the qualification and its EISA date); RPL/ARPL picks a qualification.
+// `value` is a sitting id or a qualification title; '' until chosen.
+interface QualificationRow {
+  key: string;
+  value: string;
+}
+
+const newRow = (): QualificationRow => ({ key: crypto.randomUUID(), value: '' });
 
 // CR-044/CR-048/CR-049/CR-050/CR-051: everything except the automatic RPL/ARPL item is created
 // here by an official — visit type, QP/qualification, optional sitting link, venue, and the
@@ -58,6 +71,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [domain, setDomain] = useState<VisitDomain>(DEFAULT_VISIT_DOMAIN);
   const [meetingTitle, setMeetingTitle] = useState('');
   const [purpose, setPurpose] = useState('');
+  const [rows, setRows] = useState<QualificationRow[]>([newRow()]);
 
   const { data: linkedSdps = [] } = useSdpsForSitting(sittingId === NO_SITTING ? null : sittingId);
 
@@ -76,6 +90,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     setDomain(DEFAULT_VISIT_DOMAIN);
     setMeetingTitle('');
     setPurpose('');
+    setRows([newRow()]);
   };
 
   const onSittingChange = (value: string) => {
@@ -89,9 +104,13 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     }
   };
 
-  const perQualification = isPerQualificationVisit(visitType);
+  // Batch V1 (05.13): Marking & Moderation and RPL/ARPL choose a list; Post-EISA keeps its one
+  // qualification and optional sitting link.
+  const multiQualification = isMultiQualificationVisit(visitType);
+  const rowHasSitting = qualificationEntriesHaveSitting(visitType);
+  const perQualification = isPerQualificationVisit(visitType) && !multiQualification;
   const hasQp = visitHasQp(visitType);
-  const hasSittingLink = visitHasSittingLink(visitType);
+  const hasSittingLink = visitHasSittingLink(visitType) && !multiQualification;
   const hasSiteSelection = visitHasSiteSelection(visitType);
   const isMeeting = visitIsMeeting(visitType);
   const hasPurpose = visitHasPurpose(visitType);
@@ -104,6 +123,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   // any sitting link, and the date that came from that sitting.
   const onVisitTypeChange = (value: VisitType) => {
     setVisitType(value);
+    setRows([newRow()]);
     if (!isPerQualificationVisit(value)) {
       setSittingId(NO_SITTING);
       setQualificationTitle('');
@@ -119,8 +139,20 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const selectedSiteSdp = SDP_DIRECTORY.find((s) => s.sdpId === siteSdpId);
   const siteChosen = siteKind === 'sdp' ? !!selectedSiteSdp : !!assessmentCentreName.trim();
   const partyChosen = isMeeting ? !!meetingTitle.trim() : hasQp ? !!selectedQp : siteChosen;
+  const qualificationEntries = rows.flatMap((row): VisitQualification[] => {
+    if (!row.value) return [];
+    if (rowHasSitting) {
+      const sitting = sittings.find((s) => s.id === row.value);
+      return sitting
+        ? [{ id: row.key, qualificationTitle: sitting.qualificationTitle, saqaId: saqaIdForQualification(sitting.qualificationTitle), sittingId: sitting.id, eisaDate: sitting.date }]
+        : [];
+    }
+    return [{ id: row.key, qualificationTitle: row.value, saqaId: saqaIdForQualification(row.value), sittingId: null, eisaDate: '' }];
+  });
+  const qualificationIssues = multiQualification ? qualificationListIssues(visitType, qualificationEntries) : [];
+  const rowsComplete = !multiQualification || (rows.every((r) => !!r.value) && qualificationIssues.length === 0);
   const canSubmit =
-    partyChosen && (!perQualification || qualificationTitle.trim()) && (!hasPurpose || purpose.trim()) && visitDate && venue.trim();
+    partyChosen && rowsComplete && (!perQualification || qualificationTitle.trim()) && (!hasPurpose || purpose.trim()) && visitDate && venue.trim();
 
   const onSubmit = () => {
     if (!canSubmit) return;
@@ -135,6 +167,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         qpId: hasQp ? (selectedQp?.qpId ?? '') : '',
         qpName: hasQp ? (selectedQp?.name ?? '') : '',
         qualificationTitle: perQualification ? qualificationTitle.trim() : '',
+        qualifications: multiQualification ? qualificationEntries : undefined,
         sdpId: siteSdp?.sdpId ?? linkedSdp?.sdpId ?? null,
         sdpName: siteSdp?.name ?? linkedSdp?.sdpName ?? null,
         assessmentCentreName: hasSiteSelection && siteKind === 'assessment-centre' ? assessmentCentreName.trim() : null,
@@ -224,6 +257,76 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </SelectContent>
               </Select>
               {sittingId !== NO_SITTING && <p className="text-xs text-gray-400">QP, qualification and date were auto-populated from the sitting.</p>}
+            </div>
+          )}
+
+          {multiQualification && (
+            <div className="space-y-2">
+              <Label>{rowHasSitting ? 'Qualifications and EISA sittings *' : 'Qualifications *'}</Label>
+              <div className="space-y-2">
+                {rows.map((row, i) => {
+                  const usedElsewhere = new Set(
+                    rows
+                      .filter((r) => r.key !== row.key && r.value)
+                      .map((r) => (rowHasSitting ? sittings.find((s) => s.id === r.value)?.qualificationTitle : r.value)),
+                  );
+                  const entry = qualificationEntries.find((q) => q.id === row.key);
+                  return (
+                    <div key={row.key} className="flex items-start gap-2">
+                      <div className="flex-1 space-y-1">
+                        <Select value={row.value} onValueChange={(v) => setRows(rows.map((r) => (r.key === row.key ? { ...r, value: v } : r)))}>
+                          <SelectTrigger aria-label={`Qualification ${i + 1}`}>
+                            <SelectValue placeholder={rowHasSitting ? 'Select a qualification and its EISA sitting' : 'Select a qualification'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {rowHasSitting
+                              ? sittings.map((s) => (
+                                  <SelectItem key={s.id} value={s.id} disabled={usedElsewhere.has(s.qualificationTitle)}>
+                                    {s.qualificationTitle} (SAQA ID {saqaIdForQualification(s.qualificationTitle)}) — EISA date {s.date}
+                                  </SelectItem>
+                                ))
+                              : listQualificationDirectory().map((q) => (
+                                  <SelectItem key={q.qualificationId} value={q.qualificationName} disabled={usedElsewhere.has(q.qualificationName)}>
+                                    {q.qualificationName} (SAQA ID {q.qualificationId})
+                                  </SelectItem>
+                                ))}
+                          </SelectContent>
+                        </Select>
+                        {entry && (
+                          <p className="text-xs text-gray-500">
+                            SAQA ID {entry.saqaId}
+                            {entry.eisaDate && ` — EISA date ${entry.eisaDate}`}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remove qualification ${i + 1}`}
+                        disabled={rows.length === 1}
+                        onClick={() => setRows(rows.filter((r) => r.key !== row.key))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+              <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => setRows([...rows, newRow()])}>
+                <Plus className="h-4 w-4" />
+                Add a qualification
+              </Button>
+              {(qualificationEntries.length > 0 ? qualificationIssues : []).map((issue) => (
+                <p key={issue} role="alert" className="text-xs text-red-600">
+                  {issue}
+                </p>
+              ))}
+              <p className="text-xs text-gray-400">
+                {rowHasSitting
+                  ? 'Add every qualification this visit will check. Each has its own published EISA sitting, and a qualification can be added once.'
+                  : 'Add every qualification this visit will check at the SDP or assessment centre. A qualification can be added once.'}
+              </p>
             </div>
           )}
 

@@ -5,7 +5,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useSaveScriptVerification } from '../hooks';
-import { emptyScriptRow, SCRIPT_FINDING_LABELS, SCRIPT_RESULT_LABELS, SCRIPT_RESULT_OPTIONS, scriptVerificationOf } from '../scriptVerification';
+import {
+  emptyScriptRow,
+  SCRIPT_FINDING_LABELS,
+  SCRIPT_RESULT_LABELS,
+  SCRIPT_RESULT_OPTIONS,
+  scriptQualificationIdOf,
+  scriptSampleSizes,
+  scriptVerificationOf,
+} from '../scriptVerification';
+import { visitQualificationsOf } from '../visitQualifications';
 import type { ScriptModerationFinding, ScriptVerification, ScriptVerificationResult, ScriptVerificationRow, SiteVisit } from '../types';
 
 const FINDING_OPTIONS = Object.keys(SCRIPT_FINDING_LABELS) as ScriptModerationFinding[];
@@ -15,6 +24,10 @@ export function ScriptVerificationSection({ visit, readonly }: { visit: SiteVisi
   const save = useSaveScriptVerification();
   const verification = scriptVerificationOf(visit);
   const { rows, overallResult } = verification;
+  // Batch V1 (05.13): each script says which of the visit's qualifications it belongs to; the sample
+  // size is shown per qualification and in total.
+  const qualifications = visitQualificationsOf(visit);
+  const sampleSizes = scriptSampleSizes(visit);
 
   const commit = (next: ScriptVerification) => save.mutate({ id: visit.id, scriptVerification: next });
   const updateRow = (id: string, patch: Partial<ScriptVerificationRow>) =>
@@ -25,9 +38,18 @@ export function ScriptVerificationSection({ visit, readonly }: { visit: SiteVisi
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-gray-500 uppercase">Script Verification</p>
         <p className="text-sm text-gray-600">
-          Sample size: <span className="font-semibold">{rows.length}</span> {rows.length === 1 ? 'script' : 'scripts'}
+          Sample size: <span className="font-semibold">{sampleSizes.total}</span> {sampleSizes.total === 1 ? 'script' : 'scripts'}
         </p>
       </div>
+      {qualifications.length > 1 && (
+        <ul className="text-xs text-gray-600 space-y-0.5" aria-label="Sample size per qualification">
+          {sampleSizes.perQualification.map((q) => (
+            <li key={q.id}>
+              {q.title}: <span className="font-semibold">{q.count}</span> {q.count === 1 ? 'script' : 'scripts'}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {rows.length === 0 ? (
         <p className="text-sm text-gray-400">No scripts verified yet.</p>
@@ -36,7 +58,7 @@ export function ScriptVerificationSection({ visit, readonly }: { visit: SiteVisi
           <Table>
             <TableHeader>
               <TableRow>
-                {['Script / learner reference *', 'Component *', 'Marked outcome *', 'Moderated finding *', 'Comment', ''].map((h) => (
+                {['Qualification *', 'Script / learner reference *', 'Component *', 'Marked outcome *', 'Moderated finding *', 'Comment', ''].map((h) => (
                   <TableHead key={h} className="whitespace-nowrap">
                     {h}
                   </TableHead>
@@ -46,6 +68,24 @@ export function ScriptVerificationSection({ visit, readonly }: { visit: SiteVisi
             <TableBody>
               {rows.map((row, i) => (
                 <TableRow key={row.id}>
+                  <TableCell className="min-w-[180px]">
+                    <Select
+                      value={scriptQualificationIdOf(visit, row) ?? ''}
+                      onValueChange={(v) => updateRow(row.id, { qualificationId: v })}
+                      disabled={readonly}
+                    >
+                      <SelectTrigger aria-label={`Script ${i + 1} qualification`}>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {qualifications.map((q) => (
+                          <SelectItem key={q.id} value={q.id}>
+                            {q.qualificationTitle}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell className="min-w-[160px]">
                     <Input aria-label={`Script ${i + 1} reference`} value={row.scriptReference} disabled={readonly} onChange={(e) => updateRow(row.id, { scriptReference: e.target.value })} />
                   </TableCell>
@@ -96,7 +136,7 @@ export function ScriptVerificationSection({ visit, readonly }: { visit: SiteVisi
       )}
 
       {!readonly && (
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => commit({ ...verification, rows: [...rows, emptyScriptRow()] })}>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => commit({ ...verification, rows: [...rows, emptyScriptRow(qualifications.length === 1 ? qualifications[0].id : undefined)] })}>
           <Plus className="h-4 w-4" />
           Add script
         </Button>

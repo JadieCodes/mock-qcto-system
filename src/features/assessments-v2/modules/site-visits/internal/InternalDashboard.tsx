@@ -18,7 +18,8 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
 import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
-import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitIsMeeting, visitPartyName, visitSubject } from '../visitTypeLabels';
+import { REMEDIATION_AWAITING_STAGE } from '../remediation';
+import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitHasQp, visitIsMeeting, visitPartyName, visitSubject } from '../visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
@@ -38,13 +39,17 @@ function myItemIds(v: SiteVisit): (string | null | undefined)[] {
 // counts once the visit is booked (the Execution & Report tab is closed until then).
 function isUnassignedActionable(v: SiteVisit, role: Role, personId: string): boolean {
   if (canActInStage(PLANNING_WORKFLOW, v.planningWorkflow.stageId, role)) return true;
+  // Batch V1: only the ASD of a visit without a QP records the remediation response; the QP does it themselves.
+  if (v.planningWorkflow.stageId === 'booked' && v.reportWorkflow.stageId === REMEDIATION_AWAITING_STAGE) {
+    return role === 'ASD' && !visitHasQp(v.visitType);
+  }
   if (v.planningWorkflow.stageId === 'booked' && canActInStage(REPORT_WORKFLOW, v.reportWorkflow.stageId, role)) {
     return !v.reroutedToId || v.reroutedToId === personId;
   }
   return false;
 }
 
-const REPORT_RECEIVED_STAGES = new Set(['approved', 'outcome-shared', 'closed']);
+const REPORT_RECEIVED_STAGES = new Set(['approved', 'remediation-awaiting', 'remediation-review', 'outcome-shared', 'closed']);
 const PLANNING_PENDING_STAGES = new Set(['ad-planning', 'dd-recommend', 'domain-director-approval', 'sda-booking']);
 
 function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id: string) => void }) {

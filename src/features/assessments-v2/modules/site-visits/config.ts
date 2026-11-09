@@ -32,6 +32,15 @@ export const MISSING_VISIT_DATE_MESSAGE = 'Pick a visit date before submitting t
 // "Share report with stakeholder" choice (stakeholderShare.ts).
 export const COMPLETE_VISIT_LABEL = 'Complete Visit';
 
+// Batch V1 (05.14): the DD's two approval outcomes. QCTO still has to confirm these names (Ms
+// Rafir-Munsaur suggested a meeting to define them) — progress.md, Batch V1.
+export const APPROVED_FINAL_LABEL = 'Approved (final)';
+export const APPROVED_WITH_REMEDIATION_LABEL = 'Approved with remediation';
+export const FURTHER_REMEDIATION_LABEL = 'Further remediation needed';
+export const SUBMIT_REMEDIATION_LABEL = 'Submit remediation';
+export const REMEDIATION_AWAITING_LABEL = 'Approved with remediation — awaiting QP';
+export const REMEDIATION_SUBMITTED_LABEL = 'Remediation submitted — DD review';
+
 // Shared visit outcomes: the Deputy Director, who reviews and approves the report, decides
 // whether it is shared with the QP.
 export const STAKEHOLDER_SHARE_ROLE: Role = REPORT_APPROVER_ROLE;

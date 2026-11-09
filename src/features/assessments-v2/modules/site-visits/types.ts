@@ -25,6 +25,9 @@ export type ScriptVerificationResult = 'verified' | 'verified-with-findings' | '
 
 export interface ScriptVerificationRow {
   id: string;
+  // Batch V1 (05.13): which of the visit's qualifications the script belongs to (VisitQualification.id).
+  // Optional so rows stored before Batch V1 still load — scriptVerification.ts scriptQualificationIdOf().
+  qualificationId?: string;
   scriptReference: string;
   component: string;
   markedOutcome: string;
@@ -35,6 +38,55 @@ export interface ScriptVerificationRow {
 export interface ScriptVerification {
   rows: ScriptVerificationRow[];
   overallResult: ScriptVerificationResult | null;
+}
+
+// Batch V1 (05.13): one qualification a visit covers. A Marking & Moderation entry also carries
+// its own published EISA sitting (the EISA date differs per qualification); an RPL/ARPL entry never
+// does (QCTO feedback 2.7).
+export interface VisitQualification {
+  id: string;
+  qualificationTitle: string;
+  saqaId: string;
+  sittingId: string | null;
+  // The sitting's EISA date (yyyy-mm-dd); '' when the entry has no sitting.
+  eisaDate: string;
+}
+
+// Batch V1 (05.14): the DD's two outcomes on a report besides the existing send back / reject.
+// QCTO still has to confirm the status names (progress.md, Batch V1).
+export interface RemediationEvidenceFile {
+  fileName: string;
+  fileSize: number;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
+export interface RemediationReview {
+  decision: 'approved-final' | 'further-remediation';
+  reviewedBy: string;
+  reviewedById: string;
+  reviewedAt: string;
+}
+
+// One round: the DD's items, the stakeholder's response and evidence, and the DD's review.
+export interface RemediationRound {
+  id: string;
+  round: number;
+  items: string;
+  requestedBy: string;
+  requestedById: string;
+  requestedAt: string;
+  // Who the report and items were shared with (the QP, or the SDP / assessment centre).
+  sharedWith: string;
+  evidence: RemediationEvidenceFile[];
+  response: string;
+  // Set once submitted. submittedByRole is 'ASD' when the ASD recorded it for a stakeholder
+  // without a QP.
+  submittedBy: string | null;
+  submittedById: string | null;
+  submittedByRole: 'QP' | 'ASD' | null;
+  submittedAt: string | null;
+  review: RemediationReview | null;
 }
 
 export interface StakeholderShare {
@@ -59,7 +111,13 @@ export interface SiteVisit {
   // RPL/ARPL monitoring, which has no QP (QCTO feedback 2.7).
   qpId: string;
   qpName: string;
+  // Batch V1 (05.13): always the first qualification's title (or '' when there is none), so lists
+  // and other modules that read one title keep working. Read the full list through
+  // visitQualifications.ts visitQualificationsOf().
   qualificationTitle: string;
+  // Batch V1 (05.13): Marking & Moderation and RPL/ARPL monitoring cover several qualifications.
+  // Optional so visits stored before Batch V1 still load (they become a one-item list).
+  qualifications?: VisitQualification[];
   sdpId: string | null;
   sdpName: string | null;
   // QCTO feedback 2.7: an RPL/ARPL visit is held at an SDP (sdpId/sdpName) or at an assessment
@@ -71,6 +129,8 @@ export interface SiteVisit {
   // CR-050: optional link to a published EISA Calendar sitting — when linked, the date is
   // auto-populated from the sitting instead of typed in by hand. Always null for EISA Readiness
   // and RPL/ARPL monitoring (QCTO feedback 2.6, 2.7).
+  // Batch V1: for Marking & Moderation this is the first qualification's sitting; every sitting
+  // is in `qualifications`.
   sittingId: string | null;
   visitDate: string;
   venue: string;
@@ -120,6 +180,10 @@ export interface SiteVisit {
   // stakeholderShare.ts isSharedWithStakeholder().
   stakeholderShare?: StakeholderShare;
 
+  // Batch V1 (05.14): every round of "Approved with remediation", oldest first. Missing means none —
+  // read it through remediation.ts remediationRoundsOf().
+  remediationRounds?: RemediationRound[];
+
   // Set only for the RPL/ARPL visit auto-created from a Phase 4 registration (CR-042/CR-044 —
   // the only automatic trigger into this hub). Null for every officially-created visit.
   sourceRegistrationId: string | null;
@@ -138,6 +202,9 @@ export interface NewVisitInput {
   qpId: string;
   qpName: string;
   qualificationTitle: string;
+  // Batch V1 (05.13): Marking & Moderation and RPL/ARPL monitoring. When given it replaces
+  // qualificationTitle and sittingId.
+  qualifications?: VisitQualification[];
   sdpId: string | null;
   sdpName: string | null;
   sittingId: string | null;

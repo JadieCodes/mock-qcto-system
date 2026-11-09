@@ -1,5 +1,20 @@
 import type { WorkflowDefinition } from '../../shared/workflow/types';
-import { BOOKING_ROLE, COMPLETE_VISIT_LABEL, PLAN_APPROVER_ROLE, PLAN_RECOMMENDER_ROLE, PLANNER_ROLE, REPORT_APPROVER_ROLE, REPORT_SUBMITTER_ROLE } from './config';
+import {
+  APPROVED_FINAL_LABEL,
+  APPROVED_WITH_REMEDIATION_LABEL,
+  BOOKING_ROLE,
+  COMPLETE_VISIT_LABEL,
+  FURTHER_REMEDIATION_LABEL,
+  PLAN_APPROVER_ROLE,
+  PLAN_RECOMMENDER_ROLE,
+  PLANNER_ROLE,
+  REMEDIATION_AWAITING_LABEL,
+  REMEDIATION_SUBMITTED_LABEL,
+  REPORT_APPROVER_ROLE,
+  REPORT_SUBMITTER_ROLE,
+  SUBMIT_REMEDIATION_LABEL,
+} from './config';
+import { REMEDIATION_AWAITING_STAGE, REMEDIATION_REVIEW_STAGE, remediationStakeholderLabel } from './remediation';
 import type { SiteVisit } from './types';
 
 // Audit-entry action label the Planning tab looks up to show the latest send-back note.
@@ -93,7 +108,12 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
     // FROM 'approved', and the shared workflow engine's canActInStage check blocked it when
     // this list was empty, so the Deputy Director's click silently failed and the QP never
     // received anything.
-    { id: 'approved', label: 'Approved', allowedRoles: [REPORT_APPROVER_ROLE] },
+    // Batch V1 (05.14): 'approved' now means "Approved (final)" only. Complete Visit starts here.
+    { id: 'approved', label: APPROVED_FINAL_LABEL, allowedRoles: [REPORT_APPROVER_ROLE] },
+    // Batch V1 (05.14): the stakeholder answers the DD's items. The QP does it for a visit with a
+    // QP; the ASD records it for a visit without one (api.ts checks which).
+    { id: REMEDIATION_AWAITING_STAGE, label: REMEDIATION_AWAITING_LABEL, allowedRoles: ['QP', REPORT_SUBMITTER_ROLE] },
+    { id: REMEDIATION_REVIEW_STAGE, label: REMEDIATION_SUBMITTED_LABEL, allowedRoles: [REPORT_APPROVER_ROLE] },
     { id: 'rejected', label: 'Rejected', allowedRoles: [] },
     { id: 'outcome-shared', label: 'Outcome shared', allowedRoles: ['QP'] },
     { id: 'closed', label: 'Closed', allowedRoles: [] },
@@ -102,11 +122,22 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
     { id: 'report-submit', label: 'Submit report', fromStage: 'awaiting-execution', toStage: 'dd-report-review', kind: 'advance' },
     {
       id: 'report-approve',
-      label: 'Approve report',
+      label: APPROVED_FINAL_LABEL,
       fromStage: 'dd-report-review',
       toStage: 'approved',
       kind: 'complete',
       requiresDifferentActor: true,
+    },
+    // Batch V1 (05.14): approved, but the stakeholder still has items to fix. The note is the
+    // remediation items (required).
+    {
+      id: 'report-approve-remediation',
+      label: APPROVED_WITH_REMEDIATION_LABEL,
+      fromStage: 'dd-report-review',
+      toStage: REMEDIATION_AWAITING_STAGE,
+      kind: 'advance',
+      requiresDifferentActor: true,
+      requiresNote: true,
     },
     {
       id: 'report-send-back',
@@ -130,6 +161,18 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
       fromStage: 'dd-report-review',
       toStage: 'dd-report-review',
       kind: 'reroute',
+      requiresNote: true,
+    },
+    { id: 'remediation-submit', label: SUBMIT_REMEDIATION_LABEL, fromStage: REMEDIATION_AWAITING_STAGE, toStage: REMEDIATION_REVIEW_STAGE, kind: 'advance' },
+    // The DD reviews a submitted remediation. Not requiresDifferentActor: the last actor is the
+    // stakeholder (or the ASD recording for them), never the DD's own submission.
+    { id: 'remediation-approve-final', label: APPROVED_FINAL_LABEL, fromStage: REMEDIATION_REVIEW_STAGE, toStage: 'approved', kind: 'complete' },
+    {
+      id: 'remediation-further',
+      label: FURTHER_REMEDIATION_LABEL,
+      fromStage: REMEDIATION_REVIEW_STAGE,
+      toStage: REMEDIATION_AWAITING_STAGE,
+      kind: 'send-back',
       requiresNote: true,
     },
     // Every visit type. The id is kept so stored audit entries still match; since Batch G the
@@ -179,7 +222,12 @@ export function overallStatusLabel(visit: SiteVisit, opts?: { forQp?: boolean })
     case 'dd-report-review':
       return 'Report with Deputy Director';
     case 'approved':
-      return 'Report approved';
+      return APPROVED_FINAL_LABEL;
+    case REMEDIATION_AWAITING_STAGE:
+      // QCTO still has to confirm the status names. A visit without a QP says who it awaits instead.
+      return opts?.forQp || visit.qpId ? REMEDIATION_AWAITING_LABEL : `Approved with remediation — awaiting ${remediationStakeholderLabel(visit)}`;
+    case REMEDIATION_REVIEW_STAGE:
+      return REMEDIATION_SUBMITTED_LABEL;
     case 'rejected':
       return 'Report rejected';
     case 'outcome-shared':
@@ -225,6 +273,7 @@ export function overallStatusTone(visit: SiteVisit, opts?: { forQp?: boolean }):
     case 'rejected':
       return 'red';
     case 'dd-report-review':
+    case REMEDIATION_REVIEW_STAGE:
       return 'blue';
     default:
       return 'amber';

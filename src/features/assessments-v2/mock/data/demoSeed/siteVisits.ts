@@ -49,10 +49,23 @@
 // sample visit report, uploaded by the ASD after executing the visit. SV5 (draft) has one
 // attendance register and no report yet.
 //
+// Batch V1 (05.13, 05.14): four visits added at the end (the original sixteen are unchanged).
+//  SV17  Marking & Moderation  Three qualifications (Electrical Trades,  today - 8     Report submitted — waiting for the Deputy Director
+//                              Welding, Plumbing), each with its own                  (script verification spread over the three)
+//                              published EISA sitting
+//  SV18  Marking guideline     Nomvula Dlamini                          today - 14    Approved with remediation — awaiting QP (shared with
+//        discussion                                                                    the QP automatically; she already has two outcomes)
+//  SV19  Instrument validation Precious Mahlangu                        today - 25    Remediation submitted — DD review (round 1 sent back
+//        visit                                                                         for further remediation; round 2 has a response and
+//                                                                                      evidence)
+//  SV20  RPL/ARPL Monitoring   Khanya Skills Academy (SDP, no QP),      today - 6     Report submitted — waiting for the Deputy Director
+//                              Electrical Trades and Welding
+//
 // Planners (ASD): Lindiwe Khumalo / Riaan Pretorius. Deputy Director: Grace
 // Mokoena / Peter Botha. Domain Director: Michael van Wyk / Nokuthula Dube. Sub Domain Admin:
 // Karabo Sithole / Katlego Mahlangu. Report submitters (ASD): Sipho Ndlovu / Thandeka Zulu.
 import { LABELS } from '../../../config/labels';
+import { SDP_DIRECTORY } from '../sdpDirectory';
 import type { RplArplMonitoringItem } from '../../api/siteVisitsStore';
 import { buildEisaReadinessVisitSections } from '../eisaReadinessVisitSections';
 import { buildPostEisaMonitoringVisitSections } from '../postEisaMonitoringSections';
@@ -62,6 +75,7 @@ import { isChecklistComplete, type ChecklistSection } from '../../../shared/chec
 import type { Role } from '../../../types';
 import type { ResultsBatch } from '../../../modules/approval-of-results/types';
 import { competencyRatePercent, isBelowPostEisaThreshold } from '../../../modules/approval-of-results/workflow';
+import { qualificationIdOf } from '../../../modules/eisa-calendar/sittingDetails';
 import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import type { EisaRegistrationRecord } from '../../../modules/eisa-registration/types';
 import {
@@ -78,16 +92,21 @@ import {
 } from '../../../modules/site-visits/config';
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory } from '../../../modules/site-visits/evidence';
 import { freeTextFieldsForType } from '../../../modules/site-visits/freeTextFields';
+import { bookedVisitNotificationBody, remediationRequestedNotification, remediationSubmittedNotification } from '../../../modules/site-visits/notificationText';
+import { openRemediationRound, remediationRecordedByAsd, remediationRoundsOf, remediationStakeholderName } from '../../../modules/site-visits/remediation';
 import { getScriptVerificationIssues, visitHasScriptVerification } from '../../../modules/site-visits/scriptVerification';
 import { isSharedWithStakeholder, visitCanBeShared } from '../../../modules/site-visits/stakeholderShare';
 import type {
   NotificationFlag,
   ScriptVerificationResult,
+  RemediationRound,
   ScriptVerificationRow,
   SiteVisit,
   VisitDomain,
+  VisitQualification,
   VisitType,
 } from '../../../modules/site-visits/types';
+import { isMultiQualificationVisit, qualificationListIssues, saqaIdForQualification, visitSittingIdsOf } from '../../../modules/site-visits/visitQualifications';
 import { DEFAULT_VISIT_DOMAIN } from '../../../modules/site-visits/visitDomains';
 import { isPerQualificationVisit, visitHasPurpose, visitHasQp, visitHasSdp, visitIsMeeting, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../../../modules/site-visits/workflow';
@@ -185,6 +204,12 @@ interface PlanInput {
   // Marking & Moderation and Post-EISA Monitoring link to a published sitting (CR-050), which
   // fills the QP, qualification and date; EISA Readiness has neither (QCTO feedback 2.6).
   sitting?: EisaSitting;
+  // Batch V1 (05.13): a Marking & Moderation visit with several qualifications, each with its own
+  // published sitting. The visit date is then planned by hand (it is not the EISA date).
+  sittings?: EisaSitting[];
+  // Batch V1 (05.13): an RPL/ARPL visit planned by an official, at an SDP, for these qualifications.
+  rplSdpId?: string;
+  rplQualifications?: string[];
   visitDate?: string;
   venue: string;
   notificationFlag?: NotificationFlag;
@@ -198,7 +223,10 @@ interface VisitSeedBuilder {
   plan: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
   execute: (asdId: string, atDaysAgo: number, complete: boolean) => VisitSeedBuilder;
   upload: (category: VisitEvidenceCategory, fileName: string, asdId: string, atDaysAgo: number) => VisitSeedBuilder;
-  verifyScripts: (rows: Omit<ScriptVerificationRow, 'id'>[], overallResult: ScriptVerificationResult) => VisitSeedBuilder;
+  verifyScripts: (rows: (Omit<ScriptVerificationRow, 'id' | 'qualificationId'> & { qualification?: number })[], overallResult: ScriptVerificationResult) => VisitSeedBuilder;
+  approveWithRemediation: (actorId: string, atDaysAgo: number, items: string) => VisitSeedBuilder;
+  respondToRemediation: (actorId: string, atDaysAgo: number, response: string, evidenceFileNames: string[]) => VisitSeedBuilder;
+  requireFurtherRemediation: (actorId: string, atDaysAgo: number, items: string) => VisitSeedBuilder;
   report: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
   shareWithStakeholder: (actorId: string, atDaysAgo: number, outcomeSummary: string) => VisitSeedBuilder;
   done: () => void;
@@ -219,6 +247,37 @@ export function seedSiteVisits(
   const visits: SiteVisit[] = [];
   let updatedResults = results;
   let n = 0;
+
+  // api.ts newRemediationRound().
+  function seedRemediationRound(visit: SiteVisit, items: string, requestedBy: string, requestedById: string, requestedAt: string): RemediationRound {
+    return {
+      id: `${visit.id}-round-${remediationRoundsOf(visit).length + 1}`,
+      round: remediationRoundsOf(visit).length + 1,
+      items,
+      requestedBy,
+      requestedById,
+      requestedAt,
+      sharedWith: remediationStakeholderName(visit),
+      evidence: [],
+      response: '',
+      submittedBy: null,
+      submittedById: null,
+      submittedByRole: null,
+      submittedAt: null,
+      review: null,
+    };
+  }
+
+  // api.ts notifyRemediationRequested().
+  function notifyRequested(visit: SiteVisit, round: RemediationRound, at: string): void {
+    const text = remediationRequestedNotification(visit, round.items, round.round);
+    if (remediationRecordedByAsd(visit)) {
+      notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, title: `${text.title} — record the response`, body: `${text.body} Record the response of ${round.sharedWith} on the visit.` });
+      if (visit.sdpName) notify(log, at, { recipientRole: 'SDP', title: text.title, body: text.body });
+    } else {
+      notify(log, at, { recipientRole: 'QP', title: text.title, body: `${text.body} (${visit.qpName}). See Visit Outcomes.` });
+    }
+  }
 
   function builder(initial: SiteVisit, clock: SeedClock, plannerId: string | null): VisitSeedBuilder {
     let visit = initial;
@@ -256,7 +315,7 @@ export function seedSiteVisits(
           notify(log, at, {
             recipientRole: REPORT_SUBMITTER_ROLE,
             title: bookedVisitNotificationTitle(visit.visitType),
-            body: `"${subject()}" is booked for ${visit.visitDate}. The execution form is ready.`,
+            body: bookedVisitNotificationBody(visit),
           });
         }
         const nextOwner = PLANNING_NEXT_OWNER[actionId];
@@ -306,7 +365,79 @@ export function seedSiteVisits(
       verifyScripts(rows, overallResult) {
         if (!visitHasScriptVerification(visit.visitType)) throw new Error(`Demo seed: "${subject()}" has no script verification.`);
         if (visit.reportWorkflow.stageId !== 'awaiting-execution') throw new Error(`Demo seed: script verification for "${subject()}" can only be changed while the report is being completed.`);
-        visit = { ...visit, scriptVerification: { rows: rows.map((r, i) => ({ ...r, id: `${visit.id}-script-${i + 1}` })), overallResult } };
+        // Batch V1: each script belongs to one of the visit's qualifications (by position in the list).
+        const list = visit.qualifications ?? [];
+        visit = {
+          ...visit,
+          scriptVerification: {
+            rows: rows.map(({ qualification, ...r }, i) => ({ ...r, qualificationId: list[qualification ?? 0]?.id, id: `${visit.id}-script-${i + 1}` })),
+            overallResult,
+          },
+        };
+        return api;
+      },
+      // Batch V1 (05.14): performReportAction('report-approve-remediation') — round 1, the report and
+      // items shared with the stakeholder automatically, the stakeholder (or the ASD) notified.
+      approveWithRemediation(actorId, atDaysAgo, items) {
+        const actor = seedPerson(actorId);
+        const at = clock.at(atDaysAgo, 14);
+        if (!remediationStakeholderName(visit)) throw new Error(`Demo seed: "${subject()}" has nobody to send remediation to.`);
+        const reportWorkflow = step(log, { definition: REPORT_WORKFLOW, state: visit.reportWorkflow, actionId: 'report-approve-remediation', actor, at, recordType: 'site-visit-report', recordId: visit.id, note: items });
+        const round = seedRemediationRound(visit, items, actor.name, actor.id, at);
+        visit = { ...visit, reportWorkflow, remediationRounds: [...remediationRoundsOf(visit), round] };
+        if (visitHasQp(visit.visitType) && !isSharedWithStakeholder(visit)) {
+          visit = {
+            ...visit,
+            stakeholderShare: { shared: true, outcomeSummary: 'Approved with remediation. The remediation items are listed with this report.', changedAt: at, changedBy: actor.name, changedById: actor.id },
+          };
+        }
+        audit(log, { recordType: 'site-visit-report', recordId: visit.id, actor, action: `Report and remediation items shared with ${round.sharedWith}`, note: items, timestamp: at });
+        notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, title: 'Report approved with remediation', body: `Your report for "${subject()}" was approved with remediation.` });
+        notifyRequested(visit, round, at);
+        return api;
+      },
+      // addRemediationEvidence() for each file, then performReportAction('remediation-submit').
+      respondToRemediation(actorId, atDaysAgo, response, evidenceFileNames) {
+        const actor = seedPerson(actorId);
+        const round = openRemediationRound(visit);
+        if (!round || visit.reportWorkflow.stageId !== 'remediation-awaiting') throw new Error(`Demo seed: "${subject()}" is not waiting for a remediation response.`);
+        const expected = remediationRecordedByAsd(visit) ? REPORT_SUBMITTER_ROLE : 'QP';
+        if (actor.role !== expected || (expected === 'QP' && actor.id !== visit.qpId)) throw new Error(`Demo seed: ${actor.name} cannot respond to the remediation of "${subject()}".`);
+        if (!response.trim()) throw new Error('Demo seed: a remediation response needs text.');
+        const evidence = evidenceFileNames.map((fileName, i) => ({ fileName, fileSize: 262_144 + i * 1024, uploadedAt: clock.at(atDaysAgo, 11), uploadedBy: actor.name }));
+        for (const f of evidence) {
+          audit(log, { recordType: 'site-visit-report', recordId: visit.id, actor, action: `Remediation evidence added (round ${round.round})`, note: f.fileName, timestamp: f.uploadedAt });
+        }
+        const at = clock.at(atDaysAgo, 14);
+        const reportWorkflow = step(log, { definition: REPORT_WORKFLOW, state: visit.reportWorkflow, actionId: 'remediation-submit', actor, at, recordType: 'site-visit-report', recordId: visit.id, note: response });
+        visit = {
+          ...visit,
+          reportWorkflow,
+          remediationRounds: remediationRoundsOf(visit).map((r) =>
+            r.id === round.id ? { ...r, evidence, response, submittedBy: actor.name, submittedById: actor.id, submittedByRole: actor.role === 'QP' ? 'QP' : 'ASD', submittedAt: at } : r,
+          ),
+        };
+        const text = remediationSubmittedNotification(visit);
+        notify(log, at, { recipientRole: REPORT_APPROVER_ROLE, title: text.title, body: text.body });
+        return api;
+      },
+      // performReportAction('remediation-further'): closes the round and opens the next one.
+      requireFurtherRemediation(actorId, atDaysAgo, items) {
+        const actor = seedPerson(actorId);
+        const round = openRemediationRound(visit);
+        if (!round || visit.reportWorkflow.stageId !== 'remediation-review') throw new Error(`Demo seed: "${subject()}" has no submitted remediation to review.`);
+        const at = clock.at(atDaysAgo, 14);
+        const reportWorkflow = step(log, { definition: REPORT_WORKFLOW, state: visit.reportWorkflow, actionId: 'remediation-further', actor, at, recordType: 'site-visit-report', recordId: visit.id, note: items });
+        const next = seedRemediationRound(visit, items, actor.name, actor.id, at);
+        visit = {
+          ...visit,
+          reportWorkflow,
+          remediationRounds: [
+            ...remediationRoundsOf(visit).map((r) => (r.id === round.id ? { ...r, review: { decision: 'further-remediation' as const, reviewedBy: actor.name, reviewedById: actor.id, reviewedAt: at } } : r)),
+            next,
+          ],
+        };
+        notifyRequested(visit, next, at);
         return api;
       },
       // setStakeholderShare() with shared = true.
@@ -382,27 +513,46 @@ export function seedSiteVisits(
     if (visitHasQp(input.visitType) !== !!input.qpId) throw new Error(`Demo seed: a ${input.visitType} visit ${input.qpId ? 'cannot have' : 'needs'} a QP.`);
     const qp = input.qpId ? seedPerson(input.qpId) : null;
     const perQualification = isPerQualificationVisit(input.visitType);
-    if (perQualification !== !!input.sitting) throw new Error(`Demo seed: a ${input.visitType} visit ${perQualification ? 'needs' : 'cannot have'} a sitting link here.`);
+    const sittingList = input.sittings ?? (input.sitting ? [input.sitting] : []);
+    const isRpl = input.visitType === 'rpl-arpl-monitoring';
+    if (isRpl) {
+      if (!input.rplSdpId || !input.rplQualifications?.length || sittingList.length > 0) throw new Error('Demo seed: an RPL/ARPL visit needs an SDP and qualifications, and has no sitting.');
+    } else if (perQualification !== (sittingList.length > 0)) {
+      throw new Error(`Demo seed: a ${input.visitType} visit ${perQualification ? 'needs' : 'cannot have'} a sitting link here.`);
+    }
     if (input.sitting && input.sitting.qpId !== input.qpId) throw new Error('Demo seed: the sitting belongs to another QP.');
+    const rplSdp = isRpl ? SDP_DIRECTORY.find((d) => d.sdpId === input.rplSdpId) : undefined;
+    if (isRpl && !rplSdp) throw new Error(`Demo seed: no SDP ${input.rplSdpId}.`);
+    const visitId = seedId(VISIT_ID_GROUP, ++n);
+    // Batch V1 (05.13): createVisit() list for Marking & Moderation and RPL/ARPL.
+    let qualifications: VisitQualification[] | undefined;
+    if (isMultiQualificationVisit(input.visitType)) {
+      qualifications = isRpl
+        ? (input.rplQualifications ?? []).map((title, i) => ({ id: `${visitId}-q${i + 1}`, qualificationTitle: title, saqaId: saqaIdForQualification(title), sittingId: null, eisaDate: '' }))
+        : sittingList.map((sitting, i) => ({ id: `${visitId}-q${i + 1}`, qualificationTitle: sitting.qualificationTitle, saqaId: qualificationIdOf(sitting), sittingId: sitting.id, eisaDate: sitting.date }));
+      const issue = qualificationListIssues(input.visitType, qualifications)[0];
+      if (issue) throw new Error(`Demo seed: ${issue}`);
+    }
     // createVisit(), QCTO feedback 2.5.
     if (visitIsMeeting(input.visitType) !== !!input.meetingTitle?.trim()) throw new Error('Demo seed: only a special meeting has a title, and it needs one.');
     if (visitHasPurpose(input.visitType) !== !!input.purpose?.trim()) throw new Error(`Demo seed: a ${input.visitType} visit ${input.purpose ? 'has no' : 'needs a'} purpose.`);
     const notificationFlag = input.notificationFlag ?? 'notified';
     const visit: SiteVisit = {
-      id: seedId(VISIT_ID_GROUP, ++n),
+      id: visitId,
       visitType: input.visitType,
       domain: input.domain ?? DEFAULT_VISIT_DOMAIN,
       meetingTitle: input.meetingTitle,
       purpose: input.purpose,
       qpId: qp?.id ?? '',
       qpName: qp?.name ?? '',
-      qualificationTitle: input.sitting?.qualificationTitle ?? '',
-      // A2: Readiness and Marking & Moderation have no SDP; none of the planned visits here is a
-      // type that takes one from the sitting.
-      sdpId: null,
-      sdpName: null,
-      sittingId: input.sitting?.id ?? null,
-      visitDate: input.sitting?.date ?? input.visitDate ?? '',
+      qualificationTitle: qualifications?.[0]?.qualificationTitle ?? sittingList[0]?.qualificationTitle ?? '',
+      qualifications,
+      // A2: Readiness and Marking & Moderation have no SDP; an RPL/ARPL visit planned here is held at one.
+      sdpId: rplSdp?.sdpId ?? null,
+      sdpName: rplSdp?.name ?? null,
+      assessmentCentreName: isRpl ? null : undefined,
+      sittingId: sittingList[0]?.id ?? null,
+      visitDate: input.sittings ? (input.visitDate ?? '') : (input.sitting?.date ?? input.visitDate ?? ''),
       venue: input.venue,
       notificationFlag,
       noticeLeadTimeDays: notificationFlag === 'notified' ? DEFAULT_NOTICE_LEAD_TIME_DAYS : null,
@@ -425,7 +575,7 @@ export function seedSiteVisits(
       createdAt: clock.at(input.createdDaysAgo, 9),
     };
     if (!visit.visitDate) throw new Error('Demo seed: a visit needs a date.');
-    if (visitHasSdp(input.visitType)) throw new Error('Demo seed: RPL/ARPL and Post-EISA visits come from a registration or a results batch here.');
+    if (visitHasSdp(input.visitType) && !isRpl) throw new Error('Demo seed: Post-EISA visits come from a results batch here.');
     return builder(visit, clock, planner.id);
   }
 
@@ -514,6 +664,7 @@ export function seedSiteVisits(
       qpId: '',
       qpName: '',
       qualificationTitle: item.qualificationTitle,
+      qualifications: [{ id: `${seedId(VISIT_ID_GROUP, n)}-q1`, qualificationTitle: item.qualificationTitle, saqaId: saqaIdForQualification(item.qualificationTitle), sittingId: null, eisaDate: '' }],
       sdpId: item.sdpId,
       sdpName: item.sdpName,
       assessmentCentreName: null,
@@ -750,6 +901,123 @@ export function seedSiteVisits(
     .plan('plan-recommend', PETER, 11)
     .plan('plan-approve', MICHAEL, 9)
     .plan('plan-book', KARABO, 7)
+    .done();
+
+  // Batch V1 (05.13): the most recent past published sitting of a qualification that no other
+  // Marking & Moderation visit is linked to, so the visits already seeded keep their sittings to themselves.
+  const latestUnusedPastSitting = (qualificationTitle: string): EisaSitting => {
+    const cutoff = workingDateFromToday(-10);
+    const used = new Set(visits.flatMap((v) => visitSittingIdsOf(v)));
+    const found = sittings
+      .filter((s) => s.qualificationTitle === qualificationTitle && s.status === 'published' && s.date <= cutoff && !used.has(s.id))
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!found) throw new Error(`Demo seed: no unused past published ${qualificationTitle} sitting.`);
+    return found;
+  };
+
+  // SV17 — Marking & Moderation covering three qualifications, each with its own published EISA
+  // sitting: report submitted with a script verification spread over the three, with the Deputy Director.
+  planVisit({
+    visitType: 'marking-moderation',
+    qpId: NOMVULA,
+    sittings: [latestUnusedPastSitting('Electrical Trades'), latestUnusedPastSitting('Welding'), latestUnusedPastSitting('Plumbing')],
+    visitDate: workingDateFromToday(-8),
+    venue: 'Marking centre, Germiston',
+    plannerId: LINDIWE,
+    createdDaysAgo: 40,
+  })
+    .submitPlan(39, 'Monitor the joint marking session for three qualifications and verify a sample of marked and moderated scripts from each.')
+    .plan('plan-recommend', PETER, 36)
+    .plan('plan-approve', MICHAEL, 33)
+    .plan('plan-book', KARABO, 30)
+    .execute(SIPHO, 6, true)
+    .upload('report', 'Marking_Moderation_Visit_Report_Three_Qualifications.pdf', SIPHO, 6)
+    .verifyScripts(
+      [
+        { qualification: 0, scriptReference: 'ELT-2026-008', component: 'Knowledge (written)', markedOutcome: '72%', moderatedFinding: 'agree', comment: '' },
+        { qualification: 0, scriptReference: 'ELT-2026-019', component: 'Practical', markedOutcome: 'Competent', moderatedFinding: 'agree', comment: '' },
+        { qualification: 1, scriptReference: 'WLD-2026-052', component: 'Practical', markedOutcome: 'Competent', moderatedFinding: 'disagree', comment: 'Weld inspection record incomplete; moderator changed the outcome to Not yet competent.' },
+        { qualification: 1, scriptReference: 'WLD-2026-061', component: 'Knowledge (written)', markedOutcome: '58%', moderatedFinding: 'agree', comment: '' },
+        { qualification: 2, scriptReference: 'PLB-2026-027', component: 'Practical', markedOutcome: 'Competent', moderatedFinding: 'agree', comment: '' },
+      ],
+      'verified-with-findings',
+    )
+    .report('report-submit', SIPHO, 5)
+    .done();
+
+  // SV18 — Marking guideline discussion with Nomvula Dlamini (who already has two shared
+  // outcomes): approved with remediation, so the report and items are shared with her automatically
+  // and she answers them on Visit Outcomes.
+  planVisit({
+    visitType: 'marking-guideline-discussion',
+    qpId: NOMVULA,
+    purpose: 'Discuss the final marking guidelines for the Electrical Trades practical component with the appointed markers and moderators.',
+    visitDate: workingDateFromToday(-14),
+    venue: 'Virtual (MS Teams)',
+    plannerId: RIAAN,
+    createdDaysAgo: 50,
+  })
+    .submitPlan(49, 'Attend the marking guideline discussion for the practical component.')
+    .plan('plan-recommend', GRACE, 46)
+    .plan('plan-approve', NOKUTHULA, 43)
+    .plan('plan-book', KATLEGO, 41)
+    .execute(THANDEKA, 10, true)
+    .upload('report', 'Marking_Guideline_Discussion_Report_Electrical_Practical.pdf', THANDEKA, 10)
+    .report('report-submit', THANDEKA, 9)
+    .approveWithRemediation(
+      PETER,
+      6,
+      '1. Add the model answer for question 6 to the marking guideline.\n2. Confirm in writing that the markers received the final guideline before marking started.',
+    )
+    .done();
+
+  // SV19 — Instrument validation visit with Precious Mahlangu: two rounds of remediation. The DD asked
+  // for further remediation after round 1; round 2 has a response and evidence and is with the DD.
+  planVisit({
+    visitType: 'instrument-validation-visit',
+    qpId: PRECIOUS,
+    purpose: 'Validate the revised Welding practical instrument and rubric with the QP.',
+    visitDate: workingDateFromToday(-25),
+    venue: 'QP offices, Vanderbijlpark',
+    plannerId: LINDIWE,
+    createdDaysAgo: 60,
+  })
+    .submitPlan(59, 'On-site validation of the revised Welding practical instrument.')
+    .plan('plan-recommend', GRACE, 56)
+    .plan('plan-approve', NOKUTHULA, 54)
+    .plan('plan-book', KATLEGO, 52)
+    .execute(SIPHO, 20, true)
+    .upload('report', 'Instrument_Validation_Visit_Report_Welding.pdf', SIPHO, 20)
+    .report('report-submit', SIPHO, 19)
+    .approveWithRemediation(GRACE, 16, '1. Correct the weighting on rubric criteria 3 and 5.\n2. Add the safety criterion that was left out of the practical.')
+    .respondToRemediation(PRECIOUS, 13, 'The weightings on criteria 3 and 5 are corrected. The safety criterion is being added.', ['Welding_Rubric_Corrections.pdf'])
+    .requireFurtherRemediation(GRACE, 10, 'The safety criterion is still missing from the instrument. Send the revised instrument and the calibration certificates for the test equipment.')
+    .respondToRemediation(
+      PRECIOUS,
+      6,
+      'The safety criterion is now item 11 of the practical. The revised instrument and the calibration certificates are attached.',
+      ['Revised_Welding_Practical_Instrument_v3.pdf', 'Equipment_Calibration_Certificates_2026.pdf'],
+    )
+    .done();
+
+  // SV20 — RPL/ARPL monitoring at Khanya Skills Academy (no QP) for two qualifications: report
+  // submitted, with the Deputy Director.
+  planVisit({
+    visitType: 'rpl-arpl-monitoring',
+    rplSdpId: 'sdp-khanya-skills-academy',
+    rplQualifications: ['Electrical Trades', 'Welding'],
+    visitDate: workingDateFromToday(-6),
+    venue: 'Khanya Skills Academy, Johannesburg',
+    plannerId: RIAAN,
+    createdDaysAgo: 35,
+  })
+    .submitPlan(34, 'Monitor the RPL/ARPL process at the SDP for both qualifications.')
+    .plan('plan-recommend', PETER, 31)
+    .plan('plan-approve', MICHAEL, 28)
+    .plan('plan-book', KARABO, 26)
+    .execute(THANDEKA, 3, true)
+    .upload('report', 'RPL_ARPL_Monitoring_Visit_Report_Khanya.pdf', THANDEKA, 3)
+    .report('report-submit', THANDEKA, 2)
     .done();
 
   // QCTO feedback 2.8: final approval below the threshold always creates the visit, so the seed

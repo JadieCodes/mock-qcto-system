@@ -28,3 +28,8 @@ export function findQualification(idOrName: string): QualificationWithAccredited
   );
   return entry ? withQpName(entry) : undefined;
 }
+
+// Every qualification in the directory, for pickers (an RPL/ARPL visit chooses its qualifications from it).
+export function listQualificationDirectory(): QualificationWithAccreditedSdps[] {
+  return ACCREDITED_QUALIFICATIONS.map(withQpName);
+}

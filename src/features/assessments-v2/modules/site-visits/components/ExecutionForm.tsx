@@ -21,6 +21,7 @@ import {
 } from '../hooks';
 import { visitHasScriptVerification } from '../scriptVerification';
 import type { SiteVisit } from '../types';
+import { isMultiQualificationVisit, visitQualificationsOf } from '../visitQualifications';
 import { isPerQualificationVisit, visitHasQp, visitIsMeeting, visitSiteKindLabel, visitSiteName } from '../visitTypeLabels';
 import { ScriptVerificationSection } from './ScriptVerificationSection';
 
@@ -39,7 +40,10 @@ function qpsForQualification(qualificationTitle: string) {
 // pre-filled from the visit (itself pre-filled from the linked sitting at creation time, if any).
 function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; readonly: boolean }) {
   const updateVisitDetails = useUpdateVisitDetails();
-  const perQualification = isPerQualificationVisit(visit.visitType);
+  // Batch V1 (05.13): a visit with a list of qualifications shows the list; only a single-
+  // qualification visit (Post-EISA) restricts the QP choice by its qualification.
+  const multiQualification = isMultiQualificationVisit(visit.visitType);
+  const perQualification = isPerQualificationVisit(visit.visitType) && !multiQualification;
   // QCTO feedback 2.7: RPL/ARPL has no QP; the SDP or assessment centre is shown instead.
   const hasQp = visitHasQp(visit.visitType);
 
@@ -80,9 +84,21 @@ function QpAndQualificationSelectors({ visit, readonly }: { visit: SiteVisit; re
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
       <p className="text-xs font-semibold text-gray-500 uppercase">
-        {!hasQp ? `${visitSiteKindLabel(visit)} & Qualification` : perQualification ? 'QP & Qualification' : 'QP'}
+        {!hasQp ? `${visitSiteKindLabel(visit)} & Qualifications` : perQualification ? 'QP & Qualification' : multiQualification ? 'QP & Qualifications' : 'QP'}
       </p>
       <div className="grid grid-cols-2 gap-3">
+        {multiQualification && (
+          <div className="space-y-1.5 col-span-2">
+            <Label>Qualifications</Label>
+            <ul className="text-sm text-gray-800 space-y-0.5">
+              {visitQualificationsOf(visit).map((q) => (
+                <li key={q.id}>
+                  {q.qualificationTitle} <span className="text-gray-500">(SAQA ID {q.saqaId}{q.eisaDate && `, EISA date ${q.eisaDate}`})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {perQualification && (
           <div className="space-y-1.5">
             <Label>Qualification *</Label>
