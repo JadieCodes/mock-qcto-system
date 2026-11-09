@@ -11,7 +11,7 @@ import type { ResultsTrack } from '../types';
 import { FisaResultsView } from './FisaResultsView';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
-import { useResultsBatches, useSittingsAwaitingSubmission } from '../hooks';
+import { useResultsBatches, useResultsDrafts, useSittingsAwaitingSubmission } from '../hooks';
 import { absenteeismText, batchFiguresOf, competenceRateText } from '../calculation';
 import { submissionDeadlineFor } from '../workflow';
 import { ResultsBatchDetail } from './ResultsBatchDetail';
@@ -23,6 +23,7 @@ function QpResultsView() {
   const { person } = useV2Role();
   const { data: awaiting = [] } = useSittingsAwaitingSubmission();
   const { data: batches = [] } = useResultsBatches();
+  const { data: drafts = [] } = useResultsDrafts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitSittingId, setSubmitSittingId] = useState<string | null>(null);
 
@@ -49,7 +50,12 @@ function QpResultsView() {
               <TableBody>
                 {myAwaiting.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="max-w-[200px] truncate">{a.qualificationTitle}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">
+                      {a.qualificationTitle}
+                      {drafts.some((d) => d.sittingId === a.sittingId) && (
+                        <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">Draft saved</span>
+                      )}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">{a.sittingDate}</TableCell>
                     <TableCell>{a.learners.length}</TableCell>
                     <TableCell>
@@ -57,7 +63,7 @@ function QpResultsView() {
                     </TableCell>
                     <TableCell>
                       <Button size="sm" onClick={() => setSubmitSittingId(a.sittingId)}>
-                        Submit Results
+                        {drafts.some((d) => d.sittingId === a.sittingId) ? 'Continue' : 'Submit Results'}
                       </Button>
                     </TableCell>
                   </TableRow>

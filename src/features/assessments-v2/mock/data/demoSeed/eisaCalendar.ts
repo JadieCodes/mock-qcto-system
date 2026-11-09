@@ -32,6 +32,8 @@
 //  S15 Electrical Trades  today - 170  Published (past)
 //  S16 Plumbing           today - 50   Published (past)
 //  S17 Plumbing           today + 150  Published — registration open; request R3 open at the Director
+// Added in Batch L2 (05.24):
+//  S18 Welding            today - 20   Published (past) — confirmed, awaiting results with a saved draft
 // B1's three dates are published with registration open.
 //
 // Postponement and cancellation requests (QCTO feedback 2.4, changeRequests.ts), each with a
@@ -463,7 +465,11 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
   );
   requests.push(r1.request, r2.request, r3.request);
 
-  sittings.push(...s1to5, r1.sitting, s7, s8, ...s9to16, s17);
+  // Batch L2 (05.24): a second confirmed sitting still awaiting its results, so one can hold a
+  // saved draft while the Electrical Trades one stays empty. Added last so no seed id moves.
+  const s18 = addDirect(welding, -20, THANDEKA, 220).sitting;
+
+  sittings.push(...s1to5, r1.sitting, s7, s8, ...s9to16, s17, s18);
 
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,
   // and every future one has a date after today.

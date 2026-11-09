@@ -5,7 +5,10 @@ import type { Role } from '../../types';
 import {
   createPemVisitForBatch,
   getBatch,
+  getResultsDraft,
   listBatches,
+  listCaptureLearners,
+  listResultsDrafts,
   listComponentsForSitting,
   listMarkingModerationVisitsForSitting,
   listSittingsAwaitingSubmission,
@@ -13,6 +16,7 @@ import {
   saveComplianceChecklist,
   saveComplianceReviewNotes,
   saveEvidenceEvaluationNotes,
+  saveResultsDraft,
   submitResultsBatch,
   uploadEvidenceDocument,
 } from './api';
@@ -35,6 +39,8 @@ import type { FisaResultsBatch, FisaResultsDraftPatch, NewFisaResultsBatchInput,
 const LIST_KEY = ['approval-of-results', 'batches'] as const;
 const detailKey = (id: string) => ['approval-of-results', 'batches', id] as const;
 const AWAITING_KEY = ['approval-of-results', 'awaiting-submission'] as const;
+const DRAFTS_KEY_LIST = ['approval-of-results', 'drafts'] as const;
+const draftKey = (sittingId: string) => ['approval-of-results', 'draft', sittingId] as const;
 const mmKey = (sittingId: string) => ['approval-of-results', 'marking-moderation', sittingId] as const;
 
 export function useResultsBatches() {
@@ -55,6 +61,37 @@ export function useComponentsForSitting(sittingId: string | null) {
     queryKey: ['approval-of-results', 'components-for-sitting', sittingId ?? 'none'],
     queryFn: () => listComponentsForSitting(sittingId as string),
     enabled: !!sittingId,
+  });
+}
+
+// QCTO feedback 05.24: the learners (with ID numbers) and the saved draft for the capture screen.
+export function useCaptureLearners(sittingId: string | null) {
+  return useQuery({
+    queryKey: ['approval-of-results', 'capture-learners', sittingId ?? 'none'],
+    queryFn: () => listCaptureLearners(sittingId as string),
+    enabled: !!sittingId,
+  });
+}
+
+export function useResultsDrafts() {
+  return useQuery({ queryKey: DRAFTS_KEY_LIST, queryFn: listResultsDrafts });
+}
+
+export function useResultsDraft(sittingId: string | null) {
+  return useQuery({ queryKey: draftKey(sittingId ?? 'none'), queryFn: () => getResultsDraft(sittingId as string), enabled: !!sittingId });
+}
+
+export function useSaveResultsDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: saveResultsDraft,
+    onSuccess: (draft) => {
+      queryClient.setQueryData(draftKey(draft.sittingId), draft);
+      queryClient.invalidateQueries({ queryKey: DRAFTS_KEY_LIST });
+      queryClient.invalidateQueries({ queryKey: AWAITING_KEY });
+      toast.success('Draft saved. You can come back to finish it.');
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });
 }
 

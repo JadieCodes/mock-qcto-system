@@ -15,3 +15,8 @@ export async function getSdpComplianceStatus(sdpName: string): Promise<boolean> 
 export async function listEnrolledLearners(sdpName: string): Promise<EnrolledLearner[]> {
   return ENROLLED_LEARNERS.filter((l) => l.sdpName === sdpName);
 }
+
+// QCTO feedback 05.23/05.24: the ID numbers of the learners on a results batch.
+export async function listEnrolledLearnersByIds(learnerIds: string[]): Promise<EnrolledLearner[]> {
+  return ENROLLED_LEARNERS.filter((l) => learnerIds.includes(l.id));
+}

@@ -178,3 +178,24 @@ export interface FisaResultsDraftPatch {
   learnerResults?: LearnerResult[];
   evidenceDocuments?: TaggedEvidenceDocument[];
 }
+
+// ---------------------------------------------------------------------------
+// QCTO feedback 05.24: the QP's results capture screen.
+// ---------------------------------------------------------------------------
+
+// A learner on the sitting's EISA Confirmation, with the ID number the QA domain holds for them
+// (05.23: the capture screen flags an invalid stored ID, and File 3 rows are matched on it).
+export interface CaptureLearner {
+  learnerId: string;
+  fullName: string;
+  idNumber: string;
+}
+
+// "Save draft": unfinished marks kept for a sitting that has no batch yet. Marks may be blank or
+// out of range here — the checks only gate Submit. Removed when the batch is submitted.
+export interface ResultsDraft {
+  sittingId: string;
+  learnerResults: EisaLearnerResult[];
+  savedAt: string;
+  savedBy: string;
+}

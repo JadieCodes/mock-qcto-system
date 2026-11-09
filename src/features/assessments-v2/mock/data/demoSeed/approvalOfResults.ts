@@ -13,7 +13,9 @@
 // (one component below its pass mark), A = Absent. Rate = competent / wrote.
 //
 //  #    Qualification      EISA date    QP                   Pattern  Rate   Stage
-//  —    Electrical Trades  today - 15   Nomvula Dlamini      —        —      Awaiting submission (QP side) — no batch yet
+//  —    Electrical Trades  today - 15   Nomvula Dlamini      —        —      Awaiting submission (QP side) — no batch yet, nothing captured
+//  —    Welding            today - 20   Precious Mahlangu    —        —      Awaiting submission (QP side) — no batch yet, with a saved draft
+//                                                                          (seedResultsDrafts(): Batch L2, 05.24)
 //  A2   Plumbing           today - 30   Johan van der Merwe  CCCN     75%    Submitted — with the ASD, review not started
 //  A3   Welding            today - 45   Precious Mahlangu    CCCN     75%    ASD: compliance review (notes + first folder done)
 //  A4   Electrical Trades  today - 60   Nomvula Dlamini      CCA      100%   ASD: evidence evaluation (both notes, 3 of 4 folders, evidence uploaded)
@@ -38,7 +40,7 @@ import { snapshotResultsComponents } from '../../../modules/approval-of-results/
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
 import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
-import type { EisaLearnerResult, ResultsBatch, ResultsComponent } from '../../../modules/approval-of-results/types';
+import type { EisaLearnerResult, ResultsBatch, ResultsComponent, ResultsDraft } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
@@ -292,4 +294,27 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
 
   // Newest first, the order submitResultsBatch() leaves the list in.
   return batches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+}
+
+// QCTO feedback 05.24: the saved draft behind the Welding sitting at today - 20 — the first two
+// learners captured (one competent, one with a mark below the pass mark in the first component),
+// the third learner still blank. The draft holds marks only; the checks apply at Submit.
+export function seedResultsDrafts(confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[]): ResultsDraft[] {
+  const date = workingDateFromToday(-20);
+  const confirmation = confirmations.find((c) => c.qualificationTitle === 'Welding' && c.sittingDate === date);
+  if (!confirmation) throw new Error(`Demo seed: no EISA Confirmation for Welding ${date}.`);
+  const components = snapshotResultsComponents(qasas, confirmation);
+  if (components.length === 0) throw new Error('Demo seed: the approved QASA for Welding has no assessment components.');
+  const [first] = components;
+  const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => {
+    if (i === 0) return { learnerId: l.learnerId, fullName: l.fullName, absent: false, marks: seedMarks(components, 'C', i) };
+    if (i === 1) return { learnerId: l.learnerId, fullName: l.fullName, absent: false, marks: { [first.id]: Math.max(0, first.passMark - 5) } };
+    return { learnerId: l.learnerId, fullName: l.fullName, absent: false, marks: {} };
+  });
+  // The draft must be genuinely unfinished: the first learner passes the checks, the others do not.
+  if (markEntryIssues(components, learnerResults.slice(0, 1)).length > 0 || markEntryIssues(components, learnerResults.slice(1)).length === 0) {
+    throw new Error('Demo seed: the results draft is not in the unfinished state it should show.');
+  }
+  const qp = seedPerson(confirmation.qpId);
+  return [{ sittingId: confirmation.sittingId, learnerResults, savedAt: createClock().at(2, 15), savedBy: qp.name }];
 }

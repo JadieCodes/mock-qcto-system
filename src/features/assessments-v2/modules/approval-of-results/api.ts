@@ -2,6 +2,7 @@ import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
+import { listEnrolledLearnersByIds } from '../../mock/api/qaDomain';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { buildResultsComplianceChecklist } from '../../mock/data/resultsComplianceFolders';
 import type { Role } from '../../types';
@@ -15,9 +16,11 @@ import { NO_COMPONENTS_MESSAGE, snapshotResultsComponents } from './componentSna
 import { RESULTS_AD_ROLE } from './config';
 import { markEntryIssues } from './markEntry';
 import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
-import type { EvidenceDocument, NewResultsBatchInput, ResultsBatch, ResultsComponent } from './types';
+import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, NewResultsBatchInput, ResultsBatch, ResultsComponent, ResultsDraft } from './types';
 
 export const KEY = 'approvalOfResults:batches';
+// QCTO feedback 05.24: the QP's saved drafts, one per sitting that has no batch yet.
+export const DRAFTS_KEY = 'approvalOfResults:drafts';
 
 function loadAll(): ResultsBatch[] {
   return readStore<ResultsBatch[]>(KEY, []);
@@ -38,7 +41,7 @@ function replace(batches: ResultsBatch[], updated: ResultsBatch): ResultsBatch[]
 }
 
 // QCTO feedback 29.31: batches stored before results were per component are cleared by the
-// SEED_VERSION bump to 'A12' (mock/api/storage.ts), so no shape migration is needed here.
+// SEED_VERSION bump to 'A12' (drafts are new in 'A13') (mock/api/storage.ts), so no shape migration is needed here.
 export async function listBatches(): Promise<ResultsBatch[]> {
   return loadAll();
 }
@@ -53,6 +56,40 @@ export async function listComponentsForSitting(sittingId: string): Promise<Resul
   const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
   if (!confirmation) return [];
   return snapshotResultsComponents(await listApplications(), confirmation);
+}
+
+function loadDrafts(): ResultsDraft[] {
+  return readStore<ResultsDraft[]>(DRAFTS_KEY, []);
+}
+
+export async function listResultsDrafts(): Promise<ResultsDraft[]> {
+  return loadDrafts();
+}
+
+export async function getResultsDraft(sittingId: string): Promise<ResultsDraft | null> {
+  return loadDrafts().find((d) => d.sittingId === sittingId) ?? null;
+}
+
+// QCTO feedback 05.24: the learners on the sitting with the ID number the QA domain holds for each.
+export async function listCaptureLearners(sittingId: string): Promise<CaptureLearner[]> {
+  const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
+  if (!confirmation) return [];
+  const enrolled = await listEnrolledLearnersByIds(confirmation.learners.map((l) => l.learnerId));
+  return confirmation.learners.map((l) => ({
+    learnerId: l.learnerId,
+    fullName: l.fullName,
+    idNumber: enrolled.find((e) => e.id === l.learnerId)?.idNumber ?? '',
+  }));
+}
+
+// "Save draft": unfinished marks are kept as typed — only Submit applies the checks.
+export async function saveResultsDraft(input: { sittingId: string; learnerResults: EisaLearnerResult[]; savedBy: string }): Promise<ResultsDraft> {
+  if (loadAll().some((b) => b.sittingId === input.sittingId)) throw new Error('A results batch has already been submitted for this sitting.');
+  const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === input.sittingId);
+  if (!confirmation || confirmation.workflow.stageId !== 'confirmed') throw new Error('Results can only be saved for a confirmed sitting.');
+  const draft: ResultsDraft = { sittingId: input.sittingId, learnerResults: input.learnerResults, savedAt: new Date().toISOString(), savedBy: input.savedBy };
+  writeStore(DRAFTS_KEY, [draft, ...loadDrafts().filter((d) => d.sittingId !== input.sittingId)]);
+  return draft;
 }
 
 // CR-059: only sittings with a fully CONFIRMED EISA Confirmation, and without an existing
@@ -114,6 +151,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     createdBy: input.submittedBy,
   };
   saveAll([batch, ...all]);
+  writeStore(DRAFTS_KEY, loadDrafts().filter((d) => d.sittingId !== input.sittingId));
 
   addNotification({
     recipientRole: RESULTS_AD_ROLE,

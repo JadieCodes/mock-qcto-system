@@ -8,6 +8,7 @@
 //  F1   Electrical Trades, today+35   Nomvula Dlamini      Lindiwe Khumalo  Ready to confirm — list acknowledged, QP still to confirm
 //                                                                           centres, learner counts and marking/moderation dates
 //                                                                           (2 centres: Khanya Skills Academy, Thabo Technical College)
+//  F13  Welding, today - 20   Precious Mahlangu   Lindiwe Khumalo  Confirmed, Khanya (3 learners) — awaiting results with a saved draft (Batch L2)
 //  F2–F12  the 11 past sittings behind eisaRegistration.ts P1–P11: Confirmed, ~5 weeks before
 //       each sitting, with marking 2 and moderation 7 working days after it. F2 (Electrical
 //       Trades, today - 15) is the confirmed one still awaiting its results batch.
@@ -150,6 +151,10 @@ export function seedEisaConfirmations(log: SeedLog, sittings: EisaSitting[], reg
       .confirm(sittingDaysAgo + 35)
       .done();
   }
+
+  // F13 (Batch L2, 05.24) — confirmed, awaiting results with a saved draft. Generated after the
+  // loop above so no earlier confirmation changes id.
+  generate(sittingAt(sittings, 'Welding', -20), LINDIWE, 60).acknowledge(57).confirm(55).done();
 
   // F1 — ready for the QP to confirm.
   generate(sittingAt(sittings, 'Electrical Trades', 35), LINDIWE, 12).acknowledge(6).done();

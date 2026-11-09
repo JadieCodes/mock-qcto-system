@@ -1,13 +1,14 @@
 // Demo seed (QCTO feedback Batch C) — so every module opens with records at every stage after
 // "Reset demo data". Records per module are listed at the top of each file:
 //   qasa.ts                  13 QASA submissions (phase C1; the 13th added in Batch E)
-//   eisaCalendar.ts          3 QP batches, 24 sittings — 7 from the batches, 17 added by the ASD (phases C1, C2);
+//   eisaCalendar.ts          3 QP batches, 25 sittings — 7 from the batches, 18 added by the ASD (phases C1, C2, Batch L2);
 //                            3 postponement/cancellation requests (QCTO feedback 2.4)
 //   instrumentValidation.ts  4 EISA Instrument Validations (phase C1)
-//   eisaRegistration.ts      20 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
-//   eisaConfirmation.ts      12 EISA Confirmations — 1 ready to confirm, 11 confirmed (phase C2)
-//   approvalOfResults.ts     10 results batches at every stage, 1 sitting awaiting submission (phase C2);
-//                            marks per component from the approved QASAs, some learners absent (Batch L1)
+//   eisaRegistration.ts      21 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
+//   eisaConfirmation.ts      13 EISA Confirmations — 1 ready to confirm, 12 confirmed (phases C2, L2)
+//   approvalOfResults.ts     10 results batches at every stage, 2 sittings awaiting submission (phase C2);
+//                            marks per component from the approved QASAs, some learners absent (Batch L1);
+//                            one awaiting sitting has a saved capture draft, one is empty (Batch L2)
 //   fisaResults.ts           4 FISA results batches: awaiting submission, with the ASD, with the DD,
 //                            approved with the letter sent (QCTO feedback 3.14)
 //   siteVisits.ts            16 site visits — every type, every planning and report stage (phase C3, Batch G)
@@ -21,7 +22,7 @@
 // sittings; Confirmation needs Registered registrations; Approval of Results needs Confirmed
 // confirmations and the approved QASAs' components; Site Visits needs the sittings, the RPL/ARPL monitoring items from
 // Registration and the low-competency results batch (it sets that batch's pemVisitId).
-import { KEY as RESULTS_KEY } from '../../../modules/approval-of-results/api';
+import { DRAFTS_KEY as RESULTS_DRAFTS_KEY, KEY as RESULTS_KEY } from '../../../modules/approval-of-results/api';
 import { FISA_RESULTS_KEY } from '../../../modules/approval-of-results/fisaApi';
 import { BATCHES_KEY, SITTINGS_KEY } from '../../../modules/eisa-calendar/api';
 import { CHANGE_REQUESTS_KEY } from '../../../modules/eisa-calendar/changeRequests';
@@ -36,7 +37,7 @@ import { KEY as AUDIT_KEY } from '../../../shared/audit/auditLog';
 import { KEY as NOTIFICATIONS_KEY } from '../../../shared/notifications/store';
 import { KEY as MONITORING_ITEMS_KEY } from '../../api/siteVisitsStore';
 import { clearWorkflowStores, isSeedCurrent, markSeedCurrent, writeStore } from '../../api/storage';
-import { seedResultsBatches } from './approvalOfResults';
+import { seedResultsBatches, seedResultsDrafts } from './approvalOfResults';
 import { seedEisaCalendar } from './eisaCalendar';
 import { seedEisaConfirmations } from './eisaConfirmation';
 import { seedEisaRegistrations } from './eisaRegistration';
@@ -56,6 +57,7 @@ export function seedDemoData(): void {
   const { registrations, monitoringItems } = seedEisaRegistrations(log, calendar.sittings);
   const confirmations = seedEisaConfirmations(log, calendar.sittings, registrations);
   const siteVisits = seedSiteVisits(log, calendar.sittings, registrations, monitoringItems, seedResultsBatches(log, confirmations, qasa));
+  const resultsDrafts = seedResultsDrafts(confirmations, qasa);
   const fisaValidations = seedFisaValidations(log);
   const fisaResults = seedFisaResultsBatches(log);
   const rplToolkits = seedRplToolkits(log);
@@ -68,6 +70,7 @@ export function seedDemoData(): void {
   writeStore(REGISTRATION_KEY, registrations);
   writeStore(CONFIRMATION_KEY, confirmations);
   writeStore(RESULTS_KEY, siteVisits.results);
+  writeStore(RESULTS_DRAFTS_KEY, resultsDrafts);
   writeStore(MONITORING_ITEMS_KEY, monitoringItems);
   writeStore(SITE_VISITS_KEY, siteVisits.visits);
   writeStore(FISA_VALIDATION_KEY, fisaValidations);

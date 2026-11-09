@@ -4,20 +4,26 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { saIdNumberIssue } from '../../../shared/validation/saIdNumber';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { ASSESSMENT_COMPONENT_TYPE_LABELS } from '../../qsa-addendum/assessmentDetails';
+import { calculateLearnerResult, EISA_OUTCOME_LABELS, type EisaLearnerOutcome } from '../calculation';
 import { NO_COMPONENTS_MESSAGE } from '../componentSnapshot';
 import { DeadlineBadge } from '../components/DeadlineBadge';
-import { useComponentsForSitting, useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
-import { markEntryIssues } from '../markEntry';
+import { EisaBatchFigures } from '../components/EisaBatchFigures';
+import { useCaptureLearners, useComponentsForSitting, useResultsDraft, useSaveResultsDraft, useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
+import { markEntryIssues, markIssue } from '../markEntry';
 import { submissionDeadlineFor } from '../workflow';
 import type { EisaConfirmationRecord } from '../../eisa-confirmation/types';
-import type { EisaLearnerResult, EvidenceDocument, ResultsComponent } from '../types';
+import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, ResultsComponent, ResultsDraft } from '../types';
+import { File3Upload } from './File3Upload';
 
 interface LearnerRow {
   absent: boolean;
-  // One entry per component, in component order.
+  // One entry per component, in component order. Text, so a half-typed mark is kept as typed.
   marks: string[];
 }
 
@@ -25,48 +31,71 @@ interface FormValues {
   learners: LearnerRow[];
 }
 
-function toLearnerResults(sitting: EisaConfirmationRecord, components: ResultsComponent[], rows: LearnerRow[]): EisaLearnerResult[] {
-  return sitting.learners.map((l, i) => {
+const OUTCOME_CLASS: Record<EisaLearnerOutcome, string> = {
+  competent: 'text-emerald-700',
+  'not-yet-competent': 'text-amber-700',
+  absent: 'text-gray-500',
+};
+
+function toLearnerResults(learners: CaptureLearner[], components: ResultsComponent[], rows: LearnerRow[]): EisaLearnerResult[] {
+  return learners.map((l, i) => {
     const row = rows[i];
     const marks: Record<string, number> = {};
-    if (!row.absent) {
+    if (!row?.absent) {
       components.forEach((c, j) => {
-        const raw = row.marks[j]?.trim() ?? '';
+        const raw = row?.marks[j]?.trim() ?? '';
         if (raw !== '') marks[c.id] = Number(raw);
       });
     }
-    return { learnerId: l.learnerId, fullName: l.fullName, absent: row.absent, marks };
+    return { learnerId: l.learnerId, fullName: l.fullName, absent: row?.absent ?? false, marks };
   });
 }
 
-// The form only mounts while a sitting is selected, keyed by its id — closing (or switching
-// sittings) unmounts it and discards whatever was typed, so the next open always starts fresh
-// from that sitting's current values with no reset effect needed (same pattern as the EISA
-// Calendar's AddEditSittingDialog).
-// QCTO feedback 29.31: a mark per component for every learner, or Absent — basic checks only
-// (a fuller capture screen and File 3 upload come in the next batch).
-function SubmitResultsBatchForm({
+function toRows(learners: CaptureLearner[], components: ResultsComponent[], results: EisaLearnerResult[] | undefined): LearnerRow[] {
+  return learners.map((l) => {
+    const saved = results?.find((r) => r.learnerId === l.learnerId);
+    return { absent: saved?.absent ?? false, marks: components.map((c) => (saved && !saved.absent && saved.marks[c.id] !== undefined ? String(saved.marks[c.id]) : '')) };
+  });
+}
+
+// The form only mounts while a sitting is selected and its learners and draft have loaded, keyed
+// by the sitting's id — closing (or switching sittings) unmounts it and discards whatever was
+// typed and not saved, so the next open starts fresh from the saved draft with no reset effect.
+// QCTO feedback 05.24: one row per learner, a mark per component and an Absent tick, checked as
+// the QP types with the same rules the api uses (markEntry.ts), with the live result per row
+// (calculation.ts) and live batch figures. "Save draft" keeps unfinished marks; "Submit results"
+// stays disabled until every row passes. File 3 (CSV) fills the same grid.
+function ResultsCaptureForm({
   sitting,
   components,
+  learners,
+  draft,
   actorId,
   actorName,
   onDone,
 }: {
   sitting: EisaConfirmationRecord;
   components: ResultsComponent[];
+  learners: CaptureLearner[];
+  draft: ResultsDraft | null | undefined;
   actorId: string;
   actorName: string;
   onDone: () => void;
 }) {
   const submitBatch = useSubmitResultsBatch();
+  const saveDraft = useSaveResultsDraft();
   const [evidenceDocuments, setEvidenceDocuments] = useState<EvidenceDocument[]>([]);
-  const { control, register, handleSubmit } = useForm<FormValues>({
-    defaultValues: { learners: sitting.learners.map(() => ({ absent: false, marks: components.map(() => '') })) },
+  const { control, register, handleSubmit, reset, setValue } = useForm<FormValues>({
+    defaultValues: { learners: toRows(learners, components, draft?.learnerResults) },
   });
   const rows = useWatch({ control, name: 'learners' });
-  const learnerResults = toLearnerResults(sitting, components, rows);
-  // Fix 2A: the shared validation-summary shape, not a silently-disabled button.
+  const learnerResults = toLearnerResults(learners, components, rows);
   const issues = markEntryIssues(components, learnerResults);
+
+  // A row is complete when it is Absent or every mark passes the shared check.
+  const isComplete = (r: EisaLearnerResult) => r.absent || components.every((c) => markIssue(c, r.marks[c.id]) === null);
+  const completeResults = learnerResults.filter(isComplete);
+  const incompleteCount = learnerResults.length - completeResults.length;
 
   const onSubmit = () => {
     if (issues.length > 0) return;
@@ -80,45 +109,88 @@ function SubmitResultsBatchForm({
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4">
         <DeadlineBadge deadline={submissionDeadlineFor(sitting.sittingDate)} />
+        {draft && (
+          <p className="text-xs text-gray-500">
+            Draft last saved {new Date(draft.savedAt).toLocaleString('en-ZA')} by {draft.savedBy}.
+          </p>
+        )}
+
+        <File3Upload
+          sittingDate={sitting.sittingDate}
+          components={components}
+          learners={learners}
+          onFill={(results) => reset({ learners: toRows(learners, components, results) })}
+        />
 
         <div className="space-y-2">
           <Label>Learner Marks *</Label>
-          <div className="overflow-x-auto rounded-xl border max-h-80 overflow-y-auto">
+          <div className="overflow-x-auto rounded-xl border max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs text-gray-600">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-left text-xs text-gray-600">
                 <tr>
-                  <th className="p-2 font-medium">Learner</th>
+                  <th className="sticky left-0 z-20 bg-gray-50 p-2 font-medium whitespace-nowrap">Learner</th>
                   {components.map((c) => (
-                    <th key={c.id} className="p-2 font-medium whitespace-nowrap">
+                    <th key={c.id} className="p-2 font-medium whitespace-nowrap align-bottom">
                       <span className="block">{c.name}</span>
+                      <span className="block font-normal text-gray-500">{ASSESSMENT_COMPONENT_TYPE_LABELS[c.type]}</span>
+                      <span className="block font-normal text-gray-500">EISA date {c.eisaDate}</span>
                       <span className="block font-normal text-gray-500">
-                        EISA date {c.eisaDate} · out of {c.totalMarks}
+                        Total {c.totalMarks} · pass {c.passMark}
                       </span>
                     </th>
                   ))}
-                  <th className="p-2 font-medium">Absent</th>
+                  <th className="p-2 font-medium align-bottom">Absent</th>
+                  <th className="p-2 font-medium align-bottom whitespace-nowrap">Weighted score</th>
+                  <th className="p-2 font-medium align-bottom">Result</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {sitting.learners.map((learner, i) => {
-                  const absent = rows[i]?.absent ?? false;
+                {learners.map((learner, i) => {
+                  const result = learnerResults[i];
+                  const absent = result.absent;
+                  const complete = isComplete(result);
+                  const calc = complete ? calculateLearnerResult(components, result) : null;
+                  const idIssue = saIdNumberIssue(learner.idNumber);
                   return (
-                    <tr key={learner.learnerId}>
-                      <td className="p-2 text-gray-700 whitespace-nowrap">{learner.fullName}</td>
-                      {components.map((c, j) => (
-                        <td key={c.id} className="p-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={c.totalMarks}
-                            step="any"
-                            className="w-24"
-                            disabled={absent}
-                            aria-label={`${learner.fullName} — ${c.name} mark out of ${c.totalMarks}`}
-                            {...register(`learners.${i}.marks.${j}`)}
-                          />
-                        </td>
-                      ))}
+                    <tr key={learner.learnerId} className="align-top">
+                      <td className="sticky left-0 z-[5] bg-white p-2 whitespace-nowrap">
+                        <span className="block font-medium text-gray-800">{learner.fullName}</span>
+                        <span className="block font-mono text-xs text-gray-500">{learner.idNumber || 'No ID number'}</span>
+                        {idIssue && <span className="block max-w-[14rem] whitespace-normal text-xs text-amber-700">{idIssue}. Ask the SDP to correct the learner record.</span>}
+                      </td>
+                      {components.map((c, j) => {
+                        const raw = rows[i]?.marks[j]?.trim() ?? '';
+                        // Blank is not an error until Submit — only a typed mark is judged live.
+                        const message = absent || raw === '' ? null : markIssue(c, result.marks[c.id]);
+                        const errorId = `mark-error-${learner.learnerId}-${c.id}`;
+                        return (
+                          <td key={c.id} className="p-2">
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              max={c.totalMarks}
+                              step="any"
+                              className={cn('w-24', message && 'border-red-400')}
+                              disabled={absent}
+                              aria-label={`${learner.fullName} — ${c.name} mark out of ${c.totalMarks}`}
+                              aria-invalid={message ? true : undefined}
+                              aria-describedby={message ? errorId : undefined}
+                              {...register(`learners.${i}.marks.${j}`)}
+                            />
+                            {message && (
+                              <p id={errorId} className="mt-1 max-w-[7rem] text-xs text-red-600">
+                                {message}
+                              </p>
+                            )}
+                            {!message && !absent && raw !== '' && (
+                              <p className={cn('mt-1 text-xs', result.marks[c.id] >= c.passMark ? 'text-emerald-700' : 'text-amber-700')}>
+                                {result.marks[c.id] >= c.passMark ? 'C' : 'NYC'}
+                              </p>
+                            )}
+                          </td>
+                        );
+                      })}
                       <td className="p-2">
                         <Controller
                           control={control}
@@ -126,11 +198,21 @@ function SubmitResultsBatchForm({
                           render={({ field }) => (
                             <Checkbox
                               checked={field.value}
-                              onCheckedChange={(checked) => field.onChange(checked === true)}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked === true);
+                                // Absent clears the learner's marks (the inputs are locked while ticked).
+                                if (checked === true) setValue(`learners.${i}.marks`, components.map(() => ''));
+                              }}
                               aria-label={`${learner.fullName} was absent`}
                             />
                           )}
                         />
+                      </td>
+                      <td className="p-2 whitespace-nowrap text-gray-700">
+                        {calc && calc.weightedScorePercent !== null ? `${calc.weightedScorePercent}%` : '—'}
+                      </td>
+                      <td className={cn('p-2 whitespace-nowrap font-medium', calc ? OUTCOME_CLASS[calc.outcome] : 'text-gray-400')}>
+                        {calc ? EISA_OUTCOME_LABELS[calc.outcome] : 'Incomplete'}
                       </td>
                     </tr>
                   );
@@ -138,7 +220,18 @@ function SubmitResultsBatchForm({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-gray-500">Enter a mark from 0 to the component's total for every learner, or tick Absent.</p>
+          <p className="text-xs text-gray-500">
+            Enter a mark from 0 to the component's total for every learner, or tick Absent. C = competent in that component, NYC = not yet competent.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <EisaBatchFigures batch={{ components, learnerResults: completeResults }} />
+          {incompleteCount > 0 && (
+            <p className="text-xs text-amber-700">
+              These figures count the {completeResults.length} of {learnerResults.length} learners whose rows are complete so far.
+            </p>
+          )}
         </div>
 
         <ValidationSummary issues={issues} title="Every learner needs a mark per component (or Absent) before you can submit:" />
@@ -165,12 +258,20 @@ function SubmitResultsBatchForm({
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
+      <div className="flex flex-wrap justify-end gap-2 pt-4 mt-4 border-t">
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={saveDraft.isPending || submitBatch.isPending}
+          onClick={() => saveDraft.mutate({ sittingId: sitting.sittingId, learnerResults, savedBy: actorName })}
+        >
+          Save draft
+        </Button>
         <Button type="submit" disabled={submitBatch.isPending || issues.length > 0}>
-          Submit
+          Submit results
         </Button>
       </div>
     </form>
@@ -178,13 +279,15 @@ function SubmitResultsBatchForm({
 }
 
 // CR-059: the QP submits a results batch for a confirmed sitting — the learners are read from
-// the EISA Confirmation record and the components from the approved QASA (29.31); the QP enters
-// a mark per component or Absent and can attach evidence (UI-only file names, same pattern as
-// every other upload in this domain).
+// the EISA Confirmation record and the components from the approved QASA (29.31); the QP
+// captures marks on screen or from a File 3 CSV (05.24) and can attach evidence (UI-only file
+// names, same pattern as every other upload in this domain).
 export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingId: string | null; onOpenChange: (open: boolean) => void }) {
   const { person } = useV2Role();
   const { data: awaiting = [] } = useSittingsAwaitingSubmission();
   const { data: components, isLoading } = useComponentsForSitting(sittingId);
+  const { data: learners } = useCaptureLearners(sittingId);
+  const { data: draft, isFetched: draftFetched } = useResultsDraft(sittingId);
   const sitting = awaiting.find((s) => s.sittingId === sittingId);
 
   return (
@@ -205,11 +308,13 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
           </div>
         </div>
       )}
-      {sitting && components && components.length > 0 && (
-        <SubmitResultsBatchForm
+      {sitting && components && components.length > 0 && learners && draftFetched && (
+        <ResultsCaptureForm
           key={sitting.id}
           sitting={sitting}
           components={components}
+          learners={learners}
+          draft={draft}
           actorId={person.id}
           actorName={person.name}
           onDone={() => onOpenChange(false)}

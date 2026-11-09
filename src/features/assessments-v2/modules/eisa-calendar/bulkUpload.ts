@@ -1,3 +1,4 @@
+import { csvField, parseCsv } from '../../shared/csv/csv';
 import { toIsoDate } from '../../shared/dates/workingDays';
 import { minimumDateCount } from './api';
 import { checkSittingDate } from './dateChecks';
@@ -35,10 +36,6 @@ export interface BulkRow {
 
 export type BulkParseResult = { ok: true; rows: BulkRow[] } | { ok: false; error: string };
 
-function csvField(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 // One row per required sitting for each of this QP's qualifications, with the date left blank.
 export function buildTemplateCsv(qualifications: EligibleQualification[]): string {
   const lines = [COLUMN_KEYS.map((k) => csvField(BULK_COLUMNS[k])).join(',')];
@@ -49,49 +46,6 @@ export function buildTemplateCsv(qualifications: EligibleQualification[]): strin
     }
   }
   return `${lines.join('\r\n')}\r\n`;
-}
-
-// Handles quoted fields ("a, b"), doubled quotes, CRLF and a leading byte-order mark. A file
-// saved with semicolons (a common spreadsheet setting) is read the same way.
-export function parseCsv(text: string): string[][] {
-  const clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  const firstLine = clean.split(/\r?\n/, 1)[0] ?? '';
-  const delimiter = !firstLine.includes(',') && firstLine.includes(';') ? ';' : ',';
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < clean.length; i++) {
-    const ch = clean[i];
-    if (inQuotes) {
-      if (ch === '"' && clean[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        field += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === delimiter) {
-      row.push(field);
-      field = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && clean[i + 1] === '\n') i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += ch;
-    }
-  }
-  if (field !== '' || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows;
 }
 
 // Accepts 2027-03-15, 2027/03/15 and 15/03/2027 (how spreadsheets often save dates) and checks

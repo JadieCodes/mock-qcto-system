@@ -2,7 +2,7 @@ import { batchFiguresOf } from '../calculation';
 import type { ResultsBatch } from '../types';
 
 // QCTO feedback 29.31: the batch figures, on the internal workspace and the QP's batch detail.
-export function EisaBatchFigures({ batch }: { batch: ResultsBatch }) {
+export function EisaBatchFigures({ batch }: { batch: Pick<ResultsBatch, 'components' | 'learnerResults'> }) {
   const f = batchFiguresOf(batch);
   const tiles: { label: string; value: string }[] = [
     { label: 'Registered', value: String(f.registered) },

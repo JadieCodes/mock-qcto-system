@@ -35,6 +35,7 @@
 //  P9  Welding            today - 150  Khanya (5)
 //  P10 Electrical Trades  today - 170  Thabo (4)
 //  P11 Plumbing           today - 50   Lerato (3)
+//  P12 Welding            today - 20   Khanya (3) — Batch L2 (05.24)
 //
 // ASDs (09-visibility-matrix.md Section 3): Lindiwe Khumalo handles Khanya Skills
 // Academy; Riaan Pretorius handles Thabo Technical College and Lerato Training Institute.
@@ -335,6 +336,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     { title: 'Plumbing', offset: -50, parts: [{ sdpId: LERATO, learnerIds: ['learner-069', 'learner-070', 'learner-010'], adId: RIAAN }] },
     { title: 'Welding', offset: -45, parts: [{ sdpId: KHANYA, learnerIds: ['learner-028', 'learner-029', 'learner-030', 'learner-031'], adId: LINDIWE }] },
     { title: 'Plumbing', offset: -30, parts: [{ sdpId: LERATO, learnerIds: ['learner-057', 'learner-058', 'learner-059', 'learner-060'], adId: RIAAN }] },
+    { title: 'Welding', offset: -20, parts: [{ sdpId: KHANYA, learnerIds: ['learner-002', 'learner-003', 'learner-004'], adId: LINDIWE }] },
     {
       title: 'Electrical Trades',
       offset: -15,
