@@ -47,7 +47,8 @@ export function writeStore<T>(key: string, value: T): void {
 // results batches snapshot the components, with a mark per component or Absent per learner.
 // 'A13' = Batch L2 (05.23, 05.24): a second confirmed sitting awaiting results (Welding) with a
 // saved capture draft; the Electrical Trades one stays empty.
-export const SEED_VERSION = 'A13';
+// 'A13.1' = Batch L2.1: EISA and FISA results keep each learner's ID number.
+export const SEED_VERSION = 'A13.1';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

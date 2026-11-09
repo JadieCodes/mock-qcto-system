@@ -16,6 +16,8 @@ export type LearnerResultOutcome = 'competent' | 'not-yet-competent';
 export interface LearnerResult {
   learnerId: string;
   fullName: string;
+  // Batch L2.1: stored on the batch so the lists and downloads can show it next to the name.
+  idNumber: string;
   outcome: LearnerResultOutcome;
 }
 
@@ -37,6 +39,8 @@ export interface ResultsComponent {
 export interface EisaLearnerResult {
   learnerId: string;
   fullName: string;
+  // Batch L2.1: copied from the learner record when the batch is submitted.
+  idNumber: string;
   absent: boolean;
   // Component id -> mark. Empty when the learner was absent.
   marks: Record<string, number>;

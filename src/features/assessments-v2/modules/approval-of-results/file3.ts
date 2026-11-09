@@ -4,8 +4,8 @@
 // Learner ID number, Learner name, one column per component (header = component name) and
 // Absent (Y/N). The marks are checked with the same rules as the screen (markEntry.ts) and the
 // ID numbers with the shared check (05.23).
-import { csvField, parseCsv } from '../../shared/csv/csv';
-import { saIdNumberIssue } from '../../shared/validation/saIdNumber';
+import { csvField, normaliseHeading, parseCsvTable, withExcelPrefix } from '../../shared/csv/csv';
+import { saIdNumberIssue, withRestoredLeadingZero } from '../../shared/validation/saIdNumber';
 import { markIssue } from './markEntry';
 import type { CaptureLearner, EisaLearnerResult, ResultsComponent } from './types';
 
@@ -24,12 +24,14 @@ export function buildFile3TemplateCsv(components: ResultsComponent[], learners: 
   for (const l of learners) {
     lines.push([l.idNumber, l.fullName, ...components.map(() => ''), ''].map(csvField).join(','));
   }
-  return `${lines.join('\r\n')}\r\n`;
+  return withExcelPrefix(`${lines.join('\r\n')}\r\n`);
 }
 
 export interface File3Row {
   rowNumber: number; // the spreadsheet row, counting the header as row 1
   idNumber: string;
+  // Batch L2.1: Excel dropped the leading 0 and it was put back.
+  idZeroRestored: boolean;
   fullName: string;
   // The batch learner this row matched, or null (invalid or unknown ID number).
   learnerId: string | null;
@@ -60,29 +62,23 @@ function parseAbsent(text: string): boolean | null {
 }
 
 export function parseFile3(text: string, components: ResultsComponent[], learners: CaptureLearner[]): File3ParseResult {
-  const table = parseCsv(text).filter((cells) => cells.some((c) => c.trim() !== ''));
-  if (table.length === 0) return { ok: false, error: 'The file is empty. Download the template and add the marks to it.' };
-
-  // Extra columns are ignored; a missing required column rejects the whole file.
-  const header = table[0].map((h) => h.trim().toLowerCase());
+  // Extra columns are ignored; a missing required column (or a file Excel re-formatted) rejects
+  // the whole file. Marks keep their text here: "45,5" is read as 45.5 below.
   const required = [FILE3_ID_COLUMN, ...components.map((c) => c.name), FILE3_ABSENT_COLUMN];
-  const missing = required.filter((name) => !header.includes(name.toLowerCase()));
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      error: `The file is missing the required column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Use the template, keep its column headings, and save it as CSV.`,
-    };
-  }
+  const parsed = parseCsvTable(text, required);
+  if (!parsed.ok) return parsed;
+  const table = parsed.rows;
+  const header = table[0].map(normaliseHeading);
   if (table.length === 1) return { ok: false, error: 'The file has headings but no rows. Add one row per learner.' };
 
-  const columnOf = (name: string) => header.indexOf(name.toLowerCase());
+  const columnOf = (name: string) => header.indexOf(normaliseHeading(name));
   const idColumn = columnOf(FILE3_ID_COLUMN);
   const nameColumn = columnOf(FILE3_NAME_COLUMN);
   const absentColumn = columnOf(FILE3_ABSENT_COLUMN);
   const cell = (cells: string[], column: number) => (column >= 0 ? (cells[column] ?? '').trim() : '');
 
   const rows: File3Row[] = table.slice(1).map((cells, i) => {
-    const idNumber = cell(cells, idColumn);
+    const { idNumber, restored: idZeroRestored } = withRestoredLeadingZero(cell(cells, idColumn));
     const errors: string[] = [];
     const idIssue = saIdNumberIssue(idNumber);
     const learner = idIssue ? null : (learners.find((l) => l.idNumber === idNumber) ?? null);
@@ -112,6 +108,7 @@ export function parseFile3(text: string, components: ResultsComponent[], learner
     return {
       rowNumber: i + 2,
       idNumber,
+      idZeroRestored,
       fullName: cell(cells, nameColumn) || learner?.fullName || '',
       learnerId: learner?.learnerId ?? null,
       absent: absent === true,
@@ -138,7 +135,7 @@ export function parseFile3(text: string, components: ResultsComponent[], learner
         if (row && !row.absent) {
           for (const c of components) marks[c.id] = Number((row.markTexts[c.id] ?? '').replace(',', '.'));
         }
-        return { learnerId: l.learnerId, fullName: l.fullName, absent: row?.absent ?? false, marks };
+        return { learnerId: l.learnerId, fullName: l.fullName, idNumber: l.idNumber, absent: row?.absent ?? false, marks };
       })
     : null;
 

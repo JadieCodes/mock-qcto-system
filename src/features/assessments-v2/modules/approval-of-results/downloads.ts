@@ -27,7 +27,7 @@ interface LearnerTable {
 interface VerificationReportInput {
   heading: string;
   details: { label: string; value: string }[];
-  // FISA: Learner | Outcome. EISA (29.31): a column per component, the weighted score and the result.
+  // FISA: Learner | ID number | Outcome. EISA (29.31): a column per component, the weighted score and the result.
   learnerTable: LearnerTable;
   evidence: ReportEvidence[];
   declineHistory: ResultsDeclineEntry[];
@@ -75,7 +75,7 @@ function outcomeLabel(outcome: LearnerResult['outcome']): string {
 }
 
 function fisaLearnerTable(results: LearnerResult[]): LearnerTable {
-  return { headers: ['Learner', 'Outcome'], rows: results.map((r) => [r.fullName, outcomeLabel(r.outcome)]) };
+  return { headers: ['Learner', 'ID number', 'Outcome'], rows: results.map((r) => [r.fullName, r.idNumber, outcomeLabel(r.outcome)]) };
 }
 
 // QCTO feedback 29.31/29.32: each component column names its EISA date, total and pass mark.
@@ -83,6 +83,7 @@ function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
   return {
     headers: [
       'Learner',
+      'ID number',
       ...batch.components.map((c) => `${c.name} (EISA date ${c.eisaDate}; out of ${c.totalMarks}, pass ${c.passMark})`),
       'Weighted score',
       'Result',
@@ -91,6 +92,7 @@ function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
       const calc = calculateLearnerResult(batch.components, learner);
       return [
         learner.fullName,
+        learner.idNumber,
         ...calc.components.map((r) => (r.mark === null ? '—' : `${r.mark} (${r.competent ? 'C' : 'NYC'})`)),
         calc.weightedScorePercent === null ? '—' : `${calc.weightedScorePercent}%`,
         EISA_OUTCOME_LABELS[calc.outcome],

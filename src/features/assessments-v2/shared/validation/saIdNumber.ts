@@ -37,6 +37,17 @@ export function saIdNumberIssue(idNumber: string): string | null {
   return null;
 }
 
+export const ID_ZERO_RESTORED_NOTE = 'Leading 0 restored (Excel removes it)';
+
+// Batch L2.1: Excel turns the ID number into a number and drops a leading 0 (learners born in
+// 2000 or later). A 12-digit value is only given its 0 back when the 13-digit result is a valid
+// ID number; otherwise it stays as typed and fails the length check.
+export function withRestoredLeadingZero(idNumber: string): { idNumber: string; restored: boolean } {
+  const value = idNumber.trim();
+  if (/^\d{12}$/.test(value) && saIdNumberIssue(`0${value}`) === null) return { idNumber: `0${value}`, restored: true };
+  return { idNumber: value, restored: false };
+}
+
 export function isValidSaIdNumber(idNumber: string): boolean {
   return saIdNumberIssue(idNumber) === null;
 }

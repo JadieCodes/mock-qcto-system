@@ -82,7 +82,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
       const learner = ENROLLED_LEARNERS.find((l) => l.id === id);
       if (!learner || learner.sdpName !== sdp.name) throw new Error(`Demo seed: ${id} is not enrolled at ${sdp.name}.`);
       const outcome: LearnerResultOutcome = i < competent ? 'competent' : 'not-yet-competent';
-      return { learnerId: learner.id, fullName: learner.fullName, outcome };
+      return { learnerId: learner.id, fullName: learner.fullName, idNumber: learner.idNumber, outcome };
     });
     if (new Set(learnerIds).size !== learnerIds.length) throw new Error('Demo seed: a learner can only appear once on a batch.');
 

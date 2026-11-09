@@ -43,6 +43,7 @@ import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approv
 import type { EisaLearnerResult, ResultsBatch, ResultsComponent, ResultsDraft } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
+import { ENROLLED_LEARNERS } from '../enrolledLearners';
 import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
 
 const RESULTS_ID_GROUP = 7;
@@ -107,6 +108,13 @@ function seedMarks(components: ResultsComponent[], code: OutcomeCode, learnerInd
   );
 }
 
+// Batch L2.1: the ID number the QA domain holds for a learner on a confirmation.
+function idNumberOf(learnerId: string): string {
+  const learner = ENROLLED_LEARNERS.find((l) => l.id === learnerId);
+  if (!learner) throw new Error(`Demo seed: no enrolled learner "${learnerId}".`);
+  return learner.idNumber;
+}
+
 export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[]): ResultsBatch[] {
   const batches: ResultsBatch[] = [];
 
@@ -137,6 +145,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => ({
       learnerId: l.learnerId,
       fullName: l.fullName,
+      idNumber: idNumberOf(l.learnerId),
       absent: codes[i] === 'A',
       marks: seedMarks(components, codes[i], i),
     }));
@@ -307,9 +316,9 @@ export function seedResultsDrafts(confirmations: EisaConfirmationRecord[], qasas
   if (components.length === 0) throw new Error('Demo seed: the approved QASA for Welding has no assessment components.');
   const [first] = components;
   const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => {
-    if (i === 0) return { learnerId: l.learnerId, fullName: l.fullName, absent: false, marks: seedMarks(components, 'C', i) };
-    if (i === 1) return { learnerId: l.learnerId, fullName: l.fullName, absent: false, marks: { [first.id]: Math.max(0, first.passMark - 5) } };
-    return { learnerId: l.learnerId, fullName: l.fullName, absent: false, marks: {} };
+    if (i === 0) return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: seedMarks(components, 'C', i) };
+    if (i === 1) return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: { [first.id]: Math.max(0, first.passMark - 5) } };
+    return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: {} };
   });
   // The draft must be genuinely unfinished: the first learner passes the checks, the others do not.
   if (markEntryIssues(components, learnerResults.slice(0, 1)).length > 0 || markEntryIssues(components, learnerResults.slice(1)).length === 0) {

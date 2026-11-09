@@ -41,7 +41,7 @@ function replace(batches: ResultsBatch[], updated: ResultsBatch): ResultsBatch[]
 }
 
 // QCTO feedback 29.31: batches stored before results were per component are cleared by the
-// SEED_VERSION bump to 'A12' (drafts are new in 'A13') (mock/api/storage.ts), so no shape migration is needed here.
+// SEED_VERSION bump to 'A12' (drafts are new in 'A13'; learner ID numbers on results in 'A13.1') (mock/api/storage.ts), so no shape migration is needed here.
 export async function listBatches(): Promise<ResultsBatch[]> {
   return loadAll();
 }
@@ -126,6 +126,10 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   }
   const markIssues = markEntryIssues(components, input.learnerResults);
   if (markIssues.length > 0) throw new Error(markIssues[0].message);
+  // Batch L2.1: the ID number is stored on each learner's result (from the QA learner record,
+  // whether the marks were captured on screen or came from File 3).
+  const enrolled = await listEnrolledLearnersByIds(confirmation.learners.map((l) => l.learnerId));
+  const idNumberOf = (r: EisaLearnerResult) => enrolled.find((e) => e.id === r.learnerId)?.idNumber ?? r.idNumber;
 
   const batch: ResultsBatch = {
     id: crypto.randomUUID(),
@@ -136,7 +140,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
     components,
-    learnerResults: input.learnerResults.map((r) => (r.absent ? { ...r, marks: {} } : r)),
+    learnerResults: input.learnerResults.map((r) => ({ ...r, idNumber: idNumberOf(r), marks: r.absent ? {} : r.marks })),
     evidenceDocuments: input.evidenceDocuments,
     complianceReviewNotes: '',
     evidenceEvaluationNotes: '',

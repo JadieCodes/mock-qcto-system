@@ -48,9 +48,9 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
 
   const outcomeOf = (learnerId: string) => batch.learnerResults.find((r) => r.learnerId === learnerId)?.outcome ?? NOT_ON_BATCH;
 
-  const setOutcome = (learnerId: string, fullName: string, value: string) => {
+  const setOutcome = (learnerId: string, fullName: string, idNumber: string, value: string) => {
     const others = batch.learnerResults.filter((r) => r.learnerId !== learnerId);
-    const updated = value === NOT_ON_BATCH ? others : [...others, { learnerId, fullName, outcome: value as LearnerResultOutcome }];
+    const updated = value === NOT_ON_BATCH ? others : [...others, { learnerId, fullName, idNumber, outcome: value as LearnerResultOutcome }];
     const order = new Map(learners.map((l, i) => [l.id, i]));
     saveLearnerResults(updated.sort((a, b) => (order.get(a.learnerId) ?? 0) - (order.get(b.learnerId) ?? 0)));
   };
@@ -68,8 +68,10 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
           <div className="rounded-xl border divide-y max-h-72 overflow-y-auto">
             {learners.map((learner) => (
               <div key={learner.id} className="flex items-center justify-between gap-3 p-2.5">
-                <span className="text-sm text-gray-700 truncate">{learner.fullName}</span>
-                <Select value={outcomeOf(learner.id)} onValueChange={(v) => setOutcome(learner.id, learner.fullName, v)}>
+                <span className="truncate text-sm text-gray-700">
+                  {learner.fullName} <span className="font-mono text-xs text-gray-500">{learner.idNumber}</span>
+                </span>
+                <Select value={outcomeOf(learner.id)} onValueChange={(v) => setOutcome(learner.id, learner.fullName, learner.idNumber, v)}>
                   <SelectTrigger className="w-48" aria-label={`Result for ${learner.fullName}`}>
                     <SelectValue />
                   </SelectTrigger>

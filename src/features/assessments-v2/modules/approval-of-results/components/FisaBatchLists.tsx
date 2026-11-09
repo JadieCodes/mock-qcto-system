@@ -10,7 +10,9 @@ export function FisaLearnerResultsList({ results }: { results: LearnerResult[] }
     <ul className="rounded-xl border divide-y max-h-56 overflow-y-auto">
       {results.map((r) => (
         <li key={r.learnerId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-          <span className="truncate text-gray-700">{r.fullName}</span>
+          <span className="truncate text-gray-700">
+            {r.fullName} <span className="font-mono text-xs text-gray-500">{r.idNumber}</span>
+          </span>
           <span className={r.outcome === 'competent' ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
             {r.outcome === 'competent' ? 'Competent' : 'Not yet competent'}
           </span>

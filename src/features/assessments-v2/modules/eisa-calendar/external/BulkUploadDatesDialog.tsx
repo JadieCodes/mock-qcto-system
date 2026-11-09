@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { downloadCsvFile, EXCEL_UPLOAD_TIP } from '../../../shared/csv/csv';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { BULK_COLUMNS, BULK_TEMPLATE_FILE_NAME, buildTemplateCsv, parseBulkFile, toBatchInputs, type BulkRow } from '../bulkUpload';
@@ -19,15 +20,6 @@ export function BulkUploadDatesDialog({ open, onOpenChange }: { open: boolean; o
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">{open && <BulkUploadForm onClose={() => onOpenChange(false)} />}</DialogContent>
     </Dialog>
   );
-}
-
-function downloadCsv(fileName: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function BulkUploadForm({ onClose }: { onClose: () => void }) {
@@ -84,7 +76,7 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
             size="sm"
             className="gap-2"
             disabled={ownQualifications.length === 0}
-            onClick={() => downloadCsv(BULK_TEMPLATE_FILE_NAME, buildTemplateCsv(ownQualifications))}
+            onClick={() => downloadCsvFile(BULK_TEMPLATE_FILE_NAME, buildTemplateCsv(ownQualifications))}
           >
             <Download className="h-4 w-4" />
             Download template (CSV)
@@ -94,7 +86,7 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-2">
           <Label htmlFor="bulk-dates-file">2. Choose your file</Label>
-          <p className="text-xs text-gray-500">Save your spreadsheet as CSV before you upload it.</p>
+          <p className="text-xs text-gray-500">{EXCEL_UPLOAD_TIP}</p>
           <input id="bulk-dates-file" type="file" accept=".csv,text/csv" className="block text-sm"
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];

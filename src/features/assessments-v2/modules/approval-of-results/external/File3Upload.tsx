@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Download, FileCheck2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { downloadCsvFile } from '../../../shared/csv/csv';
+import { downloadCsvFile, EXCEL_UPLOAD_TIP } from '../../../shared/csv/csv';
+import { ID_ZERO_RESTORED_NOTE } from '../../../shared/validation/saIdNumber';
 import { buildFile3TemplateCsv, file3TemplateFileName, parseFile3, type File3ParseResult } from '../file3';
 import type { CaptureLearner, EisaLearnerResult, ResultsComponent } from '../types';
 
@@ -86,6 +87,7 @@ export function File3Upload({
         </label>
         {fileName && <span className="font-mono text-xs text-gray-500">{fileName}</span>}
       </div>
+      <p className="text-xs text-gray-500">{EXCEL_UPLOAD_TIP}</p>
 
       {fileError && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
@@ -125,7 +127,10 @@ export function File3Upload({
                 {result.rows.map((row) => (
                   <tr key={row.rowNumber} className={cn(row.errors.length > 0 && 'bg-red-50/60')}>
                     <td className="p-2">{row.rowNumber}</td>
-                    <td className="p-2 font-mono whitespace-nowrap">{row.idNumber}</td>
+                    <td className="p-2 font-mono whitespace-nowrap">
+                      {row.idNumber}
+                      {row.idZeroRestored && <span className="block font-sans text-[11px] text-gray-500">{ID_ZERO_RESTORED_NOTE}</span>}
+                    </td>
                     <td className="p-2 whitespace-nowrap">{row.fullName}</td>
                     {components.map((c) => (
                       <td key={c.id} className="p-2">

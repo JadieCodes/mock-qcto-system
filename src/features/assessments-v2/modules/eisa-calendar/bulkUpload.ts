@@ -1,4 +1,4 @@
-import { csvField, parseCsv } from '../../shared/csv/csv';
+import { csvField, normaliseHeading, parseCsvTable, withExcelPrefix } from '../../shared/csv/csv';
 import { toIsoDate } from '../../shared/dates/workingDays';
 import { minimumDateCount } from './api';
 import { checkSittingDate } from './dateChecks';
@@ -45,11 +45,11 @@ export function buildTemplateCsv(qualifications: EligibleQualification[]): strin
       lines.push([q.qualificationTitle, q.qualificationId, q.nqfLevel ?? '', q.credits ?? '', ''].map(csvField).join(','));
     }
   }
-  return `${lines.join('\r\n')}\r\n`;
+  return withExcelPrefix(`${lines.join('\r\n')}\r\n`);
 }
 
-// Accepts 2027-03-15, 2027/03/15 and 15/03/2027 (how spreadsheets often save dates) and checks
-// that the day really exists.
+// Accepts 2027-03-15, 2027/03/15 and 15/03/2027 (how Excel saves dates on South African
+// settings) and checks that the day really exists.
 export function normaliseDate(text: string): string | null {
   const value = text.trim();
   let y: number, m: number, d: number;
@@ -74,24 +74,13 @@ export function parseBulkFile(
   existingSittings: EisaSitting[],
   todayIso: string = toIsoDate(new Date()),
 ): BulkParseResult {
-  const table = parseCsv(text).filter((cells) => cells.some((c) => c.trim() !== ''));
-  if (table.length === 0) return { ok: false, error: 'The file is empty. Download the template and add your dates to it.' };
-
-  // Extra columns are ignored; a missing required column rejects the whole file.
-  const header = table[0].map((h) => h.trim().toLowerCase());
-  const index = new Map<BulkColumnKey, number>();
-  const missing: string[] = [];
-  for (const key of COLUMN_KEYS) {
-    const at = header.indexOf(BULK_COLUMNS[key].toLowerCase());
-    if (at === -1) missing.push(BULK_COLUMNS[key]);
-    index.set(key, at);
-  }
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      error: `The file is missing the required column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Use the template, keep its column headings, and save it as CSV.`,
-    };
-  }
+  // Extra columns are ignored; a missing required column (or a file Excel re-formatted) rejects
+  // the whole file.
+  const parsed = parseCsvTable(text, COLUMN_KEYS.map((k) => BULK_COLUMNS[k]));
+  if (!parsed.ok) return parsed;
+  const table = parsed.rows;
+  const header = table[0].map(normaliseHeading);
+  const index = new Map<BulkColumnKey, number>(COLUMN_KEYS.map((key) => [key, header.indexOf(normaliseHeading(BULK_COLUMNS[key]))]));
   if (table.length === 1) return { ok: false, error: 'The file has headings but no rows. Add one row per EISA date.' };
 
   const cell = (cells: string[], key: BulkColumnKey) => (cells[index.get(key) ?? -1] ?? '').trim();

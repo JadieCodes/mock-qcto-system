@@ -47,7 +47,7 @@ function toLearnerResults(learners: CaptureLearner[], components: ResultsCompone
         if (raw !== '') marks[c.id] = Number(raw);
       });
     }
-    return { learnerId: l.learnerId, fullName: l.fullName, absent: row?.absent ?? false, marks };
+    return { learnerId: l.learnerId, fullName: l.fullName, idNumber: l.idNumber, absent: row?.absent ?? false, marks };
   });
 }
 

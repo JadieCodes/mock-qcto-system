@@ -56,6 +56,7 @@ export function EisaLearnerResultsTable({ batch }: { batch: ResultsBatch }) {
                     >
                       {learner.fullName}
                     </button>
+                    <span className="block font-mono text-xs text-gray-500">{learner.idNumber}</span>
                   </TableCell>
                   {calc.components.map((r) => (
                     <TableCell key={r.componentId} className="whitespace-nowrap">
@@ -75,6 +76,9 @@ export function EisaLearnerResultsTable({ batch }: { batch: ResultsBatch }) {
                 {open && (
                   <TableRow className="bg-gray-50 hover:bg-gray-50">
                     <TableCell colSpan={columnCount}>
+                      <p className="mb-1 text-xs text-gray-600">
+                        <span className="font-medium text-gray-700">{learner.fullName}</span> — ID number <span className="font-mono">{learner.idNumber}</span>
+                      </p>
                       <ul className="space-y-1 text-xs text-gray-600">
                         {components.map((c, i) => {
                           const r = calc.components[i];
