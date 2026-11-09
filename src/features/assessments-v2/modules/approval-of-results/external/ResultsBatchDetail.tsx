@@ -1,9 +1,13 @@
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { EISA_RESULTS_RECORD_TYPE } from '../config';
+import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
+import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../components/EisaSubmissionPack';
+import { EISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
 import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
@@ -46,6 +50,15 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
           {/* QCTO feedback 29.31: the batch figures and the results per learner and component. */}
           <EisaBatchFigures batch={batch} />
           <EisaLearnerResultsTable batch={batch} />
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400 uppercase">Evidence</Label>
+            <EisaEvidenceList files={batch.evidenceDocuments} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400 uppercase">Already on File</Label>
+            <OnFileDocumentsList documents={batch.onFileDocuments} />
+          </div>
+          <DeclarationLine declaration={batch.declaration} />
           {batch.declineHistory.length > 0 && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-1">
               <p className="text-xs font-semibold text-red-700 uppercase">Latest Decline Reason</p>
@@ -63,6 +76,17 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
               onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
             />
           )}
+          <BatchDocumentsCard
+            documents={EISA_BATCH_DOCUMENTS}
+            downloads={
+              batch.workflow.stageId === 'approved'
+                ? {
+                    'eisa-outcome-letter': () => downloadEisaApprovalLetter(batch),
+                    'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
+                  }
+                : {}
+            }
+          />
           {batch.workflow.stageId === 'declined' && (
             <Button
               size="sm"

@@ -1,9 +1,11 @@
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
+import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import { listEnrolledLearnersByIds } from '../../mock/api/qaDomain';
 import { readStore, writeStore } from '../../mock/api/storage';
+import { onFileDocumentsFor } from '../../mock/data/onFileDocuments';
 import { buildResultsComplianceChecklist } from '../../mock/data/resultsComplianceFolders';
 import type { Role } from '../../types';
 import { listRecords as listConfirmationRecords } from '../eisa-confirmation/api';
@@ -13,10 +15,10 @@ import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPE
 import type { SiteVisit } from '../site-visits/types';
 import { listApplications } from '../qsa-addendum/api';
 import { resultsRulesIssue, snapshotResultsRules, type ResultsRules } from './componentSnapshot';
-import { RESULTS_AD_ROLE } from './config';
+import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from './config';
 import { markEntryIssues } from './markEntry';
-import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
-import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, NewResultsBatchInput, ResultsBatch, ResultsDraft } from './types';
+import { competencyRatePercent, eisaSubmissionIssues, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
+import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, NewResultsBatchInput, OnFileDocument, OnFileDocumentRecord, ResultsBatch, ResultsDraft } from './types';
 
 export const KEY = 'approvalOfResults:batches';
 // QCTO feedback 05.24: the QP's saved drafts, one per sitting that has no batch yet.
@@ -56,6 +58,13 @@ export async function getResultsRulesForSitting(sittingId: string): Promise<Resu
   const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
   if (!confirmation) return { components: [], addendumPassPercent: null };
   return snapshotResultsRules(await listApplications(), confirmation);
+}
+
+// QCTO feedback 29.25: the documents QCTO already holds for this sitting's qualification (mock
+// entries today — mock/data/onFileDocuments.ts).
+export async function listOnFileDocumentsForSitting(sittingId: string): Promise<OnFileDocument[]> {
+  const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
+  return confirmation ? onFileDocumentsFor(confirmation.qualificationTitle) : [];
 }
 
 function loadDrafts(): ResultsDraft[] {
@@ -128,6 +137,19 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   }
   const markIssues = markEntryIssues(components, input.learnerResults);
   if (markIssues.length > 0) throw new Error(markIssues[0].message);
+  // QCTO feedback 29.23, 29.24, 29.25, 29.26: tagged evidence (no empty files), every "Already on
+  // file" document confirmed or replaced, and the declaration.
+  input.evidenceDocuments.forEach(assertFileNotEmpty);
+  input.onFileChoices.forEach((c) => c.replacement && assertFileNotEmpty(c.replacement));
+  const onFile = onFileDocumentsFor(confirmation.qualificationTitle);
+  const documentIssues = eisaSubmissionIssues(input.evidenceDocuments, onFile, input.onFileChoices, input.declarationAccepted);
+  if (documentIssues.length > 0) throw new Error(documentIssues[0].message);
+  const decidedAt = new Date().toISOString();
+  const onFileDocuments: OnFileDocumentRecord[] = onFile.map((doc) => {
+    const picked = input.onFileChoices.find((c) => c.documentId === doc.id);
+    const replacement = picked?.choice === 'replaced' ? picked.replacement : null;
+    return { ...doc, choice: replacement ? 'replaced' : 'confirmed', replacement, decidedBy: input.submittedBy, decidedAt };
+  });
   // Batch L2.1: the ID number is stored on each learner's result (from the QA learner record,
   // whether the marks were captured on screen or came from File 3).
   const enrolled = await listEnrolledLearnersByIds(confirmation.learners.map((l) => l.learnerId));
@@ -146,6 +168,8 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     addendumPassPercent: addendumPassPercent ?? 0,
     learnerResults: input.learnerResults.map((r) => ({ ...r, idNumber: idNumberOf(r), marks: r.absent ? {} : r.marks })),
     evidenceDocuments: input.evidenceDocuments,
+    onFileDocuments,
+    declaration: { acceptedBy: input.submittedBy, acceptedById: input.submittedById, acceptedAt: decidedAt },
     complianceReviewNotes: '',
     evidenceEvaluationNotes: '',
     complianceChecklist: buildResultsComplianceChecklist(),
@@ -160,6 +184,17 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   };
   saveAll([batch, ...all]);
   writeStore(DRAFTS_KEY, loadDrafts().filter((d) => d.sittingId !== input.sittingId));
+
+  const actor = { actorRole: 'QP' as const, actorId: input.submittedById, actorName: input.submittedBy };
+  onFileDocuments.forEach((d) =>
+    appendAuditEntry({
+      recordType: EISA_RESULTS_RECORD_TYPE,
+      recordId: batch.id,
+      ...actor,
+      action: onFileAuditText(d),
+    }),
+  );
+  appendAuditEntry({ recordType: EISA_RESULTS_RECORD_TYPE, recordId: batch.id, ...actor, action: 'Declaration made: results and evidence are accurate and complete' });
 
   addNotification({
     recipientRole: RESULTS_AD_ROLE,
@@ -191,10 +226,19 @@ export async function saveEvidenceEvaluationNotes(id: string, notes: string): Pr
   return updated;
 }
 
-export async function uploadEvidenceDocument(id: string, file: { fileName: string; fileSize: number }): Promise<ResultsBatch> {
+// The audit line for one "Already on file" choice (also used by the demo seed).
+export function onFileAuditText(d: Pick<OnFileDocumentRecord, 'choice' | 'label' | 'replacement'>): string {
+  return d.choice === 'replaced' && d.replacement
+    ? `Already on file: replaced "${d.label}" with ${d.replacement.fileName}`
+    : `Already on file: confirmed "${d.label}"`;
+}
+
+// The ASD can add a file during the review. It is tagged "Other evidence".
+export async function uploadEvidenceDocument(id: string, file: { fileName: string; fileSize: number; fileType: string }): Promise<ResultsBatch> {
+  assertFileNotEmpty(file);
   const all = loadAll();
   const batch = getOrThrow(all, id);
-  const doc: EvidenceDocument = { ...file, uploadedAt: new Date().toISOString() };
+  const doc: EvidenceDocument = { ...file, tag: 'other', uploadedAt: new Date().toISOString() };
   const updated = { ...batch, evidenceDocuments: [...batch.evidenceDocuments, doc] };
   saveAll(replace(all, updated));
   return updated;

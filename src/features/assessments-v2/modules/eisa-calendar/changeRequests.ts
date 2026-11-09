@@ -1,5 +1,6 @@
 import { readStore, writeStore } from '../../mock/api/storage';
 import { appendAuditEntry, getAuditTrail } from '../../shared/audit/auditLog';
+import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
@@ -46,6 +47,7 @@ export async function raiseChangeRequest(input: RaiseChangeRequestInput): Promis
   const reason = input.reason.trim();
   if (!reason) throw new Error('A reason is required.');
   if (!input.letter) throw new Error('Upload the formal letter.');
+  assertFileNotEmpty(input.letter);
 
   let proposedNewDate: string | null = null;
   if (input.kind === 'postponement') {

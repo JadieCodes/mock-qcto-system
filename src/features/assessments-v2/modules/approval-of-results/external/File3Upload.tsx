@@ -3,6 +3,8 @@ import { Download, FileCheck2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { downloadCsvFile, EXCEL_UPLOAD_TIP } from '../../../shared/csv/csv';
+import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { DocumentChecked } from '../../../shared/files/FileCheckNotice';
 import { ID_ZERO_RESTORED_NOTE } from '../../../shared/validation/saIdNumber';
 import { buildFile3TemplateCsv, file3TemplateFileName, parseFile3, type File3ParseResult } from '../file3';
 import type { CaptureLearner, EisaLearnerResult, ResultsComponent } from '../types';
@@ -30,6 +32,11 @@ export function File3Upload({
     setFileError(null);
     setFileName(file?.name ?? null);
     if (!file) return;
+    const emptyIssue = fileUploadIssue(file);
+    if (emptyIssue) {
+      setFileError(emptyIssue);
+      return;
+    }
     if (!file.name.toLowerCase().endsWith('.csv')) {
       setFileError('Only CSV files can be uploaded. In your spreadsheet program, choose "Save as" and pick CSV.');
       return;
@@ -86,6 +93,7 @@ export function File3Upload({
           />
         </label>
         {fileName && <span className="font-mono text-xs text-gray-500">{fileName}</span>}
+        {fileName && !fileError && <DocumentChecked />}
       </div>
       <p className="text-xs text-gray-500">{EXCEL_UPLOAD_TIP}</p>
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -6,16 +7,20 @@ import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
+import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
 import { FISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
+import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
 import { ResultsActionBar } from '../components/ResultsActionBar';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
+import { FISA_BATCH_DOCUMENTS, type FisaBatchDocumentId } from '../batchDocuments';
 import { downloadFisaApprovalLetter, downloadFisaVerificationReport, fisaApprovalLetter } from '../downloads';
 import {
   useFisaResultsAction,
@@ -30,6 +35,15 @@ import type { FisaResultsBatch } from '../types';
 
 function stageLabel(stageId: string): string {
   return FISA_RESULTS_WORKFLOW.stages.find((s) => s.id === stageId)?.label ?? stageId;
+}
+
+// QCTO feedback 05.17: only the documents that already have a download are linked.
+function fisaDownloads(batch: FisaResultsBatch): Partial<Record<FisaBatchDocumentId, () => void>> {
+  if (batch.workflow.stageId !== 'approved') return {};
+  return {
+    'fisa-outcome-letter': () => downloadFisaApprovalLetter(batch),
+    'fisa-verification-report': () => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
+  };
 }
 
 function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
@@ -73,6 +87,7 @@ function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
         <Label className="text-xs text-gray-400 uppercase">Evidence</Label>
         <FisaEvidenceList files={batch.evidenceDocuments} />
       </div>
+      <BatchDocumentsCard documents={FISA_BATCH_DOCUMENTS} downloads={fisaDownloads(batch)} />
     </div>
   );
 }
@@ -86,6 +101,8 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
   const saveEvidenceNotes = useSaveFisaEvidenceEvaluationNotes();
   const uploadEvidence = useUploadFisaReviewEvidence();
   const resultsAction = useFisaResultsAction();
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadChecked, setUploadChecked] = useState(false);
 
   const editable = role === RESULTS_AD_ROLE && batch.workflow.stageId === 'ad-review';
   const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
@@ -127,11 +144,16 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
             className="text-sm"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
+              const issue = file ? fileUploadIssue(file) : null;
+              setUploadError(issue);
+              setUploadChecked(!!file && !issue);
+              if (file && !issue) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
               e.target.value = '';
             }}
           />
         )}
+        <FileCheckError message={uploadError} />
+        {uploadChecked && !uploadError && <DocumentChecked />}
       </div>
 
       <div className="space-y-2">

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -7,6 +8,8 @@ import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
+import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
@@ -16,11 +19,14 @@ import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT, visibilityScopeForRo
 import { useSiteVisit } from '../../site-visits/hooks';
 import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
 import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
+import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
+import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../components/EisaSubmissionPack';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
 import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
 import { ResultsActionBar } from '../components/ResultsActionBar';
+import { EISA_BATCH_DOCUMENTS, type EisaBatchDocumentId } from '../batchDocuments';
 import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import {
@@ -89,6 +95,16 @@ function PemVisitBanner({ batch }: { batch: ResultsBatch }) {
       )}
     </div>
   );
+}
+
+// QCTO feedback 05.17: only the documents that already have a download are linked; the others
+// show "Generated at final approval" until the batch that builds them adds them here.
+function eisaDownloads(batch: ResultsBatch): Partial<Record<EisaBatchDocumentId, () => void>> {
+  if (batch.workflow.stageId !== 'approved') return {};
+  return {
+    'eisa-outcome-letter': () => downloadEisaApprovalLetter(batch),
+    'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
+  };
 }
 
 function DetailsTab({ batch }: { batch: ResultsBatch }) {
@@ -182,18 +198,19 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         </div>
       </div>
 
-      {batch.evidenceDocuments.length > 0 && (
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Evidence Documents</Label>
-          <ul className="text-sm text-gray-700 space-y-0.5">
-            {batch.evidenceDocuments.map((d, i) => (
-              <li key={i} className="font-mono text-xs">
-                {d.fileName}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-gray-400 uppercase">Evidence Documents</Label>
+        <EisaEvidenceList files={batch.evidenceDocuments} />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-gray-400 uppercase">Already on File</Label>
+        <OnFileDocumentsList documents={batch.onFileDocuments} />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs text-gray-400 uppercase">Declaration</Label>
+        <DeclarationLine declaration={batch.declaration} />
+      </div>
+      <BatchDocumentsCard documents={EISA_BATCH_DOCUMENTS} downloads={eisaDownloads(batch)} />
     </div>
   );
 }
@@ -207,6 +224,8 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
   const saveEvidenceNotes = useSaveEvidenceEvaluationNotes();
   const uploadEvidence = useUploadEvidenceDocument();
   const resultsAction = useResultsAction();
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadChecked, setUploadChecked] = useState(false);
 
   const editable = role === RESULTS_AD_ROLE && batch.workflow.stageId === 'ad-review';
   const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
@@ -242,13 +261,28 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
         {editable && (
           <input
             type="file"
+            aria-label="Add an evidence file"
             className="text-sm"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size } });
+              const issue = file ? fileUploadIssue(file) : null;
+              setUploadError(issue);
+              setUploadChecked(!!file && !issue);
+              if (file && !issue) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
+              e.target.value = '';
             }}
           />
         )}
+        <FileCheckError message={uploadError} />
+        {uploadChecked && !uploadError && <DocumentChecked />}
+        <div className="space-y-1.5 pt-2">
+          <Label className="text-xs text-gray-400 uppercase">Evidence Documents</Label>
+          <EisaEvidenceList files={batch.evidenceDocuments} />
+        </div>
+        <div className="space-y-1.5 pt-2">
+          <Label className="text-xs text-gray-400 uppercase">Already on File</Label>
+          <OnFileDocumentsList documents={batch.onFileDocuments} />
+        </div>
       </div>
 
       <div className="space-y-2">

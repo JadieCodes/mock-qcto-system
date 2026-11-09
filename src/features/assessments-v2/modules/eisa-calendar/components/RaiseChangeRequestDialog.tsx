@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { changeRequestKindLabel } from '../changeRequests';
 import { checkSittingDate } from '../dateChecks';
@@ -35,6 +37,7 @@ function RaiseChangeRequestForm({ target, onClose }: { target: ChangeRequestTarg
   const [reason, setReason] = useState('');
   const [newDate, setNewDate] = useState('');
   const [letter, setLetter] = useState<FormalLetterFile | null>(null);
+  const [letterError, setLetterError] = useState<string | null>(null);
   const { sitting, kind } = target;
   const isPostponement = kind === 'postponement';
   const label = changeRequestKindLabel(kind);
@@ -94,10 +97,19 @@ function RaiseChangeRequestForm({ target, onClose }: { target: ChangeRequestTarg
             className="block text-sm"
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];
-              setLetter(file ? toLetterFile(file) : null);
+              const issue = file ? fileUploadIssue(file) : null;
+              setLetterError(issue);
+              setLetter(file && !issue ? toLetterFile(file) : null);
+              if (issue) e.currentTarget.value = '';
             }}
           />
-          {letter && <p className="text-xs text-gray-500">{letterSummary(letter)}</p>}
+          <FileCheckError message={letterError} />
+          {letter && (
+            <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              {letterSummary(letter)}
+              <DocumentChecked />
+            </p>
+          )}
         </div>
       </div>
       <DialogFooter>

@@ -2,10 +2,58 @@ import type { ChecklistSection } from '../../shared/checklist/types';
 import type { WorkflowRecordState } from '../../shared/workflow/types';
 import type { AssessmentComponentType } from '../qsa-addendum/types';
 
+// QCTO feedback 29.23: what an EISA evidence upload is. The list is our reading of the 29 Oct
+// meeting until QCTO confirms it (progress.md, Batch M). FISA keeps its own list (FisaEvidenceTag).
+export type EisaEvidenceTag = 'marking-report' | 'moderation-report' | 'confirmation-letter' | 'attendance-register' | 'other';
+
+// UI-only upload: the file's details and the QP's tag, never the file itself.
 export interface EvidenceDocument {
   fileName: string;
   fileSize: number;
+  fileType: string;
   uploadedAt: string;
+  tag: EisaEvidenceTag;
+}
+
+// QCTO feedback 29.25: the documents QCTO already holds for the qualification's validated EISA
+// instrument. The QP confirms each one or replaces it with a new file.
+export type OnFileDocumentId =
+  | 'confidentiality-agreement-developer'
+  | 'confidentiality-agreement-moderator'
+  | 'cv-developer'
+  | 'cv-moderator'
+  | 'instrument-development-report'
+  | 'instrument-validation-report';
+
+export interface OnFileDocument {
+  id: OnFileDocumentId;
+  label: string;
+  fileName: string;
+  fileSize: number;
+}
+
+export type OnFileChoice = 'confirmed' | 'replaced';
+
+export interface ReplacementFile {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedAt: string;
+}
+
+// What the QP chose for one "Already on file" document, kept on the batch.
+export interface OnFileDocumentRecord extends OnFileDocument {
+  choice: OnFileChoice;
+  replacement: ReplacementFile | null;
+  decidedBy: string;
+  decidedAt: string;
+}
+
+// The QP's choice while the submit screen is open (no name or date yet).
+export interface OnFileDocumentChoice {
+  documentId: OnFileDocumentId;
+  choice: OnFileChoice;
+  replacement: ReplacementFile | null;
 }
 
 // Row 40 (H-05/H-11/H-12/G-24): one result per learner, not a single hand-typed count.
@@ -48,6 +96,9 @@ export interface EisaLearnerResult {
   marks: Record<string, number>;
 }
 
+// QCTO feedback 29.26: the one-click declaration on EISA results. Same shape as the FISA one.
+export type ResultsDeclaration = FisaResultsDeclaration;
+
 export interface ResultsDeclineEntry {
   stageId: string;
   decidedBy: string;
@@ -82,6 +133,10 @@ export interface ResultsBatch {
   // these, not stored separately.
   learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
+  // QCTO feedback 29.25: each "Already on file" document and what the QP chose for it.
+  onFileDocuments: OnFileDocumentRecord[];
+  // QCTO feedback 29.26.
+  declaration: ResultsDeclaration;
 
   // CR-059: the ASD's three-part review before the batch can advance.
   complianceReviewNotes: string;
@@ -107,6 +162,8 @@ export interface NewResultsBatchInput {
   sittingId: string;
   learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
+  onFileChoices: OnFileDocumentChoice[];
+  declarationAccepted: boolean;
   submittedBy: string;
   submittedById: string;
 }

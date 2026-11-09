@@ -19,6 +19,7 @@ import { ComingSoon } from './shared/ui/ComingSoon';
 import { Dashboard } from './shared/ui/Dashboard';
 import { PortalPicker } from './shared/ui/PortalPicker';
 import { RoleBlocked } from './shared/ui/RoleBlocked';
+import { ModuleErrorBoundary } from './shared/ui/ModuleErrorBoundary';
 import { RoleProvider } from './shared/ui/RoleContext';
 import { isModuleVisible } from './shared/visibility/moduleAccess';
 import { useV2Role } from './shared/ui/useV2Role';
@@ -74,9 +75,14 @@ function PortalRoutes({ portal }: { portal: Portal }) {
       <AssessmentsV2Layout portal={portal}>
         <Routes>
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard portal={portal} />} />
+          <Route path="dashboard" element={<ModuleErrorBoundary key="dashboard"><Dashboard portal={portal} /></ModuleErrorBoundary>} />
           {navItems.map((item) => (
-            <Route key={item.path} path={item.path} element={<ModuleRoute item={item} portal={portal} />} />
+            <Route key={item.path} path={item.path} element={
+                <ModuleErrorBoundary key={item.path}>
+                  <ModuleRoute item={item} portal={portal} />
+                </ModuleErrorBoundary>
+              }
+            />
           ))}
         </Routes>
       </AssessmentsV2Layout>

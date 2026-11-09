@@ -1,5 +1,5 @@
 import type { Role } from '../../types';
-import type { FisaEvidenceTag } from './types';
+import type { EisaEvidenceTag, FisaEvidenceTag, OnFileDocumentRecord } from './types';
 
 // CR-059 names each role explicitly — no open question here, unlike several other modules'
 // "no specific role named" assumptions.
@@ -39,4 +39,34 @@ export const FISA_EVIDENCE_TAG_OPTIONS: { value: FisaEvidenceTag; label: string 
 
 export function fisaEvidenceTagLabel(tag: FisaEvidenceTag): string {
   return FISA_EVIDENCE_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
+}
+
+// QCTO feedback 29.23: the tag the QP puts on each EISA evidence file. Our reading of the 29 Oct
+// meeting until QCTO confirms (progress.md, Batch M).
+export const EISA_EVIDENCE_TAG_OPTIONS: { value: EisaEvidenceTag; label: string }[] = [
+  { value: 'marking-report', label: 'Marking report' },
+  { value: 'moderation-report', label: 'Moderation report' },
+  { value: 'confirmation-letter', label: 'Confirmation letter' },
+  { value: 'attendance-register', label: 'Attendance register' },
+  { value: 'other', label: 'Other evidence' },
+];
+
+// Submit stays blocked until a file with each of these tags is uploaded.
+export const EISA_REQUIRED_EVIDENCE_TAGS: EisaEvidenceTag[] = ['marking-report', 'moderation-report'];
+
+// Batch M.1: these two tags can be used once only; the other three can tag several files.
+export const EISA_SINGLE_USE_EVIDENCE_TAGS: EisaEvidenceTag[] = ['marking-report', 'moderation-report'];
+
+export const EISA_EVIDENCE_INSTRUCTION =
+  'Upload the marking report, the moderation report, the confirmation letters and the attendance register for this EISA. Tag each file.';
+
+export function eisaEvidenceTagLabel(tag: EisaEvidenceTag): string {
+  return EISA_EVIDENCE_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
+}
+
+export const EISA_DECLARATION_TEXT = 'I confirm that the results and evidence submitted are accurate and complete.';
+
+// QCTO feedback 29.25: how an "Already on file" choice reads on screen and in the report.
+export function onFileChoiceText(d: Pick<OnFileDocumentRecord, 'choice' | 'replacement'>): string {
+  return d.choice === 'replaced' && d.replacement ? `Replaced with ${d.replacement.fileName}` : 'Confirmed';
 }

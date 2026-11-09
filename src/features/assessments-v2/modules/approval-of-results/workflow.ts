@@ -1,9 +1,14 @@
+import { fileUploadIssue } from '../../shared/files/fileCheck';
 import { addWorkingDays, toIsoDate, workingDaysBetween } from '../../shared/dates/workingDays';
 import type { ValidationIssue } from '../../shared/validation/types';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import { batchFiguresOf } from './calculation';
 import {
+  EISA_EVIDENCE_TAG_OPTIONS,
+  EISA_REQUIRED_EVIDENCE_TAGS,
+  EISA_SINGLE_USE_EVIDENCE_TAGS,
+  eisaEvidenceTagLabel,
   FISA_RESULTS_SUBMITTER_ROLE,
   RESULTS_AD_ROLE,
   RESULTS_CHIEF_DIRECTOR_ROLE,
@@ -12,7 +17,7 @@ import {
   RESULTS_DUE_SOON_WINDOW_WORKING_DAYS,
   RESULTS_SUBMISSION_DEADLINE_WORKING_DAYS,
 } from './config';
-import type { FisaResultsBatch, ResultsBatch } from './types';
+import type { EisaEvidenceTag, EvidenceDocument, FisaResultsBatch, OnFileDocument, OnFileDocumentChoice, OnFileDocumentId, ResultsBatch } from './types';
 
 // CR-059: ASD (compliance review -> evidence evaluation -> folder-by-folder
 // checklist) -> Deputy Director -> Director -> Chief Director final approval. The register's
@@ -153,6 +158,58 @@ export function fisaSubmissionIssues(
       : []),
     ...(batch.evidenceDocuments.length === 0 ? [{ field: 'evidenceDocuments', message: 'Upload at least one evidence file.' }] : []),
     ...(batch.evidenceDocuments.some((d) => !d.tag) ? [{ field: 'evidenceTags', message: 'Every evidence file needs a tag.' }] : []),
+    ...(declarationAccepted ? [] : [{ field: 'declaration', message: 'Tick the declaration.' }]),
+  ];
+}
+
+// Batch M.1: the tags still offered for the next EISA evidence file — a single-use tag drops out
+// once a file carries it, and comes back when that file is removed.
+export function availableEisaEvidenceTags(files: EvidenceDocument[]): EisaEvidenceTag[] {
+  const used = new Set(files.map((f) => f.tag));
+  return EISA_EVIDENCE_TAG_OPTIONS.map((o) => o.value).filter((tag) => !(EISA_SINGLE_USE_EVIDENCE_TAGS.includes(tag) && used.has(tag)));
+}
+
+// Batch M.1: what "Replace" on an "Already on file" line does. An empty file leaves the choices
+// exactly as they were and returns the message; a real file sets only that document's choice.
+export function replaceOnFileDocument(
+  choices: OnFileDocumentChoice[],
+  documentId: OnFileDocumentId,
+  file: { name: string; size: number; type: string },
+  uploadedAt: string = new Date().toISOString(),
+): { choices: OnFileDocumentChoice[]; error: string | null } {
+  const error = fileUploadIssue(file);
+  if (error) return { choices, error };
+  const next: OnFileDocumentChoice = {
+    documentId,
+    choice: 'replaced',
+    replacement: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown', uploadedAt },
+  };
+  return { choices: [...choices.filter((c) => c.documentId !== documentId), next], error: null };
+}
+
+// QCTO feedback 29.23, 29.25, 29.26: what must be in place on an EISA batch besides the marks
+// before the QP can submit. Shown on screen and enforced in api.ts submitResultsBatch().
+export function eisaSubmissionIssues(
+  evidenceDocuments: EvidenceDocument[],
+  onFile: OnFileDocument[],
+  choices: OnFileDocumentChoice[],
+  declarationAccepted: boolean,
+): ValidationIssue[] {
+  const missingEvidence = EISA_REQUIRED_EVIDENCE_TAGS.filter((tag) => !evidenceDocuments.some((d) => d.tag === tag)).map((tag) => ({
+    field: `evidence-${tag}`,
+    message: `Upload the ${eisaEvidenceTagLabel(tag).toLowerCase()}.`,
+  }));
+  const repeatedSingleUse = EISA_SINGLE_USE_EVIDENCE_TAGS.filter((tag) => evidenceDocuments.filter((d) => d.tag === tag).length > 1).map((tag) => ({
+    field: `evidence-${tag}-once`,
+    message: `Use the ${eisaEvidenceTagLabel(tag).toLowerCase()} tag once only. Remove the extra file.`,
+  }));
+  const unconfirmed = onFile
+    .filter((doc) => !choices.some((c) => c.documentId === doc.id && (c.choice === 'confirmed' || c.replacement !== null)))
+    .map((doc) => ({ field: `on-file-${doc.id}`, message: `Confirm or replace: ${doc.label}.` }));
+  return [
+    ...missingEvidence,
+    ...repeatedSingleUse,
+    ...unconfirmed,
     ...(declarationAccepted ? [] : [{ field: 'declaration', message: 'Tick the declaration.' }]),
   ];
 }

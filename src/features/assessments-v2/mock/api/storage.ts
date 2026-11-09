@@ -50,7 +50,8 @@ export function writeStore<T>(key: string, value: T): void {
 // 'A13.1' = Batch L2.1: EISA and FISA results keep each learner's ID number.
 // 'A13.2' = Batch L1.1: QASA components carry QCTO's highest and lowest mark, each QASA an
 // addendum pass % and FLC; EISA results use QCTO's calculator with whole-number marks.
-export const SEED_VERSION = 'A13.2';
+// 'A14' = Batch M: EISA results have tagged evidence, "Already on file" choices and a declaration.
+export const SEED_VERSION = 'A14';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

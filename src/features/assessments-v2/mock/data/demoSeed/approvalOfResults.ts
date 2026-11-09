@@ -34,15 +34,17 @@
 // (Plumbing); Deputy Director Grace Mokoena (Nomvula's and Johan's) / Peter Botha (Precious's);
 // Director Zanele Mthembu (Nomvula's) / Sarah Naidoo (Precious's and Johan's); Chief Director
 // Busisiwe Radebe / Francois Le Roux.
+import { onFileDocumentsFor } from '../onFileDocuments';
 import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
+import { onFileAuditText } from '../../../modules/approval-of-results/api';
 import { calculateLearnerResult, type EisaLearnerOutcome } from '../../../modules/approval-of-results/calculation';
 import { snapshotResultsRules } from '../../../modules/approval-of-results/componentSnapshot';
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
 import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
-import type { EisaLearnerResult, ResultsBatch, ResultsComponent, ResultsDraft } from '../../../modules/approval-of-results/types';
+import type { EisaLearnerResult, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
@@ -68,7 +70,7 @@ const FRANCOIS = 'francois-le-roux';
 
 const COMPLIANCE_NOTES =
   'The learner list matches the EISA Confirmation, every SOR was accepted at registration and the SDP was in good standing for this sitting.';
-const EVIDENCE_NOTES = 'Marksheets and the moderation report were checked against each learner result. The outcomes are supported by the evidence.';
+const EVIDENCE_NOTES = 'The marking report and the moderation report were checked against each learner result. The outcomes are supported by the evidence.';
 const CHECKLIST_COMMENT = 'Checked against the submitted folder — in order.';
 
 // performResultsAction(): who is told next.
@@ -166,6 +168,32 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
 
     const sittingDate = confirmation.sittingDate;
     const fileTitle = title.replace(/\s+/g, '_');
+    // Batch M (29.23): every batch has a marking report and a moderation report; the others vary.
+    const pdf = (name: string, tag: EvidenceDocument['tag'], fileSize: number): EvidenceDocument => ({
+      fileName: `${fileTitle}_${name}_${sittingDate}.pdf`,
+      fileSize,
+      fileType: 'application/pdf',
+      uploadedAt: submittedAt,
+      tag,
+    });
+    const evidenceDocuments: EvidenceDocument[] = [
+      pdf('Marking_Report', 'marking-report', 412_672),
+      pdf('Moderation_Report', 'moderation-report', 1_258_291),
+      ...(n % 2 === 0 ? [pdf('Attendance_Register', 'attendance-register', 143_360)] : []),
+      ...(n % 3 === 0 ? [pdf('Confirmation_Letter', 'confirmation-letter', 96_256)] : []),
+    ];
+    const onFileDocuments: OnFileDocumentRecord[] = onFileDocumentsFor(title).map((doc, i) => {
+      const replaced = i === n % 6;
+      return {
+        ...doc,
+        choice: replaced ? 'replaced' : 'confirmed',
+        replacement: replaced
+          ? { fileName: `${fileTitle}_${doc.id}_updated.pdf`, fileSize: doc.fileSize + 20_480, fileType: 'application/pdf', uploadedAt: submittedAt }
+          : null,
+        decidedBy: qp.name,
+        decidedAt: submittedAt,
+      };
+    });
     let batch: ResultsBatch = {
       id: seedId(RESULTS_ID_GROUP, n),
       sittingId: confirmation.sittingId,
@@ -177,10 +205,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       components,
       addendumPassPercent,
       learnerResults,
-      evidenceDocuments: [
-        { fileName: `${fileTitle}_EISA_Marksheet_${sittingDate}.xlsx`, fileSize: 98_304, uploadedAt: submittedAt },
-        { fileName: `${fileTitle}_Moderation_Report_${sittingDate}.pdf`, fileSize: 1_258_291, uploadedAt: submittedAt },
-      ],
+      evidenceDocuments,
+      // Batch M (29.25): every "Already on file" document confirmed by the QP, one replaced.
+      onFileDocuments,
+      declaration: { acceptedBy: qp.name, acceptedById: qp.id, acceptedAt: submittedAt },
       complianceReviewNotes: '',
       evidenceEvaluationNotes: '',
       complianceChecklist: buildResultsComplianceChecklist(),
@@ -194,6 +222,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       createdBy: qp.name,
     };
     if (dateOf(submittedAt) > batch.submissionDeadline) throw new Error(`Demo seed: ${title} ${sittingDate} submitted after its deadline.`);
+    // submitResultsBatch() writes an audit entry per "Already on file" choice and one for the declaration.
+    [...onFileDocuments.map(onFileAuditText), 'Declaration made: results and evidence are accurate and complete'].forEach((action) =>
+      log.audit.push({ id: crypto.randomUUID(), recordType: 'results-batch', recordId: batch.id, actorRole: qp.role, actorId: qp.id, actorName: qp.name, action, timestamp: submittedAt }),
+    );
     notify(log, submittedAt, {
       recipientRole: RESULTS_AD_ROLE,
       title: 'Results batch submitted',
@@ -213,7 +245,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
           evidenceEvaluationNotes: progress.evidenceNotes ? EVIDENCE_NOTES : '',
           complianceChecklist: answerChecklist(buildResultsComplianceChecklist(), CHECKLIST_COMMENT, { onlySectionIds: progress.sectionIds }),
           evidenceDocuments: progress.evidenceFile
-            ? [...batch.evidenceDocuments, { fileName: progress.evidenceFile, fileSize: 524_288, uploadedAt: at }]
+            ? [
+                ...batch.evidenceDocuments,
+                { fileName: progress.evidenceFile, fileSize: 524_288, fileType: 'application/pdf', uploadedAt: at, tag: 'other' },
+              ]
             : batch.evidenceDocuments,
         };
         return api;

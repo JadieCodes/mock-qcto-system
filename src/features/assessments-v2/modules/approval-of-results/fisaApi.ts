@@ -5,6 +5,7 @@
 // There is no Post-EISA Monitoring visit for FISA.
 import { appendAuditEntry } from '../../shared/audit/auditLog';
 import type { ChecklistSection } from '../../shared/checklist/types';
+import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import { listEnrolledLearners } from '../../mock/api/qaDomain';
@@ -105,6 +106,7 @@ export async function saveFisaResultsDraft(id: string, sdpId: string, patch: Fis
   const batch = getOrThrow(all, id);
   assertOwnDraft(batch, sdpId);
   if (patch.learnerResults) await assertLearnersBelongToSdp(batch, patch.learnerResults);
+  patch.evidenceDocuments?.forEach(assertFileNotEmpty);
   const updated: FisaResultsBatch = { ...batch, ...patch };
   saveAll(replace(all, updated));
   return updated;
@@ -183,6 +185,7 @@ export async function saveFisaEvidenceEvaluationNotes(id: string, notes: string)
 
 // The ASD can add a file during the review, the same as on an EISA batch. It is tagged "Other".
 export async function uploadFisaReviewEvidence(id: string, file: Omit<TaggedEvidenceDocument, 'uploadedAt' | 'tag'>): Promise<FisaResultsBatch> {
+  assertFileNotEmpty(file);
   const all = loadAll();
   const batch = getOrThrow(all, id);
   assertAsdReviewStage(batch);

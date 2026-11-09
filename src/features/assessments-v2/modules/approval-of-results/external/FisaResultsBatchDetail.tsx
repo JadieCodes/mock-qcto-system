@@ -6,13 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
+import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
 import { FISA_EVIDENCE_TAG_OPTIONS, FISA_RESULTS_RECORD_TYPE } from '../config';
+import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
+import { FISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { downloadFisaApprovalLetter, downloadFisaVerificationReport, fisaApprovalLetter } from '../downloads';
@@ -39,6 +43,7 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
   const submit = useSubmitFisaResultsBatch();
   const [declared, setDeclared] = useState(false);
   const [nextTag, setNextTag] = useState<FisaEvidenceTag | ''>('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const isOwnBatch = batch.sdpId === sdpId;
   const issues = fisaSubmissionIssues(batch, declared);
@@ -113,7 +118,9 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
             disabled={!nextTag}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file && nextTag) {
+              const issue = file ? fileUploadIssue(file) : null;
+              setUploadError(issue);
+              if (file && nextTag && !issue) {
                 saveEvidence([
                   ...batch.evidenceDocuments,
                   { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown', uploadedAt: new Date().toISOString(), tag: nextTag },
@@ -123,6 +130,7 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
             }}
           />
         </div>
+        <FileCheckError message={uploadError} />
         {batch.evidenceDocuments.length === 0 ? (
           <p className="text-xs text-gray-400">No files uploaded.</p>
         ) : (
@@ -131,8 +139,9 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
               <li key={`${doc.fileName}-${doc.uploadedAt}-${index}`} className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="font-mono text-xs text-gray-700 truncate">{doc.fileName}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                     {doc.fileType}, {formatFileSize(doc.fileSize)}, uploaded on {doc.uploadedAt.slice(0, 10)}
+                    <DocumentChecked />
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -246,6 +255,18 @@ function SubmittedView({ batch }: { batch: FisaResultsBatch }) {
           Declaration ticked by {batch.declaration.acceptedBy} on {batch.declaration.acceptedAt.slice(0, 10)}.
         </p>
       )}
+
+      <BatchDocumentsCard
+        documents={FISA_BATCH_DOCUMENTS}
+        downloads={
+          batch.workflow.stageId === 'approved'
+            ? {
+                'fisa-outcome-letter': () => downloadFisaApprovalLetter(batch),
+                'fisa-verification-report': () => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
+              }
+            : {}
+        }
+      />
 
       {batch.workflow.stageId === 'approved' && batch.approvalLetter && (
         <div className="space-y-3 border-t pt-4">

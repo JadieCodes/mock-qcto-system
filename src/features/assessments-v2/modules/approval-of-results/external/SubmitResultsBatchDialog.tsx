@@ -14,12 +14,15 @@ import { calculateLearnerResult, EISA_OUTCOME_LABELS, reasonText, type EisaLearn
 import { resultsRulesIssue } from '../componentSnapshot';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
-import { useCaptureLearners, useResultsDraft, useResultsRulesForSitting, useSaveResultsDraft, useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
+import { useCaptureLearners, useOnFileDocuments, useResultsDraft, useResultsRulesForSitting, useSaveResultsDraft, useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
 import { markEntryIssues, markIssue } from '../markEntry';
-import { submissionDeadlineFor } from '../workflow';
+import { eisaSubmissionIssues, submissionDeadlineFor } from '../workflow';
 import type { EisaConfirmationRecord } from '../../eisa-confirmation/types';
-import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, ResultsComponent, ResultsDraft } from '../types';
+import { EISA_DECLARATION_TEXT } from '../config';
+import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, OnFileDocument, OnFileDocumentChoice, ResultsComponent, ResultsDraft } from '../types';
+import { EisaEvidenceUpload } from './EisaEvidenceUpload';
 import { File3Upload } from './File3Upload';
+import { OnFileDocumentsSection } from './OnFileDocumentsSection';
 
 interface LearnerRow {
   absent: boolean;
@@ -71,6 +74,7 @@ function ResultsCaptureForm({
   components,
   addendumPassPercent,
   learners,
+  onFile,
   draft,
   actorId,
   actorName,
@@ -80,6 +84,7 @@ function ResultsCaptureForm({
   components: ResultsComponent[];
   addendumPassPercent: number;
   learners: CaptureLearner[];
+  onFile: OnFileDocument[];
   draft: ResultsDraft | null | undefined;
   actorId: string;
   actorName: string;
@@ -88,12 +93,15 @@ function ResultsCaptureForm({
   const submitBatch = useSubmitResultsBatch();
   const saveDraft = useSaveResultsDraft();
   const [evidenceDocuments, setEvidenceDocuments] = useState<EvidenceDocument[]>([]);
+  const [onFileChoices, setOnFileChoices] = useState<OnFileDocumentChoice[]>([]);
+  const [declared, setDeclared] = useState(false);
   const { control, register, handleSubmit, reset, setValue } = useForm<FormValues>({
     defaultValues: { learners: toRows(learners, components, draft?.learnerResults) },
   });
   const rows = useWatch({ control, name: 'learners' });
   const learnerResults = toLearnerResults(learners, components, rows);
   const issues = markEntryIssues(components, learnerResults);
+  const documentIssues = eisaSubmissionIssues(evidenceDocuments, onFile, onFileChoices, declared);
 
   // A row is complete when it is Absent or every mark passes the shared check.
   const isComplete = (r: EisaLearnerResult) => r.absent || components.every((c) => markIssue(c, r.marks[c.id]) === null);
@@ -101,9 +109,9 @@ function ResultsCaptureForm({
   const incompleteCount = learnerResults.length - completeResults.length;
 
   const onSubmit = () => {
-    if (issues.length > 0) return;
+    if (issues.length > 0 || documentIssues.length > 0) return;
     submitBatch.mutate(
-      { sittingId: sitting.sittingId, learnerResults, evidenceDocuments, submittedBy: actorName, submittedById: actorId },
+      { sittingId: sitting.sittingId, learnerResults, evidenceDocuments, onFileChoices, declarationAccepted: declared, submittedBy: actorName, submittedById: actorId },
       { onSuccess: onDone },
     );
   };
@@ -247,26 +255,18 @@ function ResultsCaptureForm({
 
         <ValidationSummary issues={issues} title="Every learner needs a mark per component (or Absent) before you can submit:" />
 
-        <div className="space-y-2">
-          <Label htmlFor="results-evidence">Evidence Documents (optional)</Label>
-          <Input
-            id="results-evidence"
-            type="file"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) setEvidenceDocuments((prev) => [...prev, { fileName: file.name, fileSize: file.size, uploadedAt: new Date().toISOString() }]);
-            }}
-          />
-          {evidenceDocuments.length > 0 && (
-            <ul className="text-xs text-gray-500 space-y-0.5">
-              {evidenceDocuments.map((d, i) => (
-                <li key={i} className="font-mono">
-                  {d.fileName}
-                </li>
-              ))}
-            </ul>
-          )}
+        <EisaEvidenceUpload files={evidenceDocuments} onChange={setEvidenceDocuments} />
+
+        <OnFileDocumentsSection documents={onFile} choices={onFileChoices} onChange={setOnFileChoices} />
+
+        <div className="flex items-start gap-2 rounded-xl border bg-gray-50 p-3">
+          <Checkbox id="eisa-results-declaration" checked={declared} onCheckedChange={(v) => setDeclared(v === true)} className="mt-0.5" />
+          <Label htmlFor="eisa-results-declaration" className="text-sm font-normal leading-snug text-gray-700">
+            {EISA_DECLARATION_TEXT}
+          </Label>
         </div>
+
+        <ValidationSummary issues={documentIssues} title="Complete these before you can submit:" />
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 pt-4 mt-4 border-t">
@@ -281,7 +281,7 @@ function ResultsCaptureForm({
         >
           Save draft
         </Button>
-        <Button type="submit" disabled={submitBatch.isPending || issues.length > 0}>
+        <Button type="submit" disabled={submitBatch.isPending || issues.length > 0 || documentIssues.length > 0}>
           Submit results
         </Button>
       </div>
@@ -298,6 +298,7 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
   const { data: awaiting = [] } = useSittingsAwaitingSubmission();
   const { data: rules, isLoading } = useResultsRulesForSitting(sittingId);
   const { data: learners } = useCaptureLearners(sittingId);
+  const { data: onFile } = useOnFileDocuments(sittingId);
   const { data: draft, isFetched: draftFetched } = useResultsDraft(sittingId);
   const sitting = awaiting.find((s) => s.sittingId === sittingId);
   const blockedMessage = rules ? resultsRulesIssue(rules) : null;
@@ -320,13 +321,14 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
           </div>
         </div>
       )}
-      {sitting && rules && rules.addendumPassPercent !== null && !blockedMessage && learners && draftFetched && (
+      {sitting && rules && rules.addendumPassPercent !== null && !blockedMessage && learners && onFile && draftFetched && (
         <ResultsCaptureForm
           key={sitting.id}
           sitting={sitting}
           components={rules.components}
           addendumPassPercent={rules.addendumPassPercent}
           learners={learners}
+          onFile={onFile}
           draft={draft}
           actorId={person.id}
           actorName={person.name}

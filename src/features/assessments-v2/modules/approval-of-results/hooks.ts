@@ -11,6 +11,7 @@ import {
   listResultsDrafts,
   getResultsRulesForSitting,
   listMarkingModerationVisitsForSitting,
+  listOnFileDocumentsForSitting,
   listSittingsAwaitingSubmission,
   performResultsAction,
   saveComplianceChecklist,
@@ -69,6 +70,15 @@ export function useCaptureLearners(sittingId: string | null) {
   return useQuery({
     queryKey: ['approval-of-results', 'capture-learners', sittingId ?? 'none'],
     queryFn: () => listCaptureLearners(sittingId as string),
+    enabled: !!sittingId,
+  });
+}
+
+// QCTO feedback 29.25: the "Already on file" documents for the sitting's qualification.
+export function useOnFileDocuments(sittingId: string | null) {
+  return useQuery({
+    queryKey: ['approval-of-results', 'on-file-documents', sittingId ?? 'none'],
+    queryFn: () => listOnFileDocumentsForSitting(sittingId as string),
     enabled: !!sittingId,
   });
 }
@@ -142,7 +152,7 @@ export function useSaveEvidenceEvaluationNotes() {
 }
 
 export function useUploadEvidenceDocument() {
-  return useResultsBatchMutation((args: { id: string; file: { fileName: string; fileSize: number } }) => uploadEvidenceDocument(args.id, args.file));
+  return useResultsBatchMutation((args: { id: string; file: { fileName: string; fileSize: number; fileType: string } }) => uploadEvidenceDocument(args.id, args.file));
 }
 
 export function useResultsAction() {

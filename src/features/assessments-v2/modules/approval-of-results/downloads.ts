@@ -6,7 +6,7 @@ import type { AuditEntry } from '../../shared/audit/types';
 import { generateLetter } from '../../shared/letters/templates';
 import type { GeneratedLetter } from '../../shared/letters/types';
 import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
-import { fisaEvidenceTagLabel, RESULTS_CHIEF_DIRECTOR_ROLE } from './config';
+import { eisaEvidenceTagLabel, fisaEvidenceTagLabel, onFileChoiceText, RESULTS_CHIEF_DIRECTOR_ROLE } from './config';
 import { absenteeismText, batchFiguresOf, calculateLearnerResult, competenceRateText, EISA_OUTCOME_LABELS, reasonText } from './calculation';
 import { fisaCompetencyRatePercent, fisaCompetentCountOf, RESULTS_WORKFLOW, resultsStatusLabel } from './workflow';
 import type { FisaResultsBatch, LearnerResult, ResultsBatch, ResultsDeclineEntry } from './types';
@@ -30,6 +30,8 @@ interface VerificationReportInput {
   // FISA: Learner | ID number | Outcome. EISA (29.31, L1.1): a column per component, the EISA percentage, the pass % and the result with its reason.
   learnerTable: LearnerTable;
   evidence: ReportEvidence[];
+  // QCTO feedback 29.25: EISA only — the documents QCTO already held and what the QP chose.
+  onFile?: { label: string; fileName: string; choice: string }[];
   declineHistory: ResultsDeclineEntry[];
   audit: AuditEntry[];
 }
@@ -175,6 +177,12 @@ ${table(
   ['File', 'Tag', 'Type', 'Size', 'Uploaded'],
   input.evidence.map((d) => [d.fileName, d.tag ?? '—', d.fileType ?? '—', formatFileSize(d.fileSize), d.uploadedAt.slice(0, 10)]),
 )}
+${
+  input.onFile && input.onFile.length > 0
+    ? `<h2>Already on file</h2>
+${table(['Document', 'File', 'QP choice'], input.onFile.map((d) => [d.label, d.fileName, d.choice]))}`
+    : ''
+}
 <h2>Approval chain</h2>
 ${table(['Stage', 'Name', 'Role', 'Date'], chain.map((s) => [s.stage, s.actorName, s.actorRole, s.date]))}
 ${
@@ -247,6 +255,7 @@ export function downloadEisaVerificationReport(batch: ResultsBatch, audit: Audit
       { label: 'QP', value: batch.qpName },
       { label: 'EISA date', value: batch.sittingDate },
       { label: 'Submitted', value: batch.submittedAt.slice(0, 10) },
+      { label: 'Declaration', value: `Made by ${batch.declaration.acceptedBy} on ${batch.declaration.acceptedAt.slice(0, 10)}` },
       { label: 'Submission deadline', value: batch.submissionDeadline },
       { label: 'Addendum pass %', value: `${batch.addendumPassPercent}%` },
       { label: 'Registered', value: String(figures.registered) },
@@ -258,7 +267,8 @@ export function downloadEisaVerificationReport(batch: ResultsBatch, audit: Audit
       { label: 'Cycle', value: String(batch.cycleCount) },
     ],
     learnerTable: eisaLearnerTable(batch),
-    evidence: batch.evidenceDocuments,
+    evidence: batch.evidenceDocuments.map((d) => ({ ...d, tag: eisaEvidenceTagLabel(d.tag) })),
+    onFile: batch.onFileDocuments.map((d) => ({ label: d.label, fileName: d.replacement?.fileName ?? d.fileName, choice: onFileChoiceText(d) })),
     declineHistory: batch.declineHistory,
     audit,
   });
