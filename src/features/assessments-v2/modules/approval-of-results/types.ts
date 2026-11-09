@@ -28,8 +28,10 @@ export interface ResultsComponent {
   name: string;
   type: AssessmentComponentType;
   weightingPercent: number;
-  totalMarks: number;
-  passMark: number;
+  // Batch L1.1: QCTO's "Highest Mark" (the component total) and "Lowest Mark" (the competence
+  // mark for this component), copied from the QASA.
+  highestMark: number;
+  lowestMark: number;
   // QCTO feedback 29.32: each component has its own EISA date (componentDates.ts).
   eisaDate: string;
 }
@@ -73,6 +75,8 @@ export interface ResultsBatch {
   learnerCount: number;
   // QCTO feedback 29.31: the approved QASA's components at the time the batch was created.
   components: ResultsComponent[];
+  // Batch L1.1: the QASA's Addendum pass % at the time the batch was created.
+  addendumPassPercent: number;
   // Row 40 / 29.31: a result per learner on the sitting's EISA Confirmation, with a mark per
   // component or Absent. The batch figures (calculation.ts batchFiguresOf) are derived from
   // these, not stored separately.

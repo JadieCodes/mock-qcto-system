@@ -48,7 +48,9 @@ export function writeStore<T>(key: string, value: T): void {
 // 'A13' = Batch L2 (05.23, 05.24): a second confirmed sitting awaiting results (Welding) with a
 // saved capture draft; the Electrical Trades one stays empty.
 // 'A13.1' = Batch L2.1: EISA and FISA results keep each learner's ID number.
-export const SEED_VERSION = 'A13.1';
+// 'A13.2' = Batch L1.1: QASA components carry QCTO's highest and lowest mark, each QASA an
+// addendum pass % and FLC; EISA results use QCTO's calculator with whole-number marks.
+export const SEED_VERSION = 'A13.2';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

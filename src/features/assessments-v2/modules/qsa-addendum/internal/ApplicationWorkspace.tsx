@@ -246,7 +246,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
             <p className="text-sm text-amber-900">{application.notes}</p>
           </div>
         )}
-        <AssessmentDetailsCard application={application} />
+        <AssessmentDetailsCard application={application} internal />
         {/* QCTO feedback 05.2: an approved QASA can be reviewed at any time; it stays approved meanwhile. */}
         {underReview && application.review && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 space-y-1">
@@ -380,7 +380,7 @@ function ApplicationWorkspaceContent({ application }: { application: QsaAddendum
           </div>
         </div>
 
-        {asdEditable ? <AssessmentDetailsEditor application={application} /> : <AssessmentDetailsCard application={application} />}
+        {asdEditable ? <AssessmentDetailsEditor application={application} /> : <AssessmentDetailsCard application={application} internal />}
 
         {application.evalState.stageId === 'qp-corrections' && <CorrectionsPanel application={application} />}
 

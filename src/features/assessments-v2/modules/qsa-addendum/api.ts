@@ -110,7 +110,7 @@ export async function performEvaluationAction(params: ActionParams): Promise<Qsa
     if (app.evaluationReport.approvedEisaSittingsPerYear == null && !app.evaluationReport.eisaSittingsOnDemand) {
       throw new Error('Record the approved EISA sittings per year (or mark them as on demand) before the evaluation outcome can be generated.');
     }
-    const detailIssues = validateAssessmentDetails({ components: componentsOf(app) });
+    const detailIssues = validateAssessmentDetails({ components: componentsOf(app), addendumPassPercent: app.addendumPassPercent ?? null, flcRequired: app.flcRequired ?? null });
     if (detailIssues.length > 0) {
       throw new Error(detailIssues.map((i) => i.message).join(' '));
     }
@@ -285,7 +285,14 @@ export async function saveAssessmentDetails(applicationId: string, input: Assess
   }
   const issues = validateAssessmentDetails(input);
   if (issues.length > 0) throw new Error(issues.map((i) => i.message).join(' '));
-  const updated = { ...app, assessmentComponents: input.components };
+  // Batch L1.1: with no components the pass % and FLC have no meaning and are cleared.
+  const hasComponents = input.components.length > 0;
+  const updated = {
+    ...app,
+    assessmentComponents: input.components,
+    addendumPassPercent: hasComponents ? input.addendumPassPercent : null,
+    flcRequired: hasComponents ? input.flcRequired : null,
+  };
   saveAll(replace(all, updated));
   return updated;
 }

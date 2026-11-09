@@ -7,7 +7,7 @@ import { generateLetter } from '../../shared/letters/templates';
 import type { GeneratedLetter } from '../../shared/letters/types';
 import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
 import { fisaEvidenceTagLabel, RESULTS_CHIEF_DIRECTOR_ROLE } from './config';
-import { absenteeismText, batchFiguresOf, calculateLearnerResult, competenceRateText, EISA_OUTCOME_LABELS } from './calculation';
+import { absenteeismText, batchFiguresOf, calculateLearnerResult, competenceRateText, EISA_OUTCOME_LABELS, reasonText } from './calculation';
 import { fisaCompetencyRatePercent, fisaCompetentCountOf, RESULTS_WORKFLOW, resultsStatusLabel } from './workflow';
 import type { FisaResultsBatch, LearnerResult, ResultsBatch, ResultsDeclineEntry } from './types';
 
@@ -27,7 +27,7 @@ interface LearnerTable {
 interface VerificationReportInput {
   heading: string;
   details: { label: string; value: string }[];
-  // FISA: Learner | ID number | Outcome. EISA (29.31): a column per component, the weighted score and the result.
+  // FISA: Learner | ID number | Outcome. EISA (29.31, L1.1): a column per component, the EISA percentage, the pass % and the result with its reason.
   learnerTable: LearnerTable;
   evidence: ReportEvidence[];
   declineHistory: ResultsDeclineEntry[];
@@ -78,24 +78,30 @@ function fisaLearnerTable(results: LearnerResult[]): LearnerTable {
   return { headers: ['Learner', 'ID number', 'Outcome'], rows: results.map((r) => [r.fullName, r.idNumber, outcomeLabel(r.outcome)]) };
 }
 
-// QCTO feedback 29.31/29.32: each component column names its EISA date, total and pass mark.
+// QCTO feedback 29.31/29.32, Batch L1.1: each component column names its EISA date, highest and
+// lowest mark and weighting; each cell has the mark (EISA Component Achievement Value), the
+// component % and C/NYC.
 function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
   return {
     headers: [
       'Learner',
       'ID number',
-      ...batch.components.map((c) => `${c.name} (EISA date ${c.eisaDate}; out of ${c.totalMarks}, pass ${c.passMark})`),
-      'Weighted score',
+      ...batch.components.map((c) => `${c.name} (EISA date ${c.eisaDate}; highest ${c.highestMark}, lowest ${c.lowestMark}, weighting ${c.weightingPercent}%)`),
+      'EISA Percentage Obtained (decimal)',
+      'EISA Percentage Obtained (final)',
+      'Pass %',
       'Result',
     ],
     rows: batch.learnerResults.map((learner) => {
-      const calc = calculateLearnerResult(batch.components, learner);
+      const calc = calculateLearnerResult(batch.components, learner, batch.addendumPassPercent);
       return [
         learner.fullName,
         learner.idNumber,
-        ...calc.components.map((r) => (r.mark === null ? '—' : `${r.mark} (${r.competent ? 'C' : 'NYC'})`)),
-        calc.weightedScorePercent === null ? '—' : `${calc.weightedScorePercent}%`,
-        EISA_OUTCOME_LABELS[calc.outcome],
+        ...calc.components.map((r) => (r.mark === null ? '—' : `${r.mark} (${r.percent}%, ${r.competent ? 'C' : 'NYC'})`)),
+        calc.eisaPercentDecimal === null ? '—' : `${calc.eisaPercentDecimal}%`,
+        calc.eisaPercentFinal === null ? '—' : `${calc.eisaPercentFinal}%`,
+        `${calc.passPercent}%`,
+        calc.reasons.length > 0 ? `${EISA_OUTCOME_LABELS[calc.outcome]} (${reasonText(calc)})` : EISA_OUTCOME_LABELS[calc.outcome],
       ];
     }),
   };
@@ -242,6 +248,7 @@ export function downloadEisaVerificationReport(batch: ResultsBatch, audit: Audit
       { label: 'EISA date', value: batch.sittingDate },
       { label: 'Submitted', value: batch.submittedAt.slice(0, 10) },
       { label: 'Submission deadline', value: batch.submissionDeadline },
+      { label: 'Addendum pass %', value: `${batch.addendumPassPercent}%` },
       { label: 'Registered', value: String(figures.registered) },
       { label: 'Wrote', value: String(figures.wrote) },
       { label: 'Competent / Not yet competent', value: `${figures.competent} / ${figures.notYetCompetent}` },

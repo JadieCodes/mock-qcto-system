@@ -12,11 +12,11 @@ import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-v
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
 import { listApplications } from '../qsa-addendum/api';
-import { NO_COMPONENTS_MESSAGE, snapshotResultsComponents } from './componentSnapshot';
+import { resultsRulesIssue, snapshotResultsRules, type ResultsRules } from './componentSnapshot';
 import { RESULTS_AD_ROLE } from './config';
 import { markEntryIssues } from './markEntry';
 import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
-import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, NewResultsBatchInput, ResultsBatch, ResultsComponent, ResultsDraft } from './types';
+import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, NewResultsBatchInput, ResultsBatch, ResultsDraft } from './types';
 
 export const KEY = 'approvalOfResults:batches';
 // QCTO feedback 05.24: the QP's saved drafts, one per sitting that has no batch yet.
@@ -51,11 +51,11 @@ export async function getBatch(id: string): Promise<ResultsBatch | undefined> {
 }
 
 // QCTO feedback 29.31: the components a new batch for this sitting would get, so the QP's
-// submit dialog can ask for a mark per component (empty = blocked, NO_COMPONENTS_MESSAGE).
-export async function listComponentsForSitting(sittingId: string): Promise<ResultsComponent[]> {
+// submit dialog can ask for a mark per component (blocked when resultsRulesIssue() gives a message).
+export async function getResultsRulesForSitting(sittingId: string): Promise<ResultsRules> {
   const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
-  if (!confirmation) return [];
-  return snapshotResultsComponents(await listApplications(), confirmation);
+  if (!confirmation) return { components: [], addendumPassPercent: null };
+  return snapshotResultsRules(await listApplications(), confirmation);
 }
 
 function loadDrafts(): ResultsDraft[] {
@@ -116,8 +116,10 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   }
   // QCTO feedback 29.31: the components are snapshotted from the approved QASA now; without
   // them there is nothing to mark against, so the batch is blocked.
-  const components = snapshotResultsComponents(await listApplications(), confirmation);
-  if (components.length === 0) throw new Error(NO_COMPONENTS_MESSAGE);
+  const rules = snapshotResultsRules(await listApplications(), confirmation);
+  const rulesIssue = resultsRulesIssue(rules);
+  if (rulesIssue) throw new Error(rulesIssue);
+  const { components, addendumPassPercent } = rules;
   // Row 40: a result per learner, not a hand-typed count — every learner on the sitting's
   // confirmed registration needs a mark per component (or Absent) before the batch is submitted.
   const rosterIds = new Set(confirmation.learners.map((l) => l.learnerId));
@@ -140,6 +142,8 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
     components,
+    // resultsRulesIssue() above guarantees it is set.
+    addendumPassPercent: addendumPassPercent ?? 0,
     learnerResults: input.learnerResults.map((r) => ({ ...r, idNumber: idNumberOf(r), marks: r.absent ? {} : r.marks })),
     evidenceDocuments: input.evidenceDocuments,
     complianceReviewNotes: '',

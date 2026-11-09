@@ -10,11 +10,11 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { saIdNumberIssue } from '../../../shared/validation/saIdNumber';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { ASSESSMENT_COMPONENT_TYPE_LABELS } from '../../qsa-addendum/assessmentDetails';
-import { calculateLearnerResult, EISA_OUTCOME_LABELS, type EisaLearnerOutcome } from '../calculation';
-import { NO_COMPONENTS_MESSAGE } from '../componentSnapshot';
+import { calculateLearnerResult, EISA_OUTCOME_LABELS, reasonText, type EisaLearnerOutcome } from '../calculation';
+import { resultsRulesIssue } from '../componentSnapshot';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
-import { useCaptureLearners, useComponentsForSitting, useResultsDraft, useSaveResultsDraft, useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
+import { useCaptureLearners, useResultsDraft, useResultsRulesForSitting, useSaveResultsDraft, useSittingsAwaitingSubmission, useSubmitResultsBatch } from '../hooks';
 import { markEntryIssues, markIssue } from '../markEntry';
 import { submissionDeadlineFor } from '../workflow';
 import type { EisaConfirmationRecord } from '../../eisa-confirmation/types';
@@ -63,11 +63,13 @@ function toRows(learners: CaptureLearner[], components: ResultsComponent[], resu
 // typed and not saved, so the next open starts fresh from the saved draft with no reset effect.
 // QCTO feedback 05.24: one row per learner, a mark per component and an Absent tick, checked as
 // the QP types with the same rules the api uses (markEntry.ts), with the live result per row
-// (calculation.ts) and live batch figures. "Save draft" keeps unfinished marks; "Submit results"
+// (calculation.ts) and live batch figures. Batch L1.1: marks are whole numbers; each row shows
+// the component % and C/NYC per mark and the EISA Percentage Obtained against the pass %. "Save draft" keeps unfinished marks; "Submit results"
 // stays disabled until every row passes. File 3 (CSV) fills the same grid.
 function ResultsCaptureForm({
   sitting,
   components,
+  addendumPassPercent,
   learners,
   draft,
   actorId,
@@ -76,6 +78,7 @@ function ResultsCaptureForm({
 }: {
   sitting: EisaConfirmationRecord;
   components: ResultsComponent[];
+  addendumPassPercent: number;
   learners: CaptureLearner[];
   draft: ResultsDraft | null | undefined;
   actorId: string;
@@ -106,7 +109,7 @@ function ResultsCaptureForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form noValidate onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4">
         <DeadlineBadge deadline={submissionDeadlineFor(sitting.sittingDate)} />
         {draft && (
@@ -135,12 +138,16 @@ function ResultsCaptureForm({
                       <span className="block font-normal text-gray-500">{ASSESSMENT_COMPONENT_TYPE_LABELS[c.type]}</span>
                       <span className="block font-normal text-gray-500">EISA date {c.eisaDate}</span>
                       <span className="block font-normal text-gray-500">
-                        Total {c.totalMarks} · pass {c.passMark}
+                        Highest {c.highestMark} · lowest {c.lowestMark} · {c.weightingPercent}%
                       </span>
                     </th>
                   ))}
                   <th className="p-2 font-medium align-bottom">Absent</th>
-                  <th className="p-2 font-medium align-bottom whitespace-nowrap">Weighted score</th>
+                  <th className="p-2 font-medium align-bottom whitespace-nowrap">
+                    EISA % obtained
+                    <span className="block font-normal text-gray-500">decimal / final</span>
+                  </th>
+                  <th className="p-2 font-medium align-bottom whitespace-nowrap">Pass %</th>
                   <th className="p-2 font-medium align-bottom">Result</th>
                 </tr>
               </thead>
@@ -149,7 +156,7 @@ function ResultsCaptureForm({
                   const result = learnerResults[i];
                   const absent = result.absent;
                   const complete = isComplete(result);
-                  const calc = complete ? calculateLearnerResult(components, result) : null;
+                  const calc = complete ? calculateLearnerResult(components, result, addendumPassPercent) : null;
                   const idIssue = saIdNumberIssue(learner.idNumber);
                   return (
                     <tr key={learner.learnerId} className="align-top">
@@ -167,13 +174,13 @@ function ResultsCaptureForm({
                           <td key={c.id} className="p-2">
                             <Input
                               type="number"
-                              inputMode="decimal"
+                              inputMode="numeric"
                               min={0}
-                              max={c.totalMarks}
-                              step="any"
+                              max={c.highestMark}
+                              step={1}
                               className={cn('w-24', message && 'border-red-400')}
                               disabled={absent}
-                              aria-label={`${learner.fullName} — ${c.name} mark out of ${c.totalMarks}`}
+                              aria-label={`${learner.fullName} — ${c.name} mark out of ${c.highestMark}`}
                               aria-invalid={message ? true : undefined}
                               aria-describedby={message ? errorId : undefined}
                               {...register(`learners.${i}.marks.${j}`)}
@@ -184,8 +191,8 @@ function ResultsCaptureForm({
                               </p>
                             )}
                             {!message && !absent && raw !== '' && (
-                              <p className={cn('mt-1 text-xs', result.marks[c.id] >= c.passMark ? 'text-emerald-700' : 'text-amber-700')}>
-                                {result.marks[c.id] >= c.passMark ? 'C' : 'NYC'}
+                              <p className={cn('mt-1 whitespace-nowrap text-xs', result.marks[c.id] >= c.lowestMark ? 'text-emerald-700' : 'text-amber-700')}>
+                                {Math.round((result.marks[c.id] / c.highestMark) * 10000) / 100}% · {result.marks[c.id] >= c.lowestMark ? 'C' : 'NYC'}
                               </p>
                             )}
                           </td>
@@ -209,10 +216,12 @@ function ResultsCaptureForm({
                         />
                       </td>
                       <td className="p-2 whitespace-nowrap text-gray-700">
-                        {calc && calc.weightedScorePercent !== null ? `${calc.weightedScorePercent}%` : '—'}
+                        {calc && calc.eisaPercentDecimal !== null ? `${calc.eisaPercentDecimal}% / ${calc.eisaPercentFinal}%` : '—'}
                       </td>
-                      <td className={cn('p-2 whitespace-nowrap font-medium', calc ? OUTCOME_CLASS[calc.outcome] : 'text-gray-400')}>
-                        {calc ? EISA_OUTCOME_LABELS[calc.outcome] : 'Incomplete'}
+                      <td className="p-2 whitespace-nowrap text-gray-700">{addendumPassPercent}%</td>
+                      <td className={cn('p-2 font-medium', calc ? OUTCOME_CLASS[calc.outcome] : 'text-gray-400')}>
+                        <span className="whitespace-nowrap">{calc ? EISA_OUTCOME_LABELS[calc.outcome] : 'Incomplete'}</span>
+                        {calc && calc.reasons.length > 0 && <span className="block max-w-[12rem] text-xs font-normal">{reasonText(calc)}</span>}
                       </td>
                     </tr>
                   );
@@ -221,12 +230,14 @@ function ResultsCaptureForm({
             </table>
           </div>
           <p className="text-xs text-gray-500">
-            Enter a mark from 0 to the component's total for every learner, or tick Absent. C = competent in that component, NYC = not yet competent.
+            Enter a whole-number mark from 0 to the component's highest mark for every learner, or tick Absent. Under each mark: the component % and C = competent in that
+            component (mark at least the lowest mark) or NYC = not yet competent. A learner is Competent when the final EISA % is at least the pass % ({addendumPassPercent}%) and
+            the learner is competent in every component.
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <EisaBatchFigures batch={{ components, learnerResults: completeResults }} />
+          <EisaBatchFigures batch={{ components, addendumPassPercent, learnerResults: completeResults }} />
           {incompleteCount > 0 && (
             <p className="text-xs text-amber-700">
               These figures count the {completeResults.length} of {learnerResults.length} learners whose rows are complete so far.
@@ -285,10 +296,11 @@ function ResultsCaptureForm({
 export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingId: string | null; onOpenChange: (open: boolean) => void }) {
   const { person } = useV2Role();
   const { data: awaiting = [] } = useSittingsAwaitingSubmission();
-  const { data: components, isLoading } = useComponentsForSitting(sittingId);
+  const { data: rules, isLoading } = useResultsRulesForSitting(sittingId);
   const { data: learners } = useCaptureLearners(sittingId);
   const { data: draft, isFetched: draftFetched } = useResultsDraft(sittingId);
   const sitting = awaiting.find((s) => s.sittingId === sittingId);
+  const blockedMessage = rules ? resultsRulesIssue(rules) : null;
 
   return (
     <Modal
@@ -298,9 +310,9 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
       title="Submit Results Batch"
       description={sitting ? `${sitting.qualificationTitle} — EISA date ${sitting.sittingDate}` : undefined}
     >
-      {sitting && !isLoading && components && components.length === 0 && (
+      {sitting && !isLoading && rules && blockedMessage && (
         <div className="space-y-4">
-          <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">{NO_COMPONENTS_MESSAGE}</p>
+          <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">{blockedMessage}</p>
           <div className="flex justify-end">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
@@ -308,11 +320,12 @@ export function SubmitResultsBatchDialog({ sittingId, onOpenChange }: { sittingI
           </div>
         </div>
       )}
-      {sitting && components && components.length > 0 && learners && draftFetched && (
+      {sitting && rules && rules.addendumPassPercent !== null && !blockedMessage && learners && draftFetched && (
         <ResultsCaptureForm
           key={sitting.id}
           sitting={sitting}
-          components={components}
+          components={rules.components}
+          addendumPassPercent={rules.addendumPassPercent}
           learners={learners}
           draft={draft}
           actorId={person.id}

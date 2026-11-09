@@ -34,10 +34,20 @@ export interface AssessmentComponent {
   type: AssessmentComponentType;
   weightingPercent: number;
   days: number;
-  // QCTO feedback 05.3: needed to decide competence per component in Approval of Results.
-  totalMarks: number;
-  passMark: number;
+  // Batch L1.1: QCTO's control sheet columns "Highest Mark" (the component total) and "Lowest
+  // Mark" (the competence mark for this component).
+  highestMark: number;
+  lowestMark: number;
 }
+
+// Records stored before Batch L1.1 hold totalMarks / passMark instead; assessmentDetails.ts
+// normaliseComponent() maps them (totalMarks -> highest mark, passMark -> lowest mark).
+export type StoredAssessmentComponent = Omit<AssessmentComponent, 'highestMark' | 'lowestMark'> & {
+  highestMark?: number;
+  lowestMark?: number;
+  totalMarks?: number;
+  passMark?: number;
+};
 
 // QCTO feedback 3.3 / 05.1: the simulated "Certification notified of the assessment details"
 // hand-off, recorded when the CEO signs the feedback letter on an approved QASA. A snapshot of
@@ -45,9 +55,16 @@ export interface AssessmentComponent {
 export interface QasaCertificationHandoff {
   notifiedAt: string;
   notifiedBy: string;
-  components: AssessmentComponent[];
+  components: StoredAssessmentComponent[];
   approvedEisaSittingsPerYear: number | null;
   eisaSittingsOnDemand: boolean;
+  // Batch L1.1: the QASA-level control sheet values at that moment. Optional so hand-offs stored
+  // before this batch still load (missing = not captured).
+  addendumPassPercent?: number | null;
+  flcRequired?: boolean | null;
+  // The day the CEO signed the feedback letter, and the qualification's registration end date.
+  addendumStartDate?: string;
+  addendumEndDate?: string | null;
 }
 
 // QCTO feedback 05.2: a review of an approved QASA, started by the DD with a reason. While it
@@ -98,7 +115,10 @@ export interface QsaAddendumApplication {
 
   // QCTO feedback 3.3: optional and additive — read them through assessmentDetails.ts, which
   // treats a missing value as "not captured".
-  assessmentComponents?: AssessmentComponent[];
+  assessmentComponents?: StoredAssessmentComponent[];
+  // Batch L1.1: QCTO control sheet "Addendum Pass %" and "FLC", required once any component is listed.
+  addendumPassPercent?: number | null;
+  flcRequired?: boolean | null;
   certificationHandoff?: QasaCertificationHandoff | null;
   review?: QasaReview | null;
 }

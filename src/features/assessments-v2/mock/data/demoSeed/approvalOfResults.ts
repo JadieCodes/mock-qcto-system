@@ -6,11 +6,13 @@
 // result per learner on that confirmation, and was submitted about 20 days after the EISA date
 // (inside the 21-working-day deadline). Days are "days ago".
 //
-// QCTO feedback 29.31 (Batch L1): each batch snapshots the components of the approved QASA for
-// its QP and qualification (qasa.ts: Electrical Trades, Welding, Plumbing — two components each)
-// and every learner has a mark per component, or is Absent. The pattern is per learner, in
-// confirmation order: C = Competent (every mark at least the pass mark), N = Not yet competent
-// (one component below its pass mark), A = Absent. Rate = competent / wrote.
+// QCTO feedback 29.31 (Batch L1, L1.1): each batch snapshots the components and Addendum pass %
+// of the approved QASA for its QP and qualification (qasa.ts: Electrical Trades, Welding,
+// Plumbing — two components each) and every learner has a whole-number mark per component, or is
+// Absent. The pattern is per learner, in confirmation order: C = Competent (every mark at least
+// the component's lowest mark and the final EISA % at least the pass %), N = Not yet competent
+// (one component below its lowest mark; learners at an even position still pass overall, the
+// others usually fall below the pass % too), A = Absent. Rate = competent / wrote.
 //
 //  #    Qualification      EISA date    QP                   Pattern  Rate   Stage
 //  —    Electrical Trades  today - 15   Nomvula Dlamini      —        —      Awaiting submission (QP side) — no batch yet, nothing captured
@@ -36,7 +38,7 @@ import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
 import { calculateLearnerResult, type EisaLearnerOutcome } from '../../../modules/approval-of-results/calculation';
-import { snapshotResultsComponents } from '../../../modules/approval-of-results/componentSnapshot';
+import { snapshotResultsRules } from '../../../modules/approval-of-results/componentSnapshot';
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
 import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
@@ -90,19 +92,23 @@ function isOutcomeCode(value: string): value is OutcomeCode {
   return value === 'C' || value === 'N' || value === 'A';
 }
 
-// Deterministic, realistic marks for one learner. Competent: every mark between the pass mark
-// and the total. Not yet competent: one component (it alternates per learner) below its pass
-// mark, the other passed. Absent: no marks.
+// Deterministic, realistic whole-number marks for one learner. Competent: every mark between the
+// lowest mark and the highest mark. Not yet competent: one component (it alternates per learner)
+// below its lowest mark; at an even position the other components are strong, so the learner
+// passes overall but is not yet competent in that component. Absent: no marks.
 function seedMarks(components: ResultsComponent[], code: OutcomeCode, learnerIndex: number): Record<string, number> {
   if (code === 'A') return {};
   const failing = learnerIndex % components.length;
+  const strongOthers = code === 'N' && learnerIndex % 2 === 0;
   return Object.fromEntries(
     components.map((c, j) => {
       const spread = ((learnerIndex * 37 + j * 53) % 80) / 100 + 0.1;
       const mark =
         code === 'N' && j === failing
-          ? Math.floor(c.passMark * (0.55 + ((learnerIndex * 13 + j * 7) % 35) / 100))
-          : Math.min(c.totalMarks, c.passMark + Math.round((c.totalMarks - c.passMark) * spread));
+          ? Math.floor(c.lowestMark * (0.55 + ((learnerIndex * 13 + j * 7) % 35) / 100))
+          : strongOthers
+            ? Math.min(c.highestMark, Math.round(c.highestMark * (0.85 + ((learnerIndex * 11 + j * 5) % 15) / 100)))
+            : Math.min(c.highestMark, c.lowestMark + Math.round((c.highestMark - c.lowestMark) * spread));
       return [c.id, mark];
     }),
   );
@@ -140,8 +146,9 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     if (codes.length !== pattern.length || codes.length !== confirmation.learners.length) {
       throw new Error(`Demo seed: ${title} ${confirmation.sittingDate} pattern does not match its learners.`);
     }
-    const components = snapshotResultsComponents(qasas, confirmation);
+    const { components, addendumPassPercent } = snapshotResultsRules(qasas, confirmation);
     if (components.length === 0) throw new Error(`Demo seed: the approved QASA for ${title} has no assessment components.`);
+    if (addendumPassPercent === null) throw new Error(`Demo seed: the approved QASA for ${title} has no addendum pass %.`);
     const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => ({
       learnerId: l.learnerId,
       fullName: l.fullName,
@@ -151,7 +158,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     }));
     // The seeded marks must give exactly the outcome the pattern asks for, and pass the QP's checks.
     learnerResults.forEach((r, i) => {
-      if (calculateLearnerResult(components, r).outcome !== OUTCOME_OF_CODE[codes[i]]) {
+      if (calculateLearnerResult(components, r, addendumPassPercent).outcome !== OUTCOME_OF_CODE[codes[i]]) {
         throw new Error(`Demo seed: ${title} learner ${i + 1} marks do not give ${OUTCOME_OF_CODE[codes[i]]}.`);
       }
     });
@@ -168,6 +175,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       qpName: confirmation.qpName,
       learnerCount: confirmation.learners.length,
       components,
+      addendumPassPercent,
       learnerResults,
       evidenceDocuments: [
         { fileName: `${fileTitle}_EISA_Marksheet_${sittingDate}.xlsx`, fileSize: 98_304, uploadedAt: submittedAt },
@@ -312,12 +320,12 @@ export function seedResultsDrafts(confirmations: EisaConfirmationRecord[], qasas
   const date = workingDateFromToday(-20);
   const confirmation = confirmations.find((c) => c.qualificationTitle === 'Welding' && c.sittingDate === date);
   if (!confirmation) throw new Error(`Demo seed: no EISA Confirmation for Welding ${date}.`);
-  const components = snapshotResultsComponents(qasas, confirmation);
+  const { components } = snapshotResultsRules(qasas, confirmation);
   if (components.length === 0) throw new Error('Demo seed: the approved QASA for Welding has no assessment components.');
   const [first] = components;
   const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => {
     if (i === 0) return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: seedMarks(components, 'C', i) };
-    if (i === 1) return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: { [first.id]: Math.max(0, first.passMark - 5) } };
+    if (i === 1) return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: { [first.id]: Math.max(0, first.lowestMark - 5) } };
     return { learnerId: l.learnerId, fullName: l.fullName, idNumber: idNumberOf(l.learnerId), absent: false, marks: {} };
   });
   // The draft must be genuinely unfinished: the first learner passes the checks, the others do not.

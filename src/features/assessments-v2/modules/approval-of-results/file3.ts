@@ -3,7 +3,9 @@
 // docs/assessments-v2/progress.md, "Batch L2"): the columns below are our own simple version —
 // Learner ID number, Learner name, one column per component (header = component name) and
 // Absent (Y/N). The marks are checked with the same rules as the screen (markEntry.ts) and the
-// ID numbers with the shared check (05.23).
+// ID numbers with the shared check (05.23). Batch L1.1: marks are whole numbers — a decimal
+// ("45,5" or "45.5") is still read here, then rejected by markIssue() with "Marks must be whole
+// numbers".
 import { csvField, normaliseHeading, parseCsvTable, withExcelPrefix } from '../../shared/csv/csv';
 import { saIdNumberIssue, withRestoredLeadingZero } from '../../shared/validation/saIdNumber';
 import { markIssue } from './markEntry';
@@ -63,7 +65,7 @@ function parseAbsent(text: string): boolean | null {
 
 export function parseFile3(text: string, components: ResultsComponent[], learners: CaptureLearner[]): File3ParseResult {
   // Extra columns are ignored; a missing required column (or a file Excel re-formatted) rejects
-  // the whole file. Marks keep their text here: "45,5" is read as 45.5 below.
+  // the whole file. Marks keep their text here: "45,5" is read as 45.5, which is then rejected.
   const required = [FILE3_ID_COLUMN, ...components.map((c) => c.name), FILE3_ABSENT_COLUMN];
   const parsed = parseCsvTable(text, required);
   if (!parsed.ok) return parsed;
