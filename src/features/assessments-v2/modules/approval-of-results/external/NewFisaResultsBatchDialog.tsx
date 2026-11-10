@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Modal } from '../../../shared/ui/Modal';
@@ -21,16 +22,18 @@ export function NewFisaResultsBatchDialog({
   const { data: standards = [] } = useFisaStandardsForResults();
   const createBatch = useCreateFisaResultsBatch();
   const [fisaStandardId, setFisaStandardId] = useState('');
+  const [fisaDate, setFisaDate] = useState('');
 
   const close = () => {
     onOpenChange(false);
     setFisaStandardId('');
+    setFisaDate('');
   };
 
   const onCreate = () => {
-    if (!fisaStandardId) return;
+    if (!fisaStandardId || !fisaDate) return;
     createBatch.mutate(
-      { fisaStandardId, sdpId: person.sdpId ?? person.id, sdpName: person.name, createdBy: person.name, createdById: person.id },
+      { fisaStandardId, fisaDate, sdpId: person.sdpId ?? person.id, sdpName: person.name, createdBy: person.name, createdById: person.id },
       {
         onSuccess: (batch) => {
           close();
@@ -52,7 +55,7 @@ export function NewFisaResultsBatchDialog({
           <Button variant="outline" onClick={close}>
             Cancel
           </Button>
-          <Button disabled={!fisaStandardId || createBatch.isPending} onClick={onCreate}>
+          <Button disabled={!fisaStandardId || !fisaDate || createBatch.isPending} onClick={onCreate}>
             Create batch
           </Button>
         </>
@@ -76,6 +79,10 @@ export function NewFisaResultsBatchDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fisa-results-date">Date of the FISA *</Label>
+            <Input id="fisa-results-date" type="date" value={fisaDate} onChange={(e) => setFisaDate(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label>SDP</Label>

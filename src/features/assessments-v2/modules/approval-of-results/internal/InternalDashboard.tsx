@@ -13,10 +13,11 @@ import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
-import { absenteeismText, batchFiguresOf, competenceRateText } from '../calculation';
+import { absenteeismText, batchFiguresOf, competenceRateText, throughputRateText } from '../calculation';
 import { RESULTS_WORKFLOW } from '../workflow';
 import { FisaResultsTab } from './FisaResultsTab';
 import { ResultsBatchWorkspace } from './ResultsBatchWorkspace';
+import { SentToCertificationTab } from './SentToCertificationTab';
 import type { ResultsBatch } from '../types';
 
 // A brand-new submission nobody has personally touched yet still belongs under "My items" for
@@ -37,7 +38,7 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
         <TableHeader>
           <TableRow>
             {/* QCTO feedback 29.31/29.32: EISA date, and the rate (competent ÷ wrote) with absenteeism. */}
-            {['Qualification', 'QP', 'EISA Date', 'Competency Rate', 'Absent', 'Status', 'Submission'].map((h) => (
+            {['Qualification', 'QP', 'EISA Date', 'Competency Rate', 'Absent', 'Throughput Rate', 'Status', 'Submission'].map((h) => (
               <TableHead key={h} className="whitespace-nowrap">
                 {h}
               </TableHead>
@@ -54,6 +55,7 @@ function BatchesTable({ batches, onSelect }: { batches: ResultsBatch[]; onSelect
                 <TableCell className="whitespace-nowrap">{b.sittingDate}</TableCell>
                 <TableCell className="whitespace-nowrap">{competenceRateText(figures)}</TableCell>
                 <TableCell className="whitespace-nowrap">{absenteeismText(figures)}</TableCell>
+                <TableCell className="whitespace-nowrap">{throughputRateText(figures)}</TableCell>
                 <TableCell>
                   <ResultsBatchStatusBadge batch={b} />
                 </TableCell>
@@ -78,14 +80,16 @@ function EisaResultsTab({ scope }: { scope: ListScope }) {
 
   const pending = batches.filter((b) => PENDING_STAGES.has(b.workflow.stageId));
   const approved = batches.filter((b) => b.workflow.stageId === 'approved');
+  const moreEvidence = batches.filter((b) => b.workflow.stageId === 'more-evidence');
   const declined = batches.filter((b) => b.workflow.stageId === 'declined');
 
   return (
     <div className="space-y-6">
-      <StatTileGrid>
+      <StatTileGrid className="md:grid-cols-5">
         <StatTile label="Total Batches" value={batches.length} />
         <StatTile label="Pending Review" value={pending.length} />
         <StatTile label="Approved" value={approved.length} />
+        <StatTile label="More Evidence Requested" value={moreEvidence.length} />
         <StatTile label="Declined" value={declined.length} />
       </StatTileGrid>
 
@@ -122,12 +126,16 @@ export function InternalDashboard() {
         <TabsList>
           <TabsTrigger value="eisa">EISA</TabsTrigger>
           <TabsTrigger value="fisa">FISA</TabsTrigger>
+          <TabsTrigger value="certification">Sent to Certification</TabsTrigger>
         </TabsList>
         <TabsContent value="eisa" className="pt-4">
           <EisaResultsTab scope={scope} />
         </TabsContent>
         <TabsContent value="fisa" className="pt-4">
           <FisaResultsTab scope={scope} />
+        </TabsContent>
+        <TabsContent value="certification" className="pt-4">
+          <SentToCertificationTab />
         </TabsContent>
       </Tabs>
     </div>

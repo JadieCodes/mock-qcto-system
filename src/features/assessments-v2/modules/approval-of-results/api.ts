@@ -1,4 +1,4 @@
-import { appendAuditEntry } from '../../shared/audit/auditLog';
+import { appendAuditEntry, getAuditTrail } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
@@ -15,18 +15,43 @@ import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPE
 import type { SiteVisit } from '../site-visits/types';
 import { visitSittingIdsOf } from '../site-visits/visitQualifications';
 import { listApplications } from '../qsa-addendum/api';
-import { resultsRulesIssue, snapshotResultsRules, type ResultsRules } from './componentSnapshot';
+import { qualificationDetailsOf, resultsRulesIssue, snapshotResultsRules, type ResultsRules } from './componentSnapshot';
 import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from './config';
+import { reviewersFromAudit } from './downloads';
 import { markEntryIssues } from './markEntry';
-import { competencyRatePercent, eisaSubmissionIssues, isBelowPostEisaThreshold, RESULTS_WORKFLOW, submissionDeadlineFor } from './workflow';
-import type { CaptureLearner, EisaLearnerResult, EvidenceDocument, NewResultsBatchInput, OnFileDocument, OnFileDocumentRecord, ResultsBatch, ResultsDraft } from './types';
+import { lastEisaDateOf } from './outcomeLetters';
+import { buildVerificationCode } from './verificationCode';
+import {
+  competencyRatePercent,
+  eisaSubmissionIssues,
+  isBelowPostEisaThreshold,
+  isRecommendDeclineAction,
+  isRequestEvidenceAction,
+  RESULTS_WORKFLOW,
+  submissionDeadlineFor,
+} from './workflow';
+import type {
+  CaptureLearner,
+  EisaLearnerResult,
+  EvidenceDocument,
+  NewResultsBatchInput,
+  OnFileDocument,
+  OnFileDocumentRecord,
+  ResultsBatch,
+  ResultsDraft,
+  ResultsFinalDecision,
+} from './types';
 
 export const KEY = 'approvalOfResults:batches';
 // QCTO feedback 05.24: the QP's saved drafts, one per sitting that has no batch yet.
 export const DRAFTS_KEY = 'approvalOfResults:drafts';
 
+// Batch N1: a batch stored in the old 'declined' stage (before the decline became final) is a
+// "More evidence requested" batch. Idempotent: a final decline always carries a finalDecision.
 function loadAll(): ResultsBatch[] {
-  return readStore<ResultsBatch[]>(KEY, []);
+  return readStore<ResultsBatch[]>(KEY, []).map((b) =>
+    b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b, workflow: { ...b.workflow, stageId: 'more-evidence' } } : b,
+  );
 }
 
 function saveAll(batches: ResultsBatch[]): void {
@@ -161,6 +186,8 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     sittingId: confirmation.sittingId,
     sittingDate: confirmation.sittingDate,
     qualificationTitle: confirmation.qualificationTitle,
+    ...qualificationDetailsOf(await listApplications(), confirmation),
+    centres: confirmation.confirmedCentres?.map((c) => c.centre) ?? confirmation.centres,
     qpId: confirmation.qpId,
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
@@ -177,6 +204,10 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     workflow: { stageId: 'ad-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     cycleCount: 1,
     declineHistory: [],
+    declineRecommendations: [],
+    evidenceRequestedAt: null,
+    finalEvidenceReceivedAt: null,
+    finalDecision: null,
     submissionDeadline: submissionDeadlineFor(confirmation.sittingDate),
     submittedAt: new Date().toISOString(),
     recommendation: null,
@@ -252,13 +283,48 @@ interface ResultsActionParams {
   actorId: string;
   actorName: string;
   note?: string;
+  // Batch N1: the Chief Director's final decline needs both lists (one or more lines each).
+  irregularities?: string[];
+  correctiveActions?: string[];
 }
 
 export const NEXT_APPROVER: Partial<Record<string, Role>> = {
   'ad-advance': 'Deputy Director',
   'dd-advance': 'Director',
   'director-advance': 'Chief Director',
+  'dd-recommend-decline': 'Director',
+  'director-recommend-decline': 'Chief Director',
 };
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nonEmptyLines(lines: string[] | undefined): string[] {
+  return (lines ?? []).map((l) => l.trim()).filter(Boolean);
+}
+
+// Batch N1: the final decision on a batch. The code is numbered per financial year among the
+// EISA batches already decided.
+function finalDecisionFor(
+  batch: ResultsBatch,
+  all: ResultsBatch[],
+  outcome: 'approved' | 'declined',
+  actor: { id: string; name: string },
+  lists: { irregularities: string[]; correctiveActions: string[] },
+): ResultsFinalDecision {
+  const decidedAt = new Date().toISOString();
+  const existing = all.flatMap((b) => (b.finalDecision ? [b.finalDecision.verificationCode] : []));
+  return {
+    outcome,
+    decidedAt,
+    decidedBy: actor.name,
+    decidedById: actor.id,
+    verificationCode: buildVerificationCode('eisa', lastEisaDateOf(batch), today(), existing),
+    ...lists,
+    ...reviewersFromAudit(getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
+  };
+}
 
 // CR-059: the ASD's three-part review must be complete before the batch goes to the Deputy
 // Director. One check for EISA and FISA batches (QCTO feedback 3.14).
@@ -289,11 +355,12 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     });
     // CR-023-style resubmission cycle (same pattern as Instrument Validation): a fresh
     // checklist and review notes for a genuine re-check, while declineHistory keeps every
-    // past cycle's reason so nothing is lost.
+    // past cycle's reason so nothing is lost. Batch N1: "Date final outstanding evidence received".
     const updated: ResultsBatch = {
       ...batch,
       workflow: nextWorkflow,
       cycleCount: batch.cycleCount + 1,
+      finalEvidenceReceivedAt: today(),
       complianceChecklist: buildResultsComplianceChecklist(),
       complianceReviewNotes: '',
       evidenceEvaluationNotes: '',
@@ -302,10 +369,20 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     addNotification({
       recipientRole: RESULTS_AD_ROLE,
       title: 'Results batch resubmitted',
-      body: `"${batch.qualificationTitle}" was resubmitted after being declined (cycle ${updated.cycleCount}).`,
+      body: `"${batch.qualificationTitle}" was resubmitted with more evidence (cycle ${updated.cycleCount}).`,
     });
     return updated;
   }
+
+  // Batch N1: the final decline needs both lists. The audit note carries them so the trail shows why.
+  const isFinalDecline = params.actionId === 'chief-director-decline';
+  const irregularities = nonEmptyLines(params.irregularities);
+  const correctiveActions = nonEmptyLines(params.correctiveActions);
+  if (isFinalDecline) {
+    if (irregularities.length === 0) throw new Error('List at least one irregularity before declining the results.');
+    if (correctiveActions.length === 0) throw new Error('List at least one corrective action before declining the results.');
+  }
+  const note = isFinalDecline ? `Irregularities: ${irregularities.join('; ')}. Corrective actions: ${correctiveActions.join('; ')}.` : params.note;
 
   const nextWorkflow = performAction({
     definition: RESULTS_WORKFLOW,
@@ -314,16 +391,18 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     actorRole: params.actorRole,
     actorId: params.actorId,
     actorName: params.actorName,
-    note: params.note,
+    note,
     recordType: 'results-batch',
     recordId: batch.id,
   });
 
   let updated: ResultsBatch = { ...batch, workflow: nextWorkflow };
+  const actor = { actorRole: params.actorRole, actorId: params.actorId, actorName: params.actorName };
 
-  if (params.actionId.endsWith('-decline')) {
+  if (isRequestEvidenceAction(params.actionId)) {
     updated = {
       ...updated,
+      evidenceRequestedAt: today(),
       declineHistory: [
         ...updated.declineHistory,
         { stageId: batch.workflow.stageId, decidedBy: params.actorName, reason: params.note ?? '', decidedAt: new Date().toISOString() },
@@ -331,9 +410,19 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     };
     addNotification({
       recipientRole: 'QP',
-      title: 'Results batch declined',
-      body: `"${batch.qualificationTitle}" was declined: ${params.note ?? ''}`,
+      title: 'More evidence requested',
+      body: `"${batch.qualificationTitle}": ${params.note ?? ''} Add the evidence and resubmit.`,
     });
+  }
+
+  if (isRecommendDeclineAction(params.actionId)) {
+    updated = {
+      ...updated,
+      declineRecommendations: [
+        ...updated.declineRecommendations,
+        { stageId: batch.workflow.stageId, recommendedBy: params.actorName, reason: params.note ?? '', recommendedAt: new Date().toISOString(), cycle: batch.cycleCount },
+      ],
+    };
   }
 
   const nextApprover = NEXT_APPROVER[params.actionId];
@@ -345,29 +434,46 @@ export async function performResultsAction(params: ResultsActionParams): Promise
     });
   }
 
-  if (params.actionId === 'chief-director-approve') {
-    updated = { ...updated, recommendation: { recommendedAt: new Date().toISOString(), recommendedBy: params.actorName } };
-    // CR-059 hand-off: the Certification domain has no role in this build's Role union to
-    // notify directly — simulated as an audit entry, same pattern as PM-07/PM-08's QA and
-    // Accreditation hand-offs elsewhere in this domain.
+  if (isFinalDecline) {
+    updated = { ...updated, finalDecision: finalDecisionFor(batch, all, 'declined', { id: params.actorId, name: params.actorName }, { irregularities, correctiveActions }) };
     appendAuditEntry({
-      recordType: 'results-batch',
+      recordType: EISA_RESULTS_RECORD_TYPE,
       recordId: batch.id,
-      actorRole: params.actorRole,
-      actorId: params.actorId,
-      actorName: params.actorName,
-      action: 'Recommended to the Certification domain for certificate printing (simulated)',
+      ...actor,
+      action: `Outcome letter (decline) generated. Verification code ${updated.finalDecision?.verificationCode ?? ''}`,
+    });
+    addNotification({
+      recipientRole: 'QP',
+      title: 'Results declined',
+      body: `The results for "${batch.qualificationTitle}" were declined. Your Outcome Letter is ready to download. Please notify the SDPs.`,
+    });
+  }
+
+  if (params.actionId === 'chief-director-approve') {
+    updated = {
+      ...updated,
+      recommendation: { recommendedAt: new Date().toISOString(), recommendedBy: params.actorName },
+      finalDecision: finalDecisionFor(batch, all, 'approved', { id: params.actorId, name: params.actorName }, { irregularities: [], correctiveActions: [] }),
+    };
+    // CR-059 hand-off: the Certification domain has no role in this build's Role union to
+    // notify directly — simulated as an audit entry and the internal "Sent to Certification" list.
+    appendAuditEntry({
+      recordType: EISA_RESULTS_RECORD_TYPE,
+      recordId: batch.id,
+      ...actor,
+      action: 'Recommendation letter sent to Certification',
     });
     addNotification({
       recipientRole: 'QP',
       title: 'Results batch approved',
-      body: `"${batch.qualificationTitle}" results are approved and recommended to Certification.`,
+      body: `"${batch.qualificationTitle}" results are approved. Your Outcome Letter is ready to download.`,
     });
   }
 
   saveAll(replace(all, updated));
 
   // QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit.
+  // A declined batch never does.
   if (params.actionId === 'chief-director-approve') {
     return ensurePemVisitForBatch(updated.id, { role: params.actorRole, id: params.actorId, name: params.actorName }, 'automatic');
   }

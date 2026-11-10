@@ -8,7 +8,7 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { FISA_RESULTS_RECORD_TYPE } from '../config';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useFisaResultsBatches } from '../hooks';
-import { FISA_RESULTS_WORKFLOW, fisaCompetencyRatePercent } from '../workflow';
+import { FISA_RESULTS_WORKFLOW, fisaThroughputRatePercent, fisaCompetencyRatePercent } from '../workflow';
 import { FisaResultsBatchWorkspace } from './FisaResultsBatchWorkspace';
 
 const PENDING_STAGES = new Set(['ad-review', 'dd-review', 'director-review', 'chief-director-review']);
@@ -31,14 +31,16 @@ export function FisaResultsTab({ scope }: { scope: ListScope }) {
 
   const pending = batches.filter((b) => PENDING_STAGES.has(b.workflow.stageId));
   const approved = batches.filter((b) => b.workflow.stageId === 'approved');
+  const moreEvidence = batches.filter((b) => b.workflow.stageId === 'more-evidence');
   const declined = batches.filter((b) => b.workflow.stageId === 'declined');
 
   return (
     <div className="space-y-6">
-      <StatTileGrid>
+      <StatTileGrid className="md:grid-cols-5">
         <StatTile label="Total Batches" value={batches.length} />
         <StatTile label="Pending Review" value={pending.length} />
         <StatTile label="Approved" value={approved.length} />
+        <StatTile label="More Evidence Requested" value={moreEvidence.length} />
         <StatTile label="Declined" value={declined.length} />
       </StatTileGrid>
 
@@ -50,7 +52,7 @@ export function FisaResultsTab({ scope }: { scope: ListScope }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Skills Programme', 'SDP', 'Learners', 'Competency Rate', 'Status', 'Submitted'].map((h) => (
+                  {['Skills Programme', 'SDP', 'Learners', 'Competency Rate', 'Throughput Rate', 'Status', 'Submitted'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -64,6 +66,7 @@ export function FisaResultsTab({ scope }: { scope: ListScope }) {
                     <TableCell className="max-w-[180px] truncate">{b.sdpName}</TableCell>
                     <TableCell>{b.learnerResults.length}</TableCell>
                     <TableCell>{fisaCompetencyRatePercent(b)}%</TableCell>
+                    <TableCell>{fisaThroughputRatePercent(b)}%</TableCell>
                     <TableCell>
                       <ResultsBatchStatusBadge batch={b} />
                     </TableCell>

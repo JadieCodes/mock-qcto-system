@@ -15,7 +15,7 @@
 //   AND the learner is competent in every component; otherwise Not yet competent, with the reason.
 // - A learner marked Absent has no result and does not count as having written.
 // - Batch: registered = learners on the batch; wrote = not absent; competence rate =
-//   competent ÷ wrote; absenteeism = absent ÷ registered.
+//   competent ÷ wrote; absenteeism = absent ÷ registered; throughput rate = wrote ÷ registered.
 // Open questions (progress.md, "Batch L1.1"): whether the lowest mark is a sub-minimum, whole
 // number or 2-decimal rounding, and what FLC stands for.
 import type { EisaLearnerResult, ResultsComponent } from './types';
@@ -50,6 +50,8 @@ export interface BatchFigures {
   notYetCompetent: number;
   competenceRatePercent: number;
   absenteeismPercent: number;
+  // Batch N1: wrote / registered (QCTO's tracking register).
+  throughputRatePercent: number;
 }
 
 // The tiny offset keeps values such as 44.5 or 1.005 from falling to the wrong side in floating point.
@@ -138,6 +140,7 @@ export function batchFiguresOf(batch: { components: ResultsComponent[]; addendum
     notYetCompetent: wrote - competent,
     competenceRatePercent: percentOf(competent, wrote),
     absenteeismPercent: percentOf(absent, registered),
+    throughputRatePercent: percentOf(wrote, registered),
   };
 }
 
@@ -154,4 +157,8 @@ export function competenceRateText(f: BatchFigures): string {
 
 export function absenteeismText(f: BatchFigures): string {
   return `${f.absent} of ${f.registered} (${f.absenteeismPercent}%)`;
+}
+
+export function throughputRateText(f: BatchFigures): string {
+  return `${f.throughputRatePercent}% (${f.wrote} of ${f.registered} registered)`;
 }

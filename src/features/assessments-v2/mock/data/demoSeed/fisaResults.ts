@@ -9,21 +9,25 @@
 //  R1  Khanya Skills Academy    3 (2)                 Awaiting submission — draft, one evidence file, not submitted
 //  R2  Thabo Technical College  3 (3)                 Submitted — with the ASD, review not started
 //  R3  Khanya Skills Academy    4 (3)                 With the Deputy Director (ASD Lindiwe Khumalo reviewed it)
-//  R4  Khanya Skills Academy    6 (5)                 Approved — approval letter sent to the SDP, recommended to Certification
+//  R4  Khanya Skills Academy    6 (5)                 Approved — Outcome Letter sent to the SDP, recommendation letter sent to Certification (Batch N1)
 //
 // Officials on R4: ASD Sipho Ndlovu, Deputy Director Grace Mokoena, Director Zanele Mthembu,
 // Chief Director Busisiwe Radebe — a different person at every stage.
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
 import { seedFisaStandards } from '../fisaStandardsSeed';
 import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
+import { getSkillsProgrammeDetails } from '../skillsProgrammeDetails';
 import { SDP_DIRECTORY } from '../sdpDirectory';
 import type { Role } from '../../../types';
 import { assertAsdReviewComplete } from '../../../modules/approval-of-results/api';
+import { reviewersFromAudit } from '../../../modules/approval-of-results/downloads';
+import { lastFisaDateOf } from '../../../modules/approval-of-results/outcomeLetters';
+import { buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
 import { FISA_RESULTS_RECORD_TYPE, FISA_RESULTS_SUBMITTER_ROLE, RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
-import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues } from '../../../modules/approval-of-results/workflow';
+import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues, isRecommendDeclineAction, isRequestEvidenceAction } from '../../../modules/approval-of-results/workflow';
 import type { FisaEvidenceTag, FisaResultsBatch, LearnerResultOutcome } from '../../../modules/approval-of-results/types';
 import type { FisaStandardRecord } from '../../../modules/fisa/types';
-import { answerChecklist, audit, createClock, notify, seedId, seedPerson, step, type SeedLog } from './helpers';
+import { answerChecklist, audit, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
 
 const FISA_RESULTS_ID_GROUP = 13;
 const APPROVED_STANDARD_ID = 'seed-fisa-standard-approved';
@@ -40,12 +44,15 @@ const COMPLIANCE_NOTES =
   'The learner list matches the SDP’s enrolled learners for this skills programme, and the SDP is accredited and in good standing.';
 const EVIDENCE_NOTES = 'The marksheets and moderation report were checked against each learner result. The outcomes are supported by the evidence.';
 const CHECKLIST_COMMENT = 'Checked against the submitted folder — in order.';
+const RECOMMENDATIONS = 'Keep a signed attendance register for every FISA session and attach it to the marksheet.';
 
 // performFisaResultsAction(): who is told next.
 const NEXT_APPROVER: Partial<Record<string, Role>> = {
   'ad-advance': 'Deputy Director',
   'dd-advance': 'Director',
   'director-advance': 'Chief Director',
+  'dd-recommend-decline': 'Director',
+  'director-recommend-decline': 'Chief Director',
 };
 
 interface FisaResultsSeedBuilder {
@@ -90,6 +97,10 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
       id: seedId(FISA_RESULTS_ID_GROUP, n),
       fisaStandardId: standard.id,
       skillsProgrammeTitle: standard.skillsProgrammeTitle,
+      ...getSkillsProgrammeDetails(standard.skillsProgrammeTitle),
+      // Batch N1: the FISA was held two working days before the batch was created.
+      fisaDates: [workingDateFromToday(-(daysAgo + 2))],
+      recommendationsForImprovement: '',
       sdpId: sdp.sdpId,
       sdpName: sdp.name,
       learnerResults,
@@ -107,6 +118,10 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
       workflow: { stageId: 'sdp-draft' },
       cycleCount: 1,
       declineHistory: [],
+      declineRecommendations: [],
+      evidenceRequestedAt: null,
+      finalEvidenceReceivedAt: null,
+      finalDecision: null,
       createdAt,
       createdBy: sdpPerson.name,
       createdById: sdpPerson.id,
@@ -149,6 +164,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
           complianceReviewNotes: COMPLIANCE_NOTES,
           evidenceEvaluationNotes: EVIDENCE_NOTES,
           complianceChecklist: answerChecklist(buildResultsComplianceChecklist(), CHECKLIST_COMMENT),
+          recommendationsForImprovement: RECOMMENDATIONS,
         };
         return api;
       },
@@ -159,13 +175,23 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
         const fromStage = batch.workflow.stageId;
         const workflow = step(log, { definition: FISA_RESULTS_WORKFLOW, state: batch.workflow, actionId, actor, at, recordType: FISA_RESULTS_RECORD_TYPE, recordId: batch.id, note });
         batch = { ...batch, workflow };
-        if (actionId.endsWith('-decline')) {
-          batch = { ...batch, declineHistory: [...batch.declineHistory, { stageId: fromStage, decidedBy: actor.name, reason: note ?? '', decidedAt: at }] };
+        if (isRequestEvidenceAction(actionId)) {
+          batch = {
+            ...batch,
+            evidenceRequestedAt: dateOf(at),
+            declineHistory: [...batch.declineHistory, { stageId: fromStage, decidedBy: actor.name, reason: note ?? '', decidedAt: at }],
+          };
           notify(log, at, {
             recipientRole: FISA_RESULTS_SUBMITTER_ROLE,
-            title: 'FISA results batch declined',
-            body: `"${batch.skillsProgrammeTitle}" (${batch.sdpName}) was declined: ${note ?? ''}`,
+            title: 'More evidence requested',
+            body: `"${batch.skillsProgrammeTitle}" (${batch.sdpName}): ${note ?? ''} Add the evidence and resubmit.`,
           });
+        }
+        if (isRecommendDeclineAction(actionId)) {
+          batch = {
+            ...batch,
+            declineRecommendations: [...batch.declineRecommendations, { stageId: fromStage, recommendedBy: actor.name, reason: note ?? '', recommendedAt: at, cycle: batch.cycleCount }],
+          };
         }
         const nextApprover = NEXT_APPROVER[actionId];
         if (nextApprover) {
@@ -180,19 +206,29 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
             ...batch,
             recommendation: { recommendedAt: at, recommendedBy: actor.name },
             approvalLetter: { generatedAt: at, signedBy: actor.name, sentToSdpAt: at },
+            finalDecision: {
+              outcome: 'approved',
+              decidedAt: at,
+              decidedBy: actor.name,
+              decidedById: actor.id,
+              verificationCode: '',
+              irregularities: [],
+              correctiveActions: [],
+              ...reviewersFromAudit(log.audit.filter((e) => e.recordId === batch.id)),
+            },
           };
-          audit(log, { recordType: FISA_RESULTS_RECORD_TYPE, recordId: batch.id, actor, action: 'Approval letter generated and sent to the SDP', timestamp: at });
+          audit(log, { recordType: FISA_RESULTS_RECORD_TYPE, recordId: batch.id, actor, action: 'Outcome letter generated and sent to the SDP', timestamp: at });
           audit(log, {
             recordType: FISA_RESULTS_RECORD_TYPE,
             recordId: batch.id,
             actor,
-            action: 'Recommended to the Certification domain for certificate printing (simulated)',
+            action: 'Recommendation letter sent to Certification',
             timestamp: at,
           });
           notify(log, at, {
             recipientRole: FISA_RESULTS_SUBMITTER_ROLE,
             title: 'FISA results batch approved',
-            body: `"${batch.skillsProgrammeTitle}" results are approved and recommended to Certification. Your approval letter is ready to download.`,
+            body: `"${batch.skillsProgrammeTitle}" results are approved. Your Outcome Letter is ready to download.`,
           });
         }
         return api;
@@ -239,6 +275,15 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
     .act('director-advance', ZANELE, 24)
     .act('chief-director-approve', BUSISIWE, 20)
     .done();
+
+  // Batch N1: codes are numbered per financial year in the order of the decisions.
+  const existingCodes: string[] = [];
+  for (const batch of batches.filter((b) => b.finalDecision).sort((a, b) => (a.finalDecision?.decidedAt ?? '').localeCompare(b.finalDecision?.decidedAt ?? ''))) {
+    if (!batch.finalDecision) continue;
+    const code = buildVerificationCode('fisa', lastFisaDateOf(batch), dateOf(batch.finalDecision.decidedAt), existingCodes);
+    existingCodes.push(code);
+    batch.finalDecision = { ...batch.finalDecision, verificationCode: code };
+  }
 
   // Newest first, the order createFisaResultsBatch() leaves the list in.
   return batches.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

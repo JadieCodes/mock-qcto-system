@@ -1,4 +1,6 @@
 import { fileUploadIssue } from '../../shared/files/fileCheck';
+import { canActInStage } from '../../shared/workflow/engine';
+import type { Role } from '../../types';
 import { addWorkingDays, toIsoDate, workingDaysBetween } from '../../shared/dates/workingDays';
 import type { ValidationIssue } from '../../shared/validation/types';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
@@ -20,12 +22,14 @@ import {
 import type { EisaEvidenceTag, EvidenceDocument, FisaResultsBatch, OnFileDocument, OnFileDocumentChoice, OnFileDocumentId, ResultsBatch } from './types';
 
 // CR-059: ASD (compliance review -> evidence evaluation -> folder-by-folder
-// checklist) -> Deputy Director -> Director -> Chief Director final approval. The register's
-// "QCTO can approve or decline" is read as available at every one of QCTO's four internal
-// stages, not only the last one — mirroring this domain's running "decline/send-back
-// available on every approval stage" theme (CR-056), in the absence of a stage-specific
-// restriction. A decline always needs a reason; the QP is notified and can resubmit, which
-// loops the batch back to a fresh 'ad-review' cycle.
+// checklist) -> Deputy Director -> Director -> Chief Director final approval.
+// Batch N1 (QCTO 5 Nov: "once you say decline... it's a decline"):
+// - Every QCTO stage can "Request more evidence" (reason required). The batch goes back to the
+//   QP (EISA) / SDP (FISA), who add evidence and resubmit: a fresh 'ad-review' cycle.
+// - The Deputy Director and the Director can "Recommend decline" (reason required) while sending
+//   the batch on. It shows to the next role.
+// - Only the Chief Director can "Decline results". That is final: no resubmit, and the learners
+//   rewrite at the next EISA. It needs the irregularities and corrective actions (api.ts).
 export const RESULTS_WORKFLOW: WorkflowDefinition = {
   id: 'approval-of-results',
   stages: [
@@ -34,36 +38,60 @@ export const RESULTS_WORKFLOW: WorkflowDefinition = {
     { id: 'director-review', label: 'Director review', allowedRoles: [RESULTS_DIRECTOR_ROLE] },
     { id: 'chief-director-review', label: 'Chief Director review', allowedRoles: [RESULTS_CHIEF_DIRECTOR_ROLE] },
     { id: 'approved', label: 'Approved', allowedRoles: [] },
-    { id: 'declined', label: 'Declined', allowedRoles: ['QP'] },
+    { id: 'more-evidence', label: 'More evidence requested', allowedRoles: ['QP'] },
+    { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],
   actions: [
     { id: 'ad-advance', label: 'Send to Deputy Director', fromStage: 'ad-review', toStage: 'dd-review', kind: 'advance' },
-    { id: 'ad-decline', label: 'Decline', fromStage: 'ad-review', toStage: 'declined', kind: 'reject', requiresNote: true },
+    { id: 'ad-request-evidence', label: 'Request more evidence', fromStage: 'ad-review', toStage: 'more-evidence', kind: 'send-back', requiresNote: true },
     { id: 'dd-advance', label: 'Send to Director', fromStage: 'dd-review', toStage: 'director-review', kind: 'advance' },
-    { id: 'dd-decline', label: 'Decline', fromStage: 'dd-review', toStage: 'declined', kind: 'reject', requiresNote: true },
+    { id: 'dd-recommend-decline', label: 'Recommend decline', fromStage: 'dd-review', toStage: 'director-review', kind: 'advance', requiresNote: true },
+    { id: 'dd-request-evidence', label: 'Request more evidence', fromStage: 'dd-review', toStage: 'more-evidence', kind: 'send-back', requiresNote: true },
     { id: 'director-advance', label: 'Send to Chief Director', fromStage: 'director-review', toStage: 'chief-director-review', kind: 'advance' },
-    { id: 'director-decline', label: 'Decline', fromStage: 'director-review', toStage: 'declined', kind: 'reject', requiresNote: true },
-    { id: 'chief-director-approve', label: 'Final Approval', fromStage: 'chief-director-review', toStage: 'approved', kind: 'complete' },
     {
-      id: 'chief-director-decline',
-      label: 'Decline',
-      fromStage: 'chief-director-review',
-      toStage: 'declined',
-      kind: 'reject',
+      id: 'director-recommend-decline',
+      label: 'Recommend decline',
+      fromStage: 'director-review',
+      toStage: 'chief-director-review',
+      kind: 'advance',
       requiresNote: true,
     },
-    { id: 'batch-resubmit', label: 'Resubmit', fromStage: 'declined', toStage: 'ad-review', kind: 'advance' },
+    { id: 'director-request-evidence', label: 'Request more evidence', fromStage: 'director-review', toStage: 'more-evidence', kind: 'send-back', requiresNote: true },
+    { id: 'chief-director-approve', label: 'Final Approval', fromStage: 'chief-director-review', toStage: 'approved', kind: 'complete' },
+    {
+      id: 'chief-director-request-evidence',
+      label: 'Request more evidence',
+      fromStage: 'chief-director-review',
+      toStage: 'more-evidence',
+      kind: 'send-back',
+      requiresNote: true,
+    },
+    { id: 'chief-director-decline', label: 'Decline results', fromStage: 'chief-director-review', toStage: 'declined', kind: 'reject', requiresNote: true },
+    { id: 'batch-resubmit', label: 'Resubmit', fromStage: 'more-evidence', toStage: 'ad-review', kind: 'advance' },
   ],
 };
 
+// Batch N1: only the Chief Director, at the Chief Director stage, can decline the results.
+export function canDeclineResults(role: Role, stageId: string): boolean {
+  return role === RESULTS_CHIEF_DIRECTOR_ROLE && stageId === 'chief-director-review' && canActInStage(RESULTS_WORKFLOW, stageId, role);
+}
+
+export function isRequestEvidenceAction(actionId: string): boolean {
+  return actionId.endsWith('-request-evidence');
+}
+
+export function isRecommendDeclineAction(actionId: string): boolean {
+  return actionId.endsWith('-recommend-decline');
+}
+
 // QCTO feedback 3.14: FISA results go through the same internal chain and checks as EISA
 // (the stages and actions above, reused as they are). Two differences only: the SDP builds a
-// draft first and submits it, and a declined batch goes back to the SDP, not a QP.
+// draft first and submits it, and "more evidence requested" goes back to the SDP, not a QP.
 export const FISA_RESULTS_WORKFLOW: WorkflowDefinition = {
   id: 'fisa-approval-of-results',
   stages: [
     { id: 'sdp-draft', label: 'Awaiting submission', allowedRoles: [FISA_RESULTS_SUBMITTER_ROLE] },
-    ...RESULTS_WORKFLOW.stages.map((stage) => (stage.id === 'declined' ? { ...stage, allowedRoles: [FISA_RESULTS_SUBMITTER_ROLE] } : stage)),
+    ...RESULTS_WORKFLOW.stages.map((stage) => (stage.id === 'more-evidence' ? { ...stage, allowedRoles: [FISA_RESULTS_SUBMITTER_ROLE] } : stage)),
   ],
   actions: [
     { id: 'fisa-submit', label: 'Submit results', fromStage: 'sdp-draft', toStage: 'ad-review', kind: 'advance' },
@@ -90,6 +118,8 @@ export function resultsStatusLabel(batch: ResultsStatusSource): string {
       return 'With Chief Director';
     case 'approved':
       return batch.recommendation ? 'Approved — Recommended to Certification' : 'Approved';
+    case 'more-evidence':
+      return 'More evidence requested';
     case 'declined':
       return 'Declined';
     default:
@@ -111,6 +141,8 @@ export function resultsStatusTone(batch: ResultsStatusSource): ResultsStatusTone
       return 'purple';
     case 'approved':
       return 'emerald';
+    case 'more-evidence':
+      return 'amber';
     case 'declined':
       return 'red';
     default:
@@ -136,14 +168,49 @@ export function isBelowPostEisaThreshold(batch: ResultsBatch): boolean {
   return competencyRatePercent(batch) < POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT;
 }
 
-// QCTO feedback 3.14: the FISA batch rate, from the learners the SDP put on the batch.
+// QCTO feedback 3.14, Batch N1: the FISA batch figures, from the learners the SDP put on the batch.
+// Enrolled = every learner listed; completed = not absent; competency rate = competent / completed;
+// throughput rate = completed / enrolled.
+export interface FisaFigures {
+  enrolled: number;
+  completed: number;
+  absent: number;
+  competent: number;
+  notYetCompetent: number;
+  competencyRatePercent: number;
+  throughputRatePercent: number;
+}
+
+function onePercent(part: number, whole: number): number {
+  return whole === 0 ? 0 : Math.round((part / whole) * 1000) / 10;
+}
+
+export function fisaFiguresOf(batch: Pick<FisaResultsBatch, 'learnerResults'>): FisaFigures {
+  const enrolled = batch.learnerResults.length;
+  const absent = batch.learnerResults.filter((r) => r.outcome === 'absent').length;
+  const competent = batch.learnerResults.filter((r) => r.outcome === 'competent').length;
+  const completed = enrolled - absent;
+  return {
+    enrolled,
+    completed,
+    absent,
+    competent,
+    notYetCompetent: completed - competent,
+    competencyRatePercent: onePercent(competent, completed),
+    throughputRatePercent: onePercent(completed, enrolled),
+  };
+}
+
 export function fisaCompetentCountOf(batch: Pick<FisaResultsBatch, 'learnerResults'>): number {
-  return batch.learnerResults.filter((r) => r.outcome === 'competent').length;
+  return fisaFiguresOf(batch).competent;
 }
 
 export function fisaCompetencyRatePercent(batch: Pick<FisaResultsBatch, 'learnerResults'>): number {
-  if (batch.learnerResults.length === 0) return 0;
-  return Math.round((fisaCompetentCountOf(batch) / batch.learnerResults.length) * 1000) / 10;
+  return fisaFiguresOf(batch).competencyRatePercent;
+}
+
+export function fisaThroughputRatePercent(batch: Pick<FisaResultsBatch, 'learnerResults'>): number {
+  return fisaFiguresOf(batch).throughputRatePercent;
 }
 
 // QCTO feedback 3.14: what must be in place before the SDP can submit a FISA batch. Shown on

@@ -28,7 +28,10 @@
 //  A9   Welding            today - 150  Precious Mahlangu    CNCNN    40%    Approved, below the 45% threshold — its Post-EISA Monitoring
 //                                                                          visit was created automatically at final approval (siteVisits.ts SV3)
 //  A10  Electrical Trades  today - 170  Nomvula Dlamini      CNCN     50%    Approved, above the 45% threshold — no Post-EISA Monitoring visit
-//  A11  Plumbing           today - 50   Johan van der Merwe  CNC      66.7%  Declined by the Deputy Director with a reason — QP can resubmit
+//  A11  Plumbing           today - 50   Johan van der Merwe  CNC      66.7%  More evidence requested by the Deputy Director — QP can resubmit
+//  A12  Electrical Trades  today - 190  Nomvula Dlamini      NA       0%     Declined (final) by the Chief Director, after the DD and the Director
+//                                                                          recommended a decline: two irregularities, two corrective actions;
+//                                                                          no Post-EISA visit (Batch N1)
 //
 // Officials: ASD Lindiwe Khumalo (Electrical Trades, Welding) / Riaan Pretorius
 // (Plumbing); Deputy Director Grace Mokoena (Nomvula's and Johan's) / Peter Botha (Precious's);
@@ -39,12 +42,15 @@ import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
 import { isChecklistComplete } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
 import { onFileAuditText } from '../../../modules/approval-of-results/api';
+import { reviewersFromAudit } from '../../../modules/approval-of-results/downloads';
+import { lastEisaDateOf } from '../../../modules/approval-of-results/outcomeLetters';
+import { buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
 import { calculateLearnerResult, type EisaLearnerOutcome } from '../../../modules/approval-of-results/calculation';
-import { snapshotResultsRules } from '../../../modules/approval-of-results/componentSnapshot';
+import { qualificationDetailsOf, snapshotResultsRules } from '../../../modules/approval-of-results/componentSnapshot';
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
-import { RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
-import type { EisaLearnerResult, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft } from '../../../modules/approval-of-results/types';
+import { isRecommendDeclineAction, isRequestEvidenceAction, RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
+import type { EisaLearnerResult, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft, ResultsFinalDecision } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
@@ -57,6 +63,9 @@ const RESULTS_ID_GROUP = 7;
 export const RESULTS_SEED_IDS = {
   belowThresholdWelding: seedId(RESULTS_ID_GROUP, 9),
   aboveThresholdElectrical: seedId(RESULTS_ID_GROUP, 10),
+  // Batch N1: the final decline and the "More evidence requested" batch.
+  declinedElectrical: seedId(RESULTS_ID_GROUP, 12),
+  moreEvidencePlumbing: seedId(RESULTS_ID_GROUP, 11),
 } as const;
 
 const LINDIWE = 'lindiwe-khumalo';
@@ -78,11 +87,13 @@ const NEXT_APPROVER: Partial<Record<string, Role>> = {
   'ad-advance': 'Deputy Director',
   'dd-advance': 'Director',
   'director-advance': 'Chief Director',
+  'dd-recommend-decline': 'Director',
+  'director-recommend-decline': 'Chief Director',
 };
 
 interface ResultsSeedBuilder {
   adReview: (adId: string, atDaysAgo: number, progress: { evidenceNotes: boolean; sectionIds?: string[]; evidenceFile?: string }) => ResultsSeedBuilder;
-  act: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => ResultsSeedBuilder;
+  act: (actionId: string, actorId: string, atDaysAgo: number, note?: string, lists?: { irregularities: string[]; correctiveActions: string[] }) => ResultsSeedBuilder;
   done: () => void;
 }
 
@@ -199,6 +210,8 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       sittingId: confirmation.sittingId,
       sittingDate,
       qualificationTitle: confirmation.qualificationTitle,
+      ...qualificationDetailsOf(qasas, confirmation),
+      centres: confirmation.confirmedCentres?.map((c) => c.centre) ?? confirmation.centres,
       qpId: confirmation.qpId,
       qpName: confirmation.qpName,
       learnerCount: confirmation.learners.length,
@@ -215,6 +228,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       workflow: { stageId: 'ad-review', submittedBy: qp.name, submittedById: qp.id },
       cycleCount: 1,
       declineHistory: [],
+      declineRecommendations: [],
+      evidenceRequestedAt: null,
+      finalEvidenceReceivedAt: null,
+      finalDecision: null,
       submissionDeadline: submissionDeadlineFor(sittingDate),
       submittedAt,
       recommendation: null,
@@ -231,6 +248,25 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       title: 'Results batch submitted',
       body: `${confirmation.qpName} submitted results for "${confirmation.qualificationTitle}" (EISA date ${sittingDate}).`,
     });
+
+    // The verification code is numbered per financial year once every batch is built, in the order
+    // of the decisions (assignVerificationCodes below).
+    function decisionOf(
+      outcome: 'approved' | 'declined',
+      actor: ReturnType<typeof seedPerson>,
+      at: string,
+      lists: { irregularities: string[]; correctiveActions: string[] },
+    ): ResultsFinalDecision {
+      return {
+        outcome,
+        decidedAt: at,
+        decidedBy: actor.name,
+        decidedById: actor.id,
+        verificationCode: '',
+        ...lists,
+        ...reviewersFromAudit(log.audit.filter((e) => e.recordId === batch.id)),
+      };
+    }
 
     const api: ResultsSeedBuilder = {
       // The ASD's three-part review (save* functions write no audit entry).
@@ -253,18 +289,33 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
         };
         return api;
       },
-      act(actionId, actorId, atDaysAgo, note) {
+      act(actionId, actorId, atDaysAgo, note, lists) {
         if (actionId === 'ad-advance' && (!batch.complianceReviewNotes.trim() || !batch.evidenceEvaluationNotes.trim() || !isChecklistComplete(batch.complianceChecklist, true))) {
           throw new Error('Demo seed: complete the compliance review, evidence evaluation and folder checklist before advancing.');
         }
         const actor = seedPerson(actorId);
         const at = clock.at(atDaysAgo, 14);
         const fromStage = batch.workflow.stageId;
-        const workflow = step(log, { definition: RESULTS_WORKFLOW, state: batch.workflow, actionId, actor, at, recordType: 'results-batch', recordId: batch.id, note });
+        const isFinalDecline = actionId === 'chief-director-decline';
+        if (isFinalDecline && (!lists || lists.irregularities.length === 0 || lists.correctiveActions.length === 0)) {
+          throw new Error('Demo seed: a final decline needs irregularities and corrective actions.');
+        }
+        const auditNote = isFinalDecline && lists ? `Irregularities: ${lists.irregularities.join('; ')}. Corrective actions: ${lists.correctiveActions.join('; ')}.` : note;
+        const workflow = step(log, { definition: RESULTS_WORKFLOW, state: batch.workflow, actionId, actor, at, recordType: 'results-batch', recordId: batch.id, note: auditNote });
         batch = { ...batch, workflow };
-        if (actionId.endsWith('-decline')) {
-          batch = { ...batch, declineHistory: [...batch.declineHistory, { stageId: fromStage, decidedBy: actor.name, reason: note ?? '', decidedAt: at }] };
-          notify(log, at, { recipientRole: 'QP', title: 'Results batch declined', body: `"${batch.qualificationTitle}" was declined: ${note ?? ''}` });
+        if (isRequestEvidenceAction(actionId)) {
+          batch = {
+            ...batch,
+            evidenceRequestedAt: dateOf(at),
+            declineHistory: [...batch.declineHistory, { stageId: fromStage, decidedBy: actor.name, reason: note ?? '', decidedAt: at }],
+          };
+          notify(log, at, { recipientRole: 'QP', title: 'More evidence requested', body: `"${batch.qualificationTitle}": ${note ?? ''} Add the evidence and resubmit.` });
+        }
+        if (isRecommendDeclineAction(actionId)) {
+          batch = {
+            ...batch,
+            declineRecommendations: [...batch.declineRecommendations, { stageId: fromStage, recommendedBy: actor.name, reason: note ?? '', recommendedAt: at, cycle: batch.cycleCount }],
+          };
         }
         const nextApprover = NEXT_APPROVER[actionId];
         if (nextApprover) {
@@ -274,8 +325,16 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
             body: `"${batch.qualificationTitle}" (EISA date ${batch.sittingDate}) is awaiting your review.`,
           });
         }
+        if (isFinalDecline && lists) {
+          batch = { ...batch, finalDecision: decisionOf('declined', actor, at, lists) };
+          notify(log, at, {
+            recipientRole: 'QP',
+            title: 'Results declined',
+            body: `The results for "${batch.qualificationTitle}" were declined. Your Outcome Letter is ready to download. Please notify the SDPs.`,
+          });
+        }
         if (actionId === 'chief-director-approve') {
-          batch = { ...batch, recommendation: { recommendedAt: at, recommendedBy: actor.name } };
+          batch = { ...batch, recommendation: { recommendedAt: at, recommendedBy: actor.name }, finalDecision: decisionOf('approved', actor, at, { irregularities: [], correctiveActions: [] }) };
           log.audit.push({
             id: crypto.randomUUID(),
             recordType: 'results-batch',
@@ -283,10 +342,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
             actorRole: actor.role,
             actorId: actor.id,
             actorName: actor.name,
-            action: 'Recommended to the Certification domain for certificate printing (simulated)',
+            action: 'Recommendation letter sent to Certification',
             timestamp: at,
           });
-          notify(log, at, { recipientRole: 'QP', title: 'Results batch approved', body: `"${batch.qualificationTitle}" results are approved and recommended to Certification.` });
+          notify(log, at, { recipientRole: 'QP', title: 'Results batch approved', body: `"${batch.qualificationTitle}" results are approved. Your Outcome Letter is ready to download.` });
         }
         return api;
       },
@@ -337,15 +396,49 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     .adReview(RIAAN, 26, full)
     .act('ad-advance', RIAAN, 24)
     .act(
-      'dd-decline',
+      'dd-request-evidence',
       GRACE,
       20,
       'The moderation report has no moderator sign-off for Andile Khumalo, and the marksheet total for Kgomotso Letsoalo does not match the result. Correct both and resubmit.',
     )
     .done();
 
+  // Batch N1: a final decline. The DD and the Director recommended it while sending the batch on;
+  // only the Chief Director declined it. No Post-EISA visit, no resubmit.
+  submit(12, 'Electrical Trades', -190, 'NA', 170)
+    .adReview(LINDIWE, 166, full)
+    .act('ad-advance', LINDIWE, 164)
+    .act('dd-recommend-decline', GRACE, 158, 'The marking report does not match the learner marksheets for two of the three learners who wrote.')
+    .act('director-recommend-decline', ZANELE, 153, 'Agreed. The moderation report was signed before the marking was finished.')
+    .act('chief-director-decline', BUSISIWE, 147, undefined, {
+      irregularities: [
+        'The marking report totals do not match the learner marksheets for two learners.',
+        'The moderation report is dated before the marking was completed.',
+      ],
+      correctiveActions: [
+        'Re-mark the affected scripts and issue a corrected marking report.',
+        'Repeat the moderation after the corrected marking and submit a signed moderation report.',
+      ],
+    })
+    .done();
+
+  assignVerificationCodes(batches);
+
   // Newest first, the order submitResultsBatch() leaves the list in.
   return batches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+}
+
+// Batch N1: codes are numbered per financial year in the order of the decisions, the way
+// api.ts numbers them as the decisions are made.
+function assignVerificationCodes(batches: ResultsBatch[]): void {
+  const existing: string[] = [];
+  const decided = batches.filter((b) => b.finalDecision).sort((a, b) => (a.finalDecision?.decidedAt ?? '').localeCompare(b.finalDecision?.decidedAt ?? ''));
+  for (const batch of decided) {
+    if (!batch.finalDecision) continue;
+    const code = buildVerificationCode('eisa', lastEisaDateOf(batch), dateOf(batch.finalDecision.decidedAt), existing);
+    existing.push(code);
+    batch.finalDecision = { ...batch.finalDecision, verificationCode: code };
+  }
 }
 
 // QCTO feedback 05.24: the saved draft behind the Welding sitting at today - 20 — the first two

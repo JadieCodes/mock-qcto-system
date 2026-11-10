@@ -31,6 +31,7 @@ import {
   saveFisaComplianceChecklist,
   saveFisaComplianceReviewNotes,
   saveFisaEvidenceEvaluationNotes,
+  saveFisaRecommendations,
   saveFisaResultsDraft,
   submitFisaResultsBatch,
   uploadFisaReviewEvidence,
@@ -259,4 +260,8 @@ export function useCreatePemVisitForBatch() {
     },
     onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });
+}
+
+export function useSaveFisaRecommendations() {
+  return useFisaResultsBatchMutation((args: { id: string; text: string }) => saveFisaRecommendations(args.id, args.text));
 }

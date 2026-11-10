@@ -468,8 +468,10 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
   // Batch L2 (05.24): a second confirmed sitting still awaiting its results, so one can hold a
   // saved draft while the Electrical Trades one stays empty. Added last so no seed id moves.
   const s18 = addDirect(welding, -20, THANDEKA, 220).sitting;
+  // Batch N1: a past sitting whose results batch was declined (final). Added last so no seed id moves.
+  const s19 = addDirect(electrical, -190, SIPHO, 390).sitting;
 
-  sittings.push(...s1to5, r1.sitting, s7, s8, ...s9to16, s17, s18);
+  sittings.push(...s1to5, r1.sitting, s7, s8, ...s9to16, s17, s18, s19);
 
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,
   // and every future one has a date after today.

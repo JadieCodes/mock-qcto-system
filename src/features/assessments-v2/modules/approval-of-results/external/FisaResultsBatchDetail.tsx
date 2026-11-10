@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
-import { LetterView } from '../../../shared/letters/LetterView';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
@@ -16,12 +15,15 @@ import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
 import { FISA_EVIDENCE_TAG_OPTIONS, FISA_RESULTS_RECORD_TYPE } from '../config';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
-import { FISA_BATCH_DOCUMENTS } from '../batchDocuments';
+import { EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
+import { OutcomeLetterView } from '../components/OutcomeLetterView';
+import { documentsForPortal, FISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
-import { downloadFisaApprovalLetter, downloadFisaVerificationReport, fisaApprovalLetter } from '../downloads';
+import { downloadFisaVerificationReport } from '../downloads';
+import { downloadLetterModel, fisaOutcomeLetter } from '../outcomeLetters';
 import { useFisaResultsAction, useFisaResultsBatch, useLearnersForSdp, useSaveFisaResultsDraft, useSubmitFisaResultsBatch } from '../hooks';
-import { fisaCompetencyRatePercent, fisaCompetentCountOf, fisaSubmissionIssues } from '../workflow';
+import { fisaFiguresOf, fisaSubmissionIssues } from '../workflow';
 import type { FisaEvidenceTag, FisaResultsBatch, LearnerResult, LearnerResultOutcome, TaggedEvidenceDocument } from '../types';
 
 const NOT_ON_BATCH = 'not-on-batch';
@@ -30,6 +32,7 @@ const OUTCOME_OPTIONS: { value: LearnerResultOutcome | typeof NOT_ON_BATCH; labe
   { value: NOT_ON_BATCH, label: 'Not on this batch' },
   { value: 'competent', label: 'Competent' },
   { value: 'not-yet-competent', label: 'Not yet competent' },
+  { value: 'absent', label: 'Absent' },
 ];
 
 // QCTO feedback 3.14 (b): the SDP's draft — a result per learner, tagged evidence, the
@@ -93,7 +96,7 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
           </div>
         )}
         <p className="text-xs text-gray-500">
-          {batch.learnerResults.length} learner(s) on this batch, {fisaCompetentCountOf(batch)} competent.
+          {batch.learnerResults.length} learner(s) on this batch, {fisaFiguresOf(batch).competent} competent, {fisaFiguresOf(batch).absent} absent.
         </p>
       </div>
 
@@ -209,7 +212,8 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
 function SubmittedView({ batch }: { batch: FisaResultsBatch }) {
   const { role, person } = useV2Role();
   const resultsAction = useFisaResultsAction();
-  const latestDecline = batch.declineHistory[batch.declineHistory.length - 1];
+  const latestRequest = batch.declineHistory[batch.declineHistory.length - 1];
+  const figures = fisaFiguresOf(batch);
 
   return (
     <div className="space-y-4">
@@ -224,14 +228,21 @@ function SubmittedView({ batch }: { batch: FisaResultsBatch }) {
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500">Competency Rate</span>
         <span className="text-sm font-semibold">
-          {fisaCompetencyRatePercent(batch)}% ({fisaCompetentCountOf(batch)}/{batch.learnerResults.length})
+          {figures.competencyRatePercent}% ({figures.competent}/{figures.completed} completed)
         </span>
       </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-500">Throughput Rate</span>
+        <span className="text-sm font-semibold">
+          {figures.throughputRatePercent}% ({figures.completed}/{figures.enrolled} enrolled)
+        </span>
+      </div>
+      <EvidenceDates requestedAt={batch.evidenceRequestedAt} receivedAt={batch.finalEvidenceReceivedAt} />
 
-      {batch.workflow.stageId === 'declined' && latestDecline && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
-          <p className="text-xs font-semibold text-red-700 uppercase">Latest Decline Reason</p>
-          <p className="text-sm text-red-800">{latestDecline.reason}</p>
+      {batch.workflow.stageId === 'more-evidence' && latestRequest && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+          <p className="text-xs font-semibold text-amber-700 uppercase">More Evidence Requested</p>
+          <p className="text-sm text-amber-800">{latestRequest.reason}</p>
           <Button
             size="sm"
             disabled={resultsAction.isPending}
@@ -256,29 +267,27 @@ function SubmittedView({ batch }: { batch: FisaResultsBatch }) {
         </p>
       )}
 
+      {/* Batch N1: the SDP sees its Outcome Letter and its own documents, never the recommendation letter. */}
       <BatchDocumentsCard
-        documents={FISA_BATCH_DOCUMENTS}
+        documents={documentsForPortal(FISA_BATCH_DOCUMENTS, 'external')}
         downloads={
-          batch.workflow.stageId === 'approved'
+          batch.finalDecision
             ? {
-                'fisa-outcome-letter': () => downloadFisaApprovalLetter(batch),
+                'fisa-outcome-letter': () => downloadLetterModel(fisaOutcomeLetter(batch, false)),
                 'fisa-verification-report': () => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
               }
             : {}
         }
       />
 
-      {batch.workflow.stageId === 'approved' && batch.approvalLetter && (
+      {batch.finalDecision && (
         <div className="space-y-3 border-t pt-4">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-            Approved. The approval letter was sent to you on {new Date(batch.approvalLetter.sentToSdpAt).toLocaleDateString('en-ZA')}, and the
-            results were recommended to Certification.
-          </div>
+          <FinalDecisionNotice decision={batch.finalDecision} />
           <BatchDownloads
-            onDownloadLetter={() => downloadFisaApprovalLetter(batch)}
+            onDownloadLetter={() => downloadLetterModel(fisaOutcomeLetter(batch, false))}
             onDownloadReport={() => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id))}
           />
-          <LetterView letter={fisaApprovalLetter(batch)} />
+          <OutcomeLetterView model={fisaOutcomeLetter(batch, false)} />
         </div>
       )}
     </div>

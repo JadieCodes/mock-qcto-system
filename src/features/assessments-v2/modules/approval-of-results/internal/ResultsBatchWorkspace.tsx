@@ -25,9 +25,12 @@ import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../compo
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
 import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
+import { DeclineRecommendationsNotice, DeclineResultsForm, EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
+import { OutcomeLetterView } from '../components/OutcomeLetterView';
 import { ResultsActionBar } from '../components/ResultsActionBar';
-import { EISA_BATCH_DOCUMENTS, type EisaBatchDocumentId } from '../batchDocuments';
-import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
+import { documentsForPortal, EISA_BATCH_DOCUMENTS, type EisaBatchDocumentId } from '../batchDocuments';
+import { downloadEisaVerificationReport } from '../downloads';
+import { downloadLetterModel, eisaOutcomeLetter, eisaRecommendationLetter } from '../outcomeLetters';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import {
   useCreatePemVisitForBatch,
@@ -39,7 +42,7 @@ import {
   useSaveEvidenceEvaluationNotes,
   useUploadEvidenceDocument,
 } from '../hooks';
-import { competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
+import { canDeclineResults, competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
 import type { ResultsBatch } from '../types';
 
 // QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit
@@ -99,11 +102,15 @@ function PemVisitBanner({ batch }: { batch: ResultsBatch }) {
 
 // QCTO feedback 05.17: only the documents that already have a download are linked; the others
 // show "Generated at final approval" until the batch that builds them adds them here.
+// Batch N1 (05.16): on any batch with a final decision — the Outcome Letter (approval or decline),
+// the verification report and, on an approved batch only, the Certification recommendation letter.
 function eisaDownloads(batch: ResultsBatch): Partial<Record<EisaBatchDocumentId, () => void>> {
-  if (batch.workflow.stageId !== 'approved') return {};
+  if (!batch.finalDecision) return {};
+  const recommendation = eisaRecommendationLetter(batch);
   return {
-    'eisa-outcome-letter': () => downloadEisaApprovalLetter(batch),
+    'eisa-outcome-letter': () => downloadLetterModel(eisaOutcomeLetter(batch, false)),
     'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
+    ...(recommendation ? { 'eisa-recommendation-letter': () => downloadLetterModel(recommendation) } : {}),
   };
 }
 
@@ -123,6 +130,8 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         <span className="text-xs text-gray-500">Status</span>
         <ResultsBatchStatusBadge batch={batch} />
       </div>
+      {batch.finalDecision && <FinalDecisionNotice decision={batch.finalDecision} />}
+      <EvidenceDates requestedAt={batch.evidenceRequestedAt} receivedAt={batch.finalEvidenceReceivedAt} />
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">QP</Label>
@@ -210,7 +219,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         <Label className="text-xs text-gray-400 uppercase">Declaration</Label>
         <DeclarationLine declaration={batch.declaration} />
       </div>
-      <BatchDocumentsCard documents={EISA_BATCH_DOCUMENTS} downloads={eisaDownloads(batch)} />
+      <BatchDocumentsCard documents={documentsForPortal(EISA_BATCH_DOCUMENTS, 'internal')} downloads={eisaDownloads(batch)} />
     </div>
   );
 }
@@ -323,7 +332,7 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
         </div>
         <div className="p-4 flex flex-wrap items-center gap-2 text-xs">
           {['ASD', 'Deputy Director', 'Director', 'Chief Director'].map((label, i) => (
-            <span key={label} className={i <= currentIndex && batch.workflow.stageId !== 'declined' ? 'font-semibold text-blue-700' : 'text-gray-400'}>
+            <span key={label} className={i <= currentIndex && batch.workflow.stageId !== 'more-evidence' ? 'font-semibold text-blue-700' : 'text-gray-400'}>
               {label}
               {i < 3 ? ' →' : ''}
             </span>
@@ -331,31 +340,41 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
         </div>
       </div>
 
-      {batch.workflow.stageId !== 'ad-review' && batch.workflow.stageId !== 'declined' && batch.workflow.stageId !== 'approved' && (
-        <ResultsActionBar
-          definition={RESULTS_WORKFLOW}
-          stageId={batch.workflow.stageId}
-          role={role}
-          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
-        />
-      )}
+      <DeclineRecommendationsNotice recommendations={batch.declineRecommendations} cycle={batch.cycleCount} />
 
-      {batch.workflow.stageId === 'declined' && batch.declineHistory.length > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 space-y-1">
-          <p className="font-semibold">Declined at: {batch.declineHistory[batch.declineHistory.length - 1].stageId}</p>
-          <p>{batch.declineHistory[batch.declineHistory.length - 1].reason}</p>
-          <p className="text-xs text-red-600">The QP has been notified and can resubmit.</p>
+      {['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId) && (
+        <div className="space-y-2">
+          <ResultsActionBar
+            definition={RESULTS_WORKFLOW}
+            stageId={batch.workflow.stageId}
+            role={role}
+            hiddenActionIds={['chief-director-decline']}
+            onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
+          />
+          {canDeclineResults(role, batch.workflow.stageId) && (
+            <DeclineResultsForm
+              disabled={resultsAction.isPending}
+              onDecline={(irregularities, correctiveActions) =>
+                resultsAction.mutate({ batchId: batch.id, actionId: 'chief-director-decline', actorRole: role, actorId, actorName, irregularities, correctiveActions })
+              }
+            />
+          )}
         </div>
       )}
 
-      {batch.workflow.stageId === 'approved' && (
+      {batch.workflow.stageId === 'more-evidence' && batch.declineHistory.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1">
+          <p className="font-semibold">More evidence requested at: {RESULTS_WORKFLOW.stages.find((s) => s.id === batch.declineHistory[batch.declineHistory.length - 1].stageId)?.label}</p>
+          <p>{batch.declineHistory[batch.declineHistory.length - 1].reason}</p>
+          <p className="text-xs text-amber-700">The QP has been notified and can add evidence and resubmit.</p>
+        </div>
+      )}
+
+      {batch.finalDecision && (
         <>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Approved by the Chief Director.
-            {batch.recommendation && ' Recommended to the Certification domain for certificate printing.'}
-          </div>
+          <FinalDecisionNotice decision={batch.finalDecision} />
           <BatchDownloads
-            onDownloadLetter={() => downloadEisaApprovalLetter(batch)}
+            onDownloadLetter={() => downloadLetterModel(eisaOutcomeLetter(batch, false))}
             onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
           />
         </>
@@ -364,13 +383,30 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
   );
 }
 
+// Batch N1: the Outcome Letter is a draft from the Deputy Director stage onwards and final once the
+// batch is decided. The Certification recommendation letter exists on an approved batch only.
+const DRAFT_LETTER_STAGES = ['dd-review', 'director-review', 'chief-director-review'];
+
+function OutcomeLetterTab({ batch }: { batch: ResultsBatch }) {
+  return <OutcomeLetterView model={eisaOutcomeLetter(batch, !batch.finalDecision)} />;
+}
+
+function RecommendationLetterTab({ batch }: { batch: ResultsBatch }) {
+  const letter = eisaRecommendationLetter(batch);
+  return letter ? <OutcomeLetterView model={letter} /> : null;
+}
+
 function ResultsBatchWorkspaceContent({ batch }: { batch: ResultsBatch }) {
+  const showLetter = !!batch.finalDecision || DRAFT_LETTER_STAGES.includes(batch.workflow.stageId);
+  const showRecommendation = batch.finalDecision?.outcome === 'approved';
   return (
     <Tabs defaultValue="details">
-      <TabsList>
+      <TabsList className="flex-wrap h-auto">
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="compliance">Compliance Review</TabsTrigger>
         <TabsTrigger value="chain">Approval Chain</TabsTrigger>
+        {showLetter && <TabsTrigger value="letter">Outcome Letter</TabsTrigger>}
+        {showRecommendation && <TabsTrigger value="recommendation">Certification Recommendation</TabsTrigger>}
         <TabsTrigger value="audit">Audit Trail</TabsTrigger>
       </TabsList>
       <TabsContent value="details" className="pt-4">
@@ -382,6 +418,16 @@ function ResultsBatchWorkspaceContent({ batch }: { batch: ResultsBatch }) {
       <TabsContent value="chain" className="pt-4">
         <ApprovalChainTab batch={batch} />
       </TabsContent>
+      {showLetter && (
+        <TabsContent value="letter" className="pt-4">
+          <OutcomeLetterTab batch={batch} />
+        </TabsContent>
+      )}
+      {showRecommendation && (
+        <TabsContent value="recommendation" className="pt-4">
+          <RecommendationLetterTab batch={batch} />
+        </TabsContent>
+      )}
       <TabsContent value="audit" className="pt-4">
         <AuditTrailView recordTypes={['results-batch']} recordId={batch.id} />
       </TabsContent>

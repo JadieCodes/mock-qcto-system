@@ -7,7 +7,7 @@ export function BatchDownloads({ onDownloadLetter, onDownloadReport }: { onDownl
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" variant="outline" className="gap-2" onClick={onDownloadLetter}>
         <Download className="h-4 w-4" />
-        Download approval letter
+        Download Outcome Letter
       </Button>
       <Button type="button" size="sm" variant="outline" className="gap-2" onClick={onDownloadReport}>
         <Download className="h-4 w-4" />

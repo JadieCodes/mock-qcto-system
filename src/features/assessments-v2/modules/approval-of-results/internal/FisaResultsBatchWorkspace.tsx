@@ -9,7 +9,6 @@ import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
-import { LetterView } from '../../../shared/letters/LetterView';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
@@ -18,19 +17,23 @@ import { FISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
+import { DeclineRecommendationsNotice, DeclineResultsForm, EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
+import { OutcomeLetterView } from '../components/OutcomeLetterView';
 import { ResultsActionBar } from '../components/ResultsActionBar';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
-import { FISA_BATCH_DOCUMENTS, type FisaBatchDocumentId } from '../batchDocuments';
-import { downloadFisaApprovalLetter, downloadFisaVerificationReport, fisaApprovalLetter } from '../downloads';
+import { documentsForPortal, FISA_BATCH_DOCUMENTS, type FisaBatchDocumentId } from '../batchDocuments';
+import { downloadFisaVerificationReport } from '../downloads';
+import { downloadLetterModel, fisaOutcomeLetter, fisaRecommendationLetter } from '../outcomeLetters';
 import {
   useFisaResultsAction,
   useFisaResultsBatch,
   useSaveFisaComplianceChecklist,
   useSaveFisaComplianceReviewNotes,
   useSaveFisaEvidenceEvaluationNotes,
+  useSaveFisaRecommendations,
   useUploadFisaReviewEvidence,
 } from '../hooks';
-import { FISA_RESULTS_WORKFLOW, fisaCompetencyRatePercent, fisaCompetentCountOf } from '../workflow';
+import { canDeclineResults, FISA_RESULTS_WORKFLOW, fisaFiguresOf } from '../workflow';
 import type { FisaResultsBatch } from '../types';
 
 function stageLabel(stageId: string): string {
@@ -38,21 +41,28 @@ function stageLabel(stageId: string): string {
 }
 
 // QCTO feedback 05.17: only the documents that already have a download are linked.
+// Batch N1 (05.16): on any batch with a final decision — the Outcome Letter, the verification report
+// and, on an approved batch only, the SP certification recommendation letter.
 function fisaDownloads(batch: FisaResultsBatch): Partial<Record<FisaBatchDocumentId, () => void>> {
-  if (batch.workflow.stageId !== 'approved') return {};
+  if (!batch.finalDecision) return {};
+  const recommendation = fisaRecommendationLetter(batch);
   return {
-    'fisa-outcome-letter': () => downloadFisaApprovalLetter(batch),
+    'fisa-outcome-letter': () => downloadLetterModel(fisaOutcomeLetter(batch, false)),
     'fisa-verification-report': () => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
+    ...(recommendation ? { 'fisa-recommendation-letter': () => downloadLetterModel(recommendation) } : {}),
   };
 }
 
 function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
+  const figures = fisaFiguresOf(batch);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500">Status</span>
         <ResultsBatchStatusBadge batch={batch} />
       </div>
+      {batch.finalDecision && <FinalDecisionNotice decision={batch.finalDecision} />}
+      <EvidenceDates requestedAt={batch.evidenceRequestedAt} receivedAt={batch.finalEvidenceReceivedAt} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">SDP</Label>
@@ -61,6 +71,10 @@ function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Skills Programme</Label>
           <p className="text-sm font-medium">{batch.skillsProgrammeTitle}</p>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-400 uppercase">Date of FISA</Label>
+          <p className="text-sm font-medium">{batch.fisaDates.join(', ')}</p>
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Submitted</Label>
@@ -76,10 +90,13 @@ function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
 
       <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Competency Rate</p>
-        <p className="text-2xl font-bold text-gray-900">{fisaCompetencyRatePercent(batch)}%</p>
+        <p className="text-2xl font-bold text-gray-900">{figures.competencyRatePercent}%</p>
         <p className="text-xs text-gray-500">
-          {fisaCompetentCountOf(batch)} of {batch.learnerResults.length} learners found competent.
+          {figures.competent} of {figures.completed} learners who completed the FISA found competent ({figures.absent} absent).
         </p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-1">Throughput Rate</p>
+        <p className="text-lg font-bold text-gray-900">{figures.throughputRatePercent}%</p>
+        <p className="text-xs text-gray-500">Throughput rate = completed ÷ enrolled ({figures.completed} of {figures.enrolled}).</p>
         <FisaLearnerResultsList results={batch.learnerResults} />
       </div>
 
@@ -87,7 +104,7 @@ function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
         <Label className="text-xs text-gray-400 uppercase">Evidence</Label>
         <FisaEvidenceList files={batch.evidenceDocuments} />
       </div>
-      <BatchDocumentsCard documents={FISA_BATCH_DOCUMENTS} downloads={fisaDownloads(batch)} />
+      <BatchDocumentsCard documents={documentsForPortal(FISA_BATCH_DOCUMENTS, 'internal')} downloads={fisaDownloads(batch)} />
     </div>
   );
 }
@@ -99,6 +116,7 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
   const saveChecklist = useSaveFisaComplianceChecklist();
   const saveReviewNotes = useSaveFisaComplianceReviewNotes();
   const saveEvidenceNotes = useSaveFisaEvidenceEvaluationNotes();
+  const saveRecommendations = useSaveFisaRecommendations();
   const uploadEvidence = useUploadFisaReviewEvidence();
   const resultsAction = useFisaResultsAction();
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -157,6 +175,18 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
       </div>
 
       <div className="space-y-2">
+        <Label htmlFor="fisa-recommendations">Recommendations for improvements before the next FISA</Label>
+        <Textarea
+          id="fisa-recommendations"
+          rows={3}
+          value={batch.recommendationsForImprovement}
+          disabled={!editable}
+          onChange={(e) => saveRecommendations.mutate({ id: batch.id, text: e.target.value })}
+        />
+        <p className="text-xs text-gray-500">Printed on the Outcome Letter.</p>
+      </div>
+
+      <div className="space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Folder-by-Folder Compliance Checklist</p>
         <Checklist sections={batch.complianceChecklist} readonly={!editable} onChange={(sections) => saveChecklist.mutate({ id: batch.id, sections })} />
       </div>
@@ -183,7 +213,7 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
 
   const stageOrder = ['ad-review', 'dd-review', 'director-review', 'chief-director-review'];
   const currentIndex = batch.workflow.stageId === 'approved' ? stageOrder.length : stageOrder.indexOf(batch.workflow.stageId);
-  const latestDecline = batch.declineHistory[batch.declineHistory.length - 1];
+  const latestRequest = batch.declineHistory[batch.declineHistory.length - 1];
 
   return (
     <div className="space-y-4">
@@ -193,7 +223,7 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
         </div>
         <div className="p-4 flex flex-wrap items-center gap-2 text-xs">
           {['ASD', 'Deputy Director', 'Director', 'Chief Director'].map((label, i) => (
-            <span key={label} className={i <= currentIndex && batch.workflow.stageId !== 'declined' ? 'font-semibold text-blue-700' : 'text-gray-400'}>
+            <span key={label} className={i <= currentIndex && batch.workflow.stageId !== 'more-evidence' ? 'font-semibold text-blue-700' : 'text-gray-400'}>
               {label}
               {i < 3 ? ' →' : ''}
             </span>
@@ -201,32 +231,49 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
         </div>
       </div>
 
-      {['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId) && (
-        <ResultsActionBar
-          definition={FISA_RESULTS_WORKFLOW}
-          stageId={batch.workflow.stageId}
-          role={role}
-          onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId: person.id, actorName: person.name, note })}
-        />
-      )}
+      <DeclineRecommendationsNotice recommendations={batch.declineRecommendations} cycle={batch.cycleCount} />
 
-      {batch.workflow.stageId === 'declined' && latestDecline && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 space-y-1">
-          <p className="font-semibold">Declined at: {stageLabel(latestDecline.stageId)}</p>
-          <p>{latestDecline.reason}</p>
-          <p className="text-xs text-red-600">The SDP has been notified and can resubmit.</p>
+      {['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId) && (
+        <div className="space-y-2">
+          <ResultsActionBar
+            definition={FISA_RESULTS_WORKFLOW}
+            stageId={batch.workflow.stageId}
+            role={role}
+            hiddenActionIds={['chief-director-decline']}
+            onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId: person.id, actorName: person.name, note })}
+          />
+          {canDeclineResults(role, batch.workflow.stageId) && (
+            <DeclineResultsForm
+              disabled={resultsAction.isPending}
+              onDecline={(irregularities, correctiveActions) =>
+                resultsAction.mutate({
+                  batchId: batch.id,
+                  actionId: 'chief-director-decline',
+                  actorRole: role,
+                  actorId: person.id,
+                  actorName: person.name,
+                  irregularities,
+                  correctiveActions,
+                })
+              }
+            />
+          )}
         </div>
       )}
 
-      {batch.workflow.stageId === 'approved' && (
+      {batch.workflow.stageId === 'more-evidence' && latestRequest && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1">
+          <p className="font-semibold">More evidence requested at: {stageLabel(latestRequest.stageId)}</p>
+          <p>{latestRequest.reason}</p>
+          <p className="text-xs text-amber-700">The SDP has been notified and can add evidence and resubmit.</p>
+        </div>
+      )}
+
+      {batch.finalDecision && (
         <div className="space-y-3">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Approved by the Chief Director.
-            {batch.approvalLetter && ` The approval letter was sent to the SDP on ${new Date(batch.approvalLetter.sentToSdpAt).toLocaleDateString('en-ZA')}.`}
-            {batch.recommendation && ' Recommended to the Certification domain for certificate printing.'}
-          </div>
+          <FinalDecisionNotice decision={batch.finalDecision} />
           <BatchDownloads
-            onDownloadLetter={() => downloadFisaApprovalLetter(batch)}
+            onDownloadLetter={() => downloadLetterModel(fisaOutcomeLetter(batch, false))}
             onDownloadReport={() => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id))}
           />
         </div>
@@ -235,15 +282,19 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
   );
 }
 
+// Batch N1: the Outcome Letter is a draft from the Deputy Director stage onwards and final once the
+// batch is decided; the SP certification recommendation letter exists on an approved batch only.
 function FisaResultsBatchWorkspaceContent({ batch }: { batch: FisaResultsBatch }) {
-  const approved = batch.workflow.stageId === 'approved' && !!batch.approvalLetter;
+  const showLetter = !!batch.finalDecision || ['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId);
+  const recommendation = fisaRecommendationLetter(batch);
   return (
     <Tabs defaultValue="details">
       <TabsList className="flex-wrap h-auto">
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="compliance">Compliance Review</TabsTrigger>
         <TabsTrigger value="chain">Approval Chain</TabsTrigger>
-        {approved && <TabsTrigger value="letter">Approval Letter</TabsTrigger>}
+        {showLetter && <TabsTrigger value="letter">Outcome Letter</TabsTrigger>}
+        {recommendation && <TabsTrigger value="recommendation">Certification Recommendation</TabsTrigger>}
         <TabsTrigger value="audit">Audit Trail</TabsTrigger>
       </TabsList>
       <TabsContent value="details" className="pt-4">
@@ -255,9 +306,14 @@ function FisaResultsBatchWorkspaceContent({ batch }: { batch: FisaResultsBatch }
       <TabsContent value="chain" className="pt-4">
         <ApprovalChainTab batch={batch} />
       </TabsContent>
-      {approved && (
+      {showLetter && (
         <TabsContent value="letter" className="pt-4">
-          <LetterView letter={fisaApprovalLetter(batch)} />
+          <OutcomeLetterView model={fisaOutcomeLetter(batch, !batch.finalDecision)} />
+        </TabsContent>
+      )}
+      {recommendation && (
+        <TabsContent value="recommendation" className="pt-4">
+          <OutcomeLetterView model={recommendation} />
         </TabsContent>
       )}
       <TabsContent value="audit" className="pt-4">

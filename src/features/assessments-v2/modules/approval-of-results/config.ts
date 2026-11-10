@@ -70,3 +70,22 @@ export const EISA_DECLARATION_TEXT = 'I confirm that the results and evidence su
 export function onFileChoiceText(d: Pick<OnFileDocumentRecord, 'choice' | 'replacement'>): string {
   return d.choice === 'replaced' && d.replacement ? `Replaced with ${d.replacement.fileName}` : 'Confirmed';
 }
+
+// ---------------------------------------------------------------------------
+// Batch N1: outcome letters, verification codes and the Certification recommendation letter.
+// ---------------------------------------------------------------------------
+
+export const CHIEF_DIRECTOR_LETTER_TITLE = 'Chief Director: Occupational Qualifications Management';
+
+// Assumption (progress.md, Batch N1): the "Director: Assessment" who signs the recommendation
+// letters is one mock person, not a role in this build.
+export const DIRECTOR_ASSESSMENT_NAME = 'Dr Ntombi Sithebe';
+
+export const CERTIFICATION_ADDRESSEE = ['Director: Certification', 'Quality Council for Trades and Occupations', '256 Glyn Street', 'Hatfield', '0083'];
+
+export const EISA_APPEALS_EMAIL = 'EISAResults@qcto.org.za';
+
+// The EISA "FILE NAME" on the recommendation letter. Assumption: QCTO's real pattern is unknown.
+export function eisaCertificationFileName(qpCode: string, saqaId: string, lastEisaDate: string): string {
+  return `QCTO03-${qpCode}-${saqaId}-${lastEisaDate.replace(/-/g, '')}`;
+}

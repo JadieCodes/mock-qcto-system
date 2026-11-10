@@ -12,7 +12,7 @@ import { FisaResultsView } from './FisaResultsView';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches, useResultsDrafts, useSittingsAwaitingSubmission } from '../hooks';
-import { absenteeismText, batchFiguresOf, competenceRateText } from '../calculation';
+import { absenteeismText, batchFiguresOf, competenceRateText, throughputRateText } from '../calculation';
 import { submissionDeadlineFor } from '../workflow';
 import { ResultsBatchDetail } from './ResultsBatchDetail';
 import { SubmitResultsBatchDialog } from './SubmitResultsBatchDialog';
@@ -82,7 +82,7 @@ function QpResultsView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Qualification', 'EISA Date', 'Competency Rate', 'Absent', 'Status', 'Submission'].map((h) => (
+                  {['Qualification', 'EISA Date', 'Competency Rate', 'Absent', 'Throughput Rate', 'Status', 'Submission'].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -96,6 +96,7 @@ function QpResultsView() {
                     <TableCell className="whitespace-nowrap">{b.sittingDate}</TableCell>
                     <TableCell className="whitespace-nowrap">{competenceRateText(batchFiguresOf(b))}</TableCell>
                     <TableCell className="whitespace-nowrap">{absenteeismText(batchFiguresOf(b))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{throughputRateText(batchFiguresOf(b))}</TableCell>
                     <TableCell>
                       <ResultsBatchStatusBadge batch={b} />
                     </TableCell>

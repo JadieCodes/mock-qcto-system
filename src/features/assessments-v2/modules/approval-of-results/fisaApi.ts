@@ -3,7 +3,7 @@
 // Standard. Internally the batch goes through the same chain and checks as an EISA batch
 // (api.ts): ASD compliance and evidence review, Deputy Director, Director, Chief Director.
 // There is no Post-EISA Monitoring visit for FISA.
-import { appendAuditEntry } from '../../shared/audit/auditLog';
+import { appendAuditEntry, getAuditTrail } from '../../shared/audit/auditLog';
 import type { ChecklistSection } from '../../shared/checklist/types';
 import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
@@ -11,19 +11,61 @@ import { performAction } from '../../shared/workflow/engine';
 import { listEnrolledLearners } from '../../mock/api/qaDomain';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { buildResultsComplianceChecklist } from '../../mock/data/resultsComplianceFolders';
+import { getSkillsProgrammeDetails } from '../../mock/data/skillsProgrammeDetails';
 import type { EnrolledLearner } from '../../mock/data/enrolledLearners';
 import type { Role } from '../../types';
 import { listApprovedFisaStandards } from '../fisa/api';
 import type { FisaStandardRecord } from '../fisa/types';
 import { assertAsdReviewComplete, NEXT_APPROVER } from './api';
 import { FISA_RESULTS_RECORD_TYPE, FISA_RESULTS_SUBMITTER_ROLE, RESULTS_AD_ROLE } from './config';
-import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues } from './workflow';
-import type { FisaResultsBatch, FisaResultsDraftPatch, LearnerResult, NewFisaResultsBatchInput, TaggedEvidenceDocument } from './types';
+import { reviewersFromAudit } from './downloads';
+import { lastFisaDateOf } from './outcomeLetters';
+import { buildVerificationCode } from './verificationCode';
+import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues, isRecommendDeclineAction, isRequestEvidenceAction } from './workflow';
+import type {
+  FisaResultsBatch,
+  FisaResultsDraftPatch,
+  LearnerResult,
+  NewFisaResultsBatchInput,
+  ResultsFinalDecision,
+  TaggedEvidenceDocument,
+} from './types';
 
 export const FISA_RESULTS_KEY = 'approvalOfResults:fisaBatches';
 
+// Batch N1: a batch stored in the old 'declined' stage (before the decline became final) is a
+// "More evidence requested" batch. Idempotent: a final decline always carries a finalDecision.
 function loadAll(): FisaResultsBatch[] {
-  return readStore<FisaResultsBatch[]>(FISA_RESULTS_KEY, []);
+  return readStore<FisaResultsBatch[]>(FISA_RESULTS_KEY, []).map((b) =>
+    b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b, workflow: { ...b.workflow, stageId: 'more-evidence' } } : b,
+  );
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nonEmptyLines(lines: string[] | undefined): string[] {
+  return (lines ?? []).map((l) => l.trim()).filter(Boolean);
+}
+
+function fisaFinalDecisionFor(
+  batch: FisaResultsBatch,
+  all: FisaResultsBatch[],
+  outcome: 'approved' | 'declined',
+  actor: { id: string; name: string },
+  lists: { irregularities: string[]; correctiveActions: string[] },
+): ResultsFinalDecision {
+  const existing = all.flatMap((b) => (b.finalDecision ? [b.finalDecision.verificationCode] : []));
+  return {
+    outcome,
+    decidedAt: new Date().toISOString(),
+    decidedBy: actor.name,
+    decidedById: actor.id,
+    verificationCode: buildVerificationCode('fisa', lastFisaDateOf(batch), today(), existing),
+    ...lists,
+    ...reviewersFromAudit(getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
+  };
 }
 
 function saveAll(batches: FisaResultsBatch[]): void {
@@ -61,11 +103,15 @@ export async function listLearnersForSdp(sdpName: string): Promise<EnrolledLearn
 export async function createFisaResultsBatch(input: NewFisaResultsBatchInput): Promise<FisaResultsBatch> {
   const standard = (await listApprovedFisaStandards()).find((s) => s.id === input.fisaStandardId);
   if (!standard) throw new Error('Results can only be submitted for a skills programme whose FISA Standard is Approved.');
+  if (!input.fisaDate) throw new Error('Enter the date of the FISA.');
 
   const batch: FisaResultsBatch = {
     id: crypto.randomUUID(),
     fisaStandardId: standard.id,
     skillsProgrammeTitle: standard.skillsProgrammeTitle,
+    ...getSkillsProgrammeDetails(standard.skillsProgrammeTitle),
+    fisaDates: [input.fisaDate],
+    recommendationsForImprovement: '',
     sdpId: input.sdpId,
     sdpName: input.sdpName,
     learnerResults: [],
@@ -77,6 +123,10 @@ export async function createFisaResultsBatch(input: NewFisaResultsBatchInput): P
     workflow: { stageId: 'sdp-draft' },
     cycleCount: 1,
     declineHistory: [],
+    declineRecommendations: [],
+    evidenceRequestedAt: null,
+    finalEvidenceReceivedAt: null,
+    finalDecision: null,
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy,
     createdById: input.createdById,
@@ -183,6 +233,17 @@ export async function saveFisaEvidenceEvaluationNotes(id: string, notes: string)
   return updated;
 }
 
+// Batch N1: the ASD's "Recommendations for improvements to be in place before the next FISA",
+// printed on the outcome letter.
+export async function saveFisaRecommendations(id: string, text: string): Promise<FisaResultsBatch> {
+  const all = loadAll();
+  const batch = getOrThrow(all, id);
+  assertAsdReviewStage(batch);
+  const updated = { ...batch, recommendationsForImprovement: text };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
 // The ASD can add a file during the review, the same as on an EISA batch. It is tagged "Other".
 export async function uploadFisaReviewEvidence(id: string, file: Omit<TaggedEvidenceDocument, 'uploadedAt' | 'tag'>): Promise<FisaResultsBatch> {
   assertFileNotEmpty(file);
@@ -202,6 +263,9 @@ interface FisaResultsActionParams {
   actorId: string;
   actorName: string;
   note?: string;
+  // Batch N1: the Chief Director's final decline needs both lists (one or more lines each).
+  irregularities?: string[];
+  correctiveActions?: string[];
 }
 
 export async function performFisaResultsAction(params: FisaResultsActionParams): Promise<FisaResultsBatch> {
@@ -229,6 +293,7 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
       ...batch,
       workflow,
       cycleCount: batch.cycleCount + 1,
+      finalEvidenceReceivedAt: today(),
       complianceChecklist: buildResultsComplianceChecklist(),
       complianceReviewNotes: '',
       evidenceEvaluationNotes: '',
@@ -238,10 +303,19 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
     addNotification({
       recipientRole: RESULTS_AD_ROLE,
       title: 'FISA results batch resubmitted',
-      body: `"${batch.skillsProgrammeTitle}" (${batch.sdpName}) was resubmitted after being declined (cycle ${updated.cycleCount}).`,
+      body: `"${batch.skillsProgrammeTitle}" (${batch.sdpName}) was resubmitted with more evidence (cycle ${updated.cycleCount}).`,
     });
     return updated;
   }
+
+  const isFinalDecline = params.actionId === 'chief-director-decline';
+  const irregularities = nonEmptyLines(params.irregularities);
+  const correctiveActions = nonEmptyLines(params.correctiveActions);
+  if (isFinalDecline) {
+    if (irregularities.length === 0) throw new Error('List at least one irregularity before declining the results.');
+    if (correctiveActions.length === 0) throw new Error('List at least one corrective action before declining the results.');
+  }
+  const note = isFinalDecline ? `Irregularities: ${irregularities.join('; ')}. Corrective actions: ${correctiveActions.join('; ')}.` : params.note;
 
   const workflow = performAction({
     definition: FISA_RESULTS_WORKFLOW,
@@ -250,16 +324,18 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
     actorRole: params.actorRole,
     actorId: params.actorId,
     actorName: params.actorName,
-    note: params.note,
+    note,
     recordType: FISA_RESULTS_RECORD_TYPE,
     recordId: batch.id,
   });
 
   let updated: FisaResultsBatch = { ...batch, workflow };
+  const actor = { actorRole: params.actorRole, actorId: params.actorId, actorName: params.actorName };
 
-  if (params.actionId.endsWith('-decline')) {
+  if (isRequestEvidenceAction(params.actionId)) {
     updated = {
       ...updated,
+      evidenceRequestedAt: today(),
       declineHistory: [
         ...updated.declineHistory,
         { stageId: batch.workflow.stageId, decidedBy: params.actorName, reason: params.note ?? '', decidedAt: new Date().toISOString() },
@@ -267,9 +343,19 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
     };
     addNotification({
       recipientRole: FISA_RESULTS_SUBMITTER_ROLE,
-      title: 'FISA results batch declined',
-      body: `"${batch.skillsProgrammeTitle}" (${batch.sdpName}) was declined: ${params.note ?? ''}`,
+      title: 'More evidence requested',
+      body: `"${batch.skillsProgrammeTitle}" (${batch.sdpName}): ${params.note ?? ''} Add the evidence and resubmit.`,
     });
+  }
+
+  if (isRecommendDeclineAction(params.actionId)) {
+    updated = {
+      ...updated,
+      declineRecommendations: [
+        ...updated.declineRecommendations,
+        { stageId: batch.workflow.stageId, recommendedBy: params.actorName, reason: params.note ?? '', recommendedAt: new Date().toISOString(), cycle: batch.cycleCount },
+      ],
+    };
   }
 
   const nextApprover = NEXT_APPROVER[params.actionId];
@@ -281,31 +367,51 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
     });
   }
 
+  if (isFinalDecline) {
+    const now = new Date().toISOString();
+    updated = {
+      ...updated,
+      finalDecision: fisaFinalDecisionFor(batch, all, 'declined', { id: params.actorId, name: params.actorName }, { irregularities, correctiveActions }),
+      approvalLetter: { generatedAt: now, signedBy: params.actorName, sentToSdpAt: now },
+    };
+    appendAuditEntry({
+      recordType: FISA_RESULTS_RECORD_TYPE,
+      recordId: batch.id,
+      ...actor,
+      action: `Outcome letter (decline) generated and sent to the SDP. Verification code ${updated.finalDecision?.verificationCode ?? ''}`,
+    });
+    addNotification({
+      recipientRole: FISA_RESULTS_SUBMITTER_ROLE,
+      title: 'FISA results declined',
+      body: `The results for "${batch.skillsProgrammeTitle}" were declined. Your Outcome Letter is ready to download.`,
+    });
+  }
+
   if (params.actionId === 'chief-director-approve') {
     const now = new Date().toISOString();
     updated = {
       ...updated,
       recommendation: { recommendedAt: now, recommendedBy: params.actorName },
       approvalLetter: { generatedAt: now, signedBy: params.actorName, sentToSdpAt: now },
+      finalDecision: fisaFinalDecisionFor(batch, all, 'approved', { id: params.actorId, name: params.actorName }, { irregularities: [], correctiveActions: [] }),
     };
-    const actor = { actorRole: params.actorRole, actorId: params.actorId, actorName: params.actorName };
     appendAuditEntry({
       recordType: FISA_RESULTS_RECORD_TYPE,
       recordId: batch.id,
       ...actor,
-      action: 'Approval letter generated and sent to the SDP',
+      action: 'Outcome letter generated and sent to the SDP',
     });
     // Simulated hand-off, the same as for EISA batches: the Certification domain is out of scope.
     appendAuditEntry({
       recordType: FISA_RESULTS_RECORD_TYPE,
       recordId: batch.id,
       ...actor,
-      action: 'Recommended to the Certification domain for certificate printing (simulated)',
+      action: 'Recommendation letter sent to Certification',
     });
     addNotification({
       recipientRole: FISA_RESULTS_SUBMITTER_ROLE,
       title: 'FISA results batch approved',
-      body: `"${batch.skillsProgrammeTitle}" results are approved and recommended to Certification. Your approval letter is ready to download.`,
+      body: `"${batch.skillsProgrammeTitle}" results are approved. Your Outcome Letter is ready to download.`,
     });
   }
 

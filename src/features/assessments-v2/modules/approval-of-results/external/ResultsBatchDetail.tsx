@@ -6,17 +6,21 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchDownloads } from '../components/BatchDownloads';
+import { EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
+import { OutcomeLetterView } from '../components/OutcomeLetterView';
 import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../components/EisaSubmissionPack';
-import { EISA_BATCH_DOCUMENTS } from '../batchDocuments';
+import { documentsForPortal, EISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
 import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
-import { downloadEisaApprovalLetter, downloadEisaVerificationReport } from '../downloads';
+import { downloadEisaVerificationReport } from '../downloads';
+import { downloadLetterModel, eisaOutcomeLetter } from '../outcomeLetters';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsAction, useResultsBatch } from '../hooks';
 
 // CR-059: QP-facing read-only summary — status, the batch figures and per-component results
-// (29.31), the latest decline reason (if any) and a resubmit action once declined.
+// (29.31), the latest request for more evidence (if any) with a resubmit action, and once the
+// batch is decided its Outcome Letter. Batch N1: the QP never sees the Certification recommendation letter.
 export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | null; onClose: () => void }) {
   const { role, person } = useV2Role();
   const actorId = person.id;
@@ -59,35 +63,33 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
             <OnFileDocumentsList documents={batch.onFileDocuments} />
           </div>
           <DeclarationLine declaration={batch.declaration} />
-          {batch.declineHistory.length > 0 && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-1">
-              <p className="text-xs font-semibold text-red-700 uppercase">Latest Decline Reason</p>
-              <p className="text-sm text-red-800">{batch.declineHistory[batch.declineHistory.length - 1].reason}</p>
+          <EvidenceDates requestedAt={batch.evidenceRequestedAt} receivedAt={batch.finalEvidenceReceivedAt} />
+          {batch.workflow.stageId === 'more-evidence' && batch.declineHistory.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1">
+              <p className="text-xs font-semibold text-amber-700 uppercase">More Evidence Requested</p>
+              <p className="text-sm text-amber-800">{batch.declineHistory[batch.declineHistory.length - 1].reason}</p>
             </div>
           )}
-          {batch.recommendation && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              Recommended to Certification on {new Date(batch.recommendation.recommendedAt).toLocaleDateString('en-ZA')}.
-            </div>
-          )}
-          {batch.workflow.stageId === 'approved' && (
+          {batch.finalDecision && <FinalDecisionNotice decision={batch.finalDecision} />}
+          {batch.finalDecision && (
             <BatchDownloads
-              onDownloadLetter={() => downloadEisaApprovalLetter(batch)}
+              onDownloadLetter={() => downloadLetterModel(eisaOutcomeLetter(batch, false))}
               onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
             />
           )}
           <BatchDocumentsCard
-            documents={EISA_BATCH_DOCUMENTS}
+            documents={documentsForPortal(EISA_BATCH_DOCUMENTS, 'external')}
             downloads={
-              batch.workflow.stageId === 'approved'
+              batch.finalDecision
                 ? {
-                    'eisa-outcome-letter': () => downloadEisaApprovalLetter(batch),
+                    'eisa-outcome-letter': () => downloadLetterModel(eisaOutcomeLetter(batch, false)),
                     'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
                   }
                 : {}
             }
           />
-          {batch.workflow.stageId === 'declined' && (
+          {batch.finalDecision && <OutcomeLetterView model={eisaOutcomeLetter(batch, false)} />}
+          {batch.workflow.stageId === 'more-evidence' && (
             <Button
               size="sm"
               disabled={resultsAction.isPending}

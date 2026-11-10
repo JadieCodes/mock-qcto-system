@@ -236,3 +236,10 @@ QCTO: Approval of Results covers EISA and FISA. EISA is centralised (the QP subm
 - **CEO:** "My items" lists only IAC-approved QASAs awaiting signature (05.7).
 - **Status page, 29.5:** SAQA ID next to the qualification title in both tables, for every role on both portals. Still no names other than the QP, no comments and no links into records.
 - **Section 2, QASA approvers:** unchanged route (ASD → Deputy Director → Director Office → Deputy Director records the IAC outcome; CEO signs the feedback letter). No acknowledgement or approval-letter approvers any more. A review uses the same route.
+
+### Batch N1 — Outcome Letters, final decline and Sent to Certification (change request doc v14, rows 29.27, 05.19, 29.30, 05.20, 05.16; built 9 Nov 2026)
+
+- **QP (EISA) and SDP (FISA), external:** see the **Outcome Letter** of their own batch once it has a final decision (approval or decline), the verification code, the verification report, and their own documents. They never see the **Certification recommendation letter**, the "Sent to Certification" list, the Deputy Director's or Director's decline recommendations, or a DRAFT Outcome Letter. After "Request more evidence" they see the reason and the Resubmit button; after a final decline there is no Resubmit.
+- **Internal (ASD, Deputy Director, Director, Chief Director):** see the Outcome Letter (a DRAFT from the Deputy Director stage onwards), the Certification recommendation letter of an approved batch, and the new **Sent to Certification** tab in Approval of Results (internal only; no external role has it). Every QCTO stage can **Request more evidence**; the Deputy Director and the Director can **Recommend decline** while sending the batch on; **only the Chief Director** can **Decline results** (final, with irregularities and corrective actions).
+- **Documents card (`documentsForPortal`):** the recommendation letters are `internalOnly` in `batchDocuments.ts`; the external card filters them out.
+- **Section 2 — results batch / FISA results batch:** unchanged owner and approvers. New stages: `more-evidence` (the QP/SDP may act: resubmit) and a final `declined` (nobody may act).

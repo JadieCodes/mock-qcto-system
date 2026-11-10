@@ -49,3 +49,15 @@ export function snapshotResultsRules(
     })),
   };
 }
+
+// Batch N1: the SAQA ID, NQF level and credits printed on the outcome letter, copied from the same
+// approved QASA when the batch is created.
+export function qualificationDetailsOf(
+  qasas: QsaAddendumApplication[],
+  sitting: { qpId: string; qualificationTitle: string },
+): { saqaId: string; nqfLevel: string; credits: string } {
+  const qasa = qasas.find(
+    (a) => isQasaApproved(a) && a.qpId === sitting.qpId && a.qualificationTitle.toLowerCase() === sitting.qualificationTitle.toLowerCase(),
+  );
+  return { saqaId: qasa?.saqaId ?? 'Pending', nqfLevel: qasa?.nqfLevel ?? '', credits: qasa?.credits ?? '' };
+}

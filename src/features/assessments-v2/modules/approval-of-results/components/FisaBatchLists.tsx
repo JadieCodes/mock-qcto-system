@@ -13,8 +13,8 @@ export function FisaLearnerResultsList({ results }: { results: LearnerResult[] }
           <span className="truncate text-gray-700">
             {r.fullName} <span className="font-mono text-xs text-gray-500">{r.idNumber}</span>
           </span>
-          <span className={r.outcome === 'competent' ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
-            {r.outcome === 'competent' ? 'Competent' : 'Not yet competent'}
+          <span className={r.outcome === 'competent' ? 'text-emerald-700 font-medium' : r.outcome === 'absent' ? 'text-gray-600 font-medium' : 'text-amber-700 font-medium'}>
+            {r.outcome === 'competent' ? 'Competent' : r.outcome === 'absent' ? 'Absent' : 'Not yet competent'}
           </span>
         </li>
       ))}

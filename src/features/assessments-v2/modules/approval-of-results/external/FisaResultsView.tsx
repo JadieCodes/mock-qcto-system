@@ -7,13 +7,13 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useFisaResultsBatches } from '../hooks';
-import { fisaCompetencyRatePercent } from '../workflow';
+import { fisaCompetencyRatePercent, fisaThroughputRatePercent } from '../workflow';
 import type { FisaResultsBatch } from '../types';
 import { FisaResultsBatchDetail } from './FisaResultsBatchDetail';
 import { NewFisaResultsBatchDialog } from './NewFisaResultsBatchDialog';
 
 function BatchTable({ batches, onSelect, showRate }: { batches: FisaResultsBatch[]; onSelect: (id: string) => void; showRate: boolean }) {
-  const headers = ['Skills Programme', 'Learners', ...(showRate ? ['Competency Rate'] : []), 'Status', showRate ? 'Submitted' : 'Created'];
+  const headers = ['Skills Programme', 'Learners', ...(showRate ? ['Competency Rate', 'Throughput Rate'] : []), 'Status', showRate ? 'Submitted' : 'Created'];
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -32,6 +32,7 @@ function BatchTable({ batches, onSelect, showRate }: { batches: FisaResultsBatch
               <TableCell className="max-w-[240px] truncate">{b.skillsProgrammeTitle}</TableCell>
               <TableCell>{b.learnerResults.length}</TableCell>
               {showRate && <TableCell>{fisaCompetencyRatePercent(b)}%</TableCell>}
+              {showRate && <TableCell>{fisaThroughputRatePercent(b)}%</TableCell>}
               <TableCell>
                 <ResultsBatchStatusBadge batch={b} />
               </TableCell>

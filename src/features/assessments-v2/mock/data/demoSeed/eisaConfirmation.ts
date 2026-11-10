@@ -159,6 +159,9 @@ export function seedEisaConfirmations(log: SeedLog, sittings: EisaSitting[], reg
   // F1 — ready for the QP to confirm.
   generate(sittingAt(sittings, 'Electrical Trades', 35), LINDIWE, 12).acknowledge(6).done();
 
+  // F14 (Batch N1) — confirmed; its results batch was declined. Generated last so no earlier confirmation changes id.
+  generate(sittingAt(sittings, 'Electrical Trades', -190), LINDIWE, 230).acknowledge(227).confirm(225).done();
+
   if (records.some((r) => r.markingDate && dateOf(r.generatedAt) > r.markingDate)) throw new Error('Demo seed: a confirmation was generated after marking.');
 
   // Newest first, the order generateConfirmation() leaves the list in.

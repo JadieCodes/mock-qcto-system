@@ -12,7 +12,8 @@ import type { Role } from '../../../types';
 function ActionButton({ action, onRun, disabled }: { action: WorkflowAction; onRun: (note?: string) => void; disabled?: boolean }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
-  const variant = action.kind === 'reject' ? 'destructive' : 'default';
+  // Batch N1: "Request more evidence" and "Recommend decline" are softer than the final decline.
+  const variant = action.kind === 'reject' ? 'destructive' : action.kind === 'send-back' || action.id.endsWith('-recommend-decline') ? 'outline' : 'default';
 
   if (!action.requiresNote) {
     return (
@@ -59,15 +60,18 @@ export function ResultsActionBar({
   role,
   onRun,
   disabledActionIds,
+  hiddenActionIds,
 }: {
   definition: WorkflowDefinition;
   stageId: string;
   role: Role;
   onRun: (actionId: string, note?: string) => void;
   disabledActionIds?: string[];
+  // Batch N1: the Chief Director's final decline has its own form (DeclineResultsForm).
+  hiddenActionIds?: string[];
 }) {
   if (!canActInStage(definition, stageId, role)) return null;
-  const actions = availableActions(definition, stageId);
+  const actions = availableActions(definition, stageId).filter((a) => !hiddenActionIds?.includes(a.id));
   if (actions.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2 pt-2">

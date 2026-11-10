@@ -59,7 +59,8 @@ export interface OnFileDocumentChoice {
 // Row 40 (H-05/H-11/H-12/G-24): one result per learner, not a single hand-typed count.
 // FISA results keep one outcome per learner (QCTO feedback 3.14); EISA results are per
 // component since 29.31 (EisaLearnerResult below).
-export type LearnerResultOutcome = 'competent' | 'not-yet-competent';
+// Batch N1: a FISA learner can also be absent (the outcome letter counts them).
+export type LearnerResultOutcome = 'competent' | 'not-yet-competent' | 'absent';
 
 export interface LearnerResult {
   learnerId: string;
@@ -106,20 +107,54 @@ export interface ResultsDeclineEntry {
   decidedAt: string;
 }
 
-// CR-059 hand-off: simulated — the Certification domain itself is out of scope.
+// CR-059 hand-off: simulated — the Certification domain itself is out of scope. Batch N1: set
+// when the recommendation letter is sent to Certification (final approval only).
 export interface CertificationRecommendation {
   recommendedAt: string;
   recommendedBy: string;
 }
 
+// Batch N1: the Deputy Director or Director sends the batch on but recommends a decline. It shows
+// to the next role; only the Chief Director can decline.
+export interface DeclineRecommendation {
+  stageId: string;
+  recommendedBy: string;
+  reason: string;
+  recommendedAt: string;
+  cycle: number;
+}
+
+// Batch N1: the final decision on a batch (approved or declined), with the verification code
+// that goes on every letter, report and register line. Set once, never changed.
+export interface ResultsFinalDecision {
+  outcome: 'approved' | 'declined';
+  decidedAt: string;
+  decidedBy: string;
+  decidedById: string;
+  verificationCode: string;
+  // Declined only: the Chief Director's two lists (one or more lines each).
+  irregularities: string[];
+  correctiveActions: string[];
+  // Who acted in the deciding cycle, for the recommendation letter's signature lines.
+  asdName: string;
+  ddName: string;
+  directorName: string;
+}
+
 // stageId: 'ad-review' | 'dd-review' | 'director-review' | 'chief-director-review' |
-// 'approved' | 'declined'. See workflow.ts RESULTS_WORKFLOW.
+// 'more-evidence' | 'approved' | 'declined' (final). See workflow.ts RESULTS_WORKFLOW.
 export interface ResultsBatch {
   id: string;
   sittingId: string;
   // QCTO feedback 29.32: shown as the "EISA date" (the date of the first component).
   sittingDate: string;
   qualificationTitle: string;
+  // Batch N1: copied from the approved QASA when the batch is created (outcome letter table).
+  saqaId: string;
+  nqfLevel: string;
+  credits: string;
+  // Batch N1: the assessment centres on the sitting's EISA Confirmation.
+  centres: string[];
   qpId: string;
   qpName: string;
 
@@ -145,7 +180,13 @@ export interface ResultsBatch {
 
   workflow: WorkflowRecordState;
   cycleCount: number;
+  // Batch N1: every "Request more evidence" (the name is kept; a final decline is finalDecision).
   declineHistory: ResultsDeclineEntry[];
+  declineRecommendations: DeclineRecommendation[];
+  // "Date additional evidence requested" / "Date final outstanding evidence received".
+  evidenceRequestedAt: string | null;
+  finalEvidenceReceivedAt: string | null;
+  finalDecision: ResultsFinalDecision | null;
 
   // CR-059: 21 working days from the sitting date.
   submissionDeadline: string;
@@ -192,7 +233,7 @@ export interface FisaResultsDeclaration {
   acceptedAt: string;
 }
 
-// Generated automatically at final approval and sent to the SDP (in-app notification).
+// Generated at the final decision (approval or decline) and sent to the SDP (in-app notification).
 export interface FisaApprovalLetterRecord {
   generatedAt: string;
   signedBy: string;
@@ -200,11 +241,17 @@ export interface FisaApprovalLetterRecord {
 }
 
 // stageId: 'sdp-draft' | 'ad-review' | 'dd-review' | 'director-review' |
-// 'chief-director-review' | 'approved' | 'declined'. See workflow.ts FISA_RESULTS_WORKFLOW.
+// 'chief-director-review' | 'more-evidence' | 'approved' | 'declined' (final). See workflow.ts FISA_RESULTS_WORKFLOW.
 export interface FisaResultsBatch {
   id: string;
   fisaStandardId: string;
   skillsProgrammeTitle: string;
+  // Batch N1: the skills programme details for the outcome letter, copied when the batch is created.
+  skillsProgrammeId: string;
+  nqfLevel: string;
+  credits: string;
+  // Batch N1: the date(s) the FISA was held, chosen by the SDP.
+  fisaDates: string[];
   sdpId: string;
   sdpName: string;
 
@@ -216,9 +263,16 @@ export interface FisaResultsBatch {
   evidenceEvaluationNotes: string;
   complianceChecklist: ChecklistSection[];
 
+  // Batch N1: entered by the ASD in the review; printed on the outcome letter.
+  recommendationsForImprovement: string;
+
   workflow: WorkflowRecordState;
   cycleCount: number;
   declineHistory: ResultsDeclineEntry[];
+  declineRecommendations: DeclineRecommendation[];
+  evidenceRequestedAt: string | null;
+  finalEvidenceReceivedAt: string | null;
+  finalDecision: ResultsFinalDecision | null;
 
   createdAt: string;
   createdBy: string;
@@ -232,6 +286,7 @@ export interface FisaResultsBatch {
 
 export interface NewFisaResultsBatchInput {
   fisaStandardId: string;
+  fisaDate: string;
   sdpId: string;
   sdpName: string;
   createdBy: string;
