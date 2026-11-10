@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { acknowledgeConfirmation, confirmDetails, generateConfirmation, getRecord, listRecords, listSittingsReadyToConfirm } from './api';
+import { listAccreditedAssessmentCentres } from '../../mock/api/accreditation';
+import { acceptConfirmation, getRecord, listRecords, listUpcomingShares, returnConfirmationToQp, saveConfirmationDraft, submitConfirmation } from './api';
 import type { EisaConfirmationRecord } from './types';
 
 const LIST_KEY = ['eisa-confirmation', 'records'] as const;
 const detailKey = (id: string) => ['eisa-confirmation', 'records', id] as const;
-const READY_KEY = ['eisa-confirmation', 'sittings-ready'] as const;
+const UPCOMING_KEY = ['eisa-confirmation', 'upcoming-shares'] as const;
 
 export function useConfirmationRecords() {
   return useQuery({ queryKey: LIST_KEY, queryFn: listRecords });
@@ -15,41 +16,44 @@ export function useConfirmationRecord(id: string | null) {
   return useQuery({ queryKey: detailKey(id ?? 'none'), queryFn: () => getRecord(id as string), enabled: !!id });
 }
 
-export function useSittingsReadyToConfirm() {
-  return useQuery({ queryKey: READY_KEY, queryFn: listSittingsReadyToConfirm });
+export function useUpcomingShares() {
+  return useQuery({ queryKey: UPCOMING_KEY, queryFn: listUpcomingShares });
 }
 
-function useConfirmationMutation<TArgs>(mutationFn: (args: TArgs) => Promise<EisaConfirmationRecord>) {
+function useConfirmationMutation<TArgs>(mutationFn: (args: TArgs) => Promise<EisaConfirmationRecord>, successMessage: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
     onSuccess: (updated) => {
       queryClient.setQueryData(detailKey(updated.id), updated);
       queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      toast.success(successMessage);
     },
     onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });
 }
 
-export function useGenerateConfirmation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: generateConfirmation,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: LIST_KEY });
-      queryClient.invalidateQueries({ queryKey: READY_KEY });
-      toast.success('EISA Confirmation generated.');
-    },
-    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+export function useSaveConfirmationDraft() {
+  return useConfirmationMutation(saveConfirmationDraft, 'Draft saved.');
+}
+
+export function useSubmitConfirmation() {
+  return useConfirmationMutation(submitConfirmation, 'EISA Confirmation submitted to the ASD.');
+}
+
+export function useAcceptConfirmation() {
+  return useConfirmationMutation(acceptConfirmation, 'EISA Confirmation accepted.');
+}
+
+export function useReturnConfirmation() {
+  return useConfirmationMutation(returnConfirmationToQp, 'EISA Confirmation returned to the QP.');
+}
+
+// 29.21: the assessment centres accredited for one qualification.
+export function useAccreditedCentres(qualificationTitle: string | null) {
+  return useQuery({
+    queryKey: ['eisa-confirmation', 'accredited-centres', qualificationTitle ?? 'none'],
+    queryFn: () => listAccreditedAssessmentCentres(qualificationTitle as string),
+    enabled: !!qualificationTitle,
   });
-}
-
-export function useAcknowledgeConfirmation() {
-  return useConfirmationMutation((args: { recordId: string; actorId: string; actorName: string }) =>
-    acknowledgeConfirmation(args.recordId, args.actorId, args.actorName),
-  );
-}
-
-export function useConfirmDetails() {
-  return useConfirmationMutation(confirmDetails);
 }

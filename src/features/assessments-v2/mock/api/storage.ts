@@ -61,7 +61,9 @@ export function writeStore<T>(key: string, value: T): void {
 // 'A20' = Batch R1: learner EISA registration — declined learners, "Return to SDP", SDP QA monitoring
 // dates, the duplicate-registration block lifting once a results batch is approved, and a Thabo
 // registration for two learners whose earlier results were approved as Not yet competent.
-export const SEED_VERSION = 'A20';
+// 'A21' = Batch T: EISA Confirmation reversed — the system shares the consolidated learner list, the QP
+// builds the confirmation (accredited centres, allocation, dates) and the ASD accepts it or returns it.
+export const SEED_VERSION = 'A21';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

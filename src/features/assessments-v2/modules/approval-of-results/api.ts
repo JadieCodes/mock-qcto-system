@@ -9,6 +9,7 @@ import { onFileDocumentsFor } from '../../mock/data/onFileDocuments';
 import type { Role } from '../../types';
 import { listRecords as listConfirmationRecords } from '../eisa-confirmation/api';
 import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
+import { isConfirmationAccepted } from '../eisa-confirmation/workflow';
 import { listRegistrationsForSitting } from '../eisa-registration/api';
 import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
@@ -133,7 +134,7 @@ export async function listCaptureLearners(sittingId: string): Promise<CaptureLea
 export async function saveResultsDraft(input: { sittingId: string; learnerResults: EisaLearnerResult[]; savedBy: string }): Promise<ResultsDraft> {
   if (loadAll().some((b) => b.sittingId === input.sittingId)) throw new Error('A results batch has already been submitted for this sitting.');
   const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === input.sittingId);
-  if (!confirmation || confirmation.workflow.stageId !== 'confirmed') throw new Error('Results can only be saved for a confirmed sitting.');
+  if (!confirmation || !isConfirmationAccepted(confirmation)) throw new Error('Results can only be saved for a confirmed sitting.');
   const draft: ResultsDraft = { sittingId: input.sittingId, learnerResults: input.learnerResults, savedAt: new Date().toISOString(), savedBy: input.savedBy };
   writeStore(DRAFTS_KEY, [draft, ...loadDrafts().filter((d) => d.sittingId !== input.sittingId)]);
   return draft;
@@ -144,7 +145,7 @@ export async function saveResultsDraft(input: { sittingId: string; learnerResult
 // Approval of Results on the main highway and already carries the QP-confirmed learner list
 // this module needs (assumption — see progress.md).
 export async function listSittingsAwaitingSubmission(): Promise<EisaConfirmationRecord[]> {
-  const confirmed = (await listConfirmationRecords()).filter((r) => r.workflow.stageId === 'confirmed');
+  const confirmed = (await listConfirmationRecords()).filter((r) => isConfirmationAccepted(r));
   const existing = loadAll();
   const submitted = new Set(existing.map((b) => b.sittingId));
   return confirmed.filter((r) => !submitted.has(r.sittingId));
@@ -158,7 +159,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
 
   const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === input.sittingId);
   if (!confirmation) throw new Error('EISA Confirmation not found for this sitting.');
-  if (confirmation.workflow.stageId !== 'confirmed') {
+  if (!isConfirmationAccepted(confirmation)) {
     throw new Error('The sitting must be fully confirmed before results can be submitted.');
   }
   // QCTO feedback 29.31: the components are snapshotted from the approved QASA now; without

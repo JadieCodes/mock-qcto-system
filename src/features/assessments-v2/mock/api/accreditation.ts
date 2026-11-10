@@ -2,6 +2,7 @@
 // ("Data" section) until a real source exists: which qualifications have accredited SDPs
 // (QCTO feedback 1.8).
 import { ACCREDITED_QUALIFICATIONS } from '../data/accreditedQualifications';
+import { ASSESSMENT_CENTRES, type AssessmentCentre } from '../data/assessmentCentres';
 import { QP_DIRECTORY } from '../data/qpDirectory';
 
 export interface QualificationWithAccreditedSdps {
@@ -32,4 +33,12 @@ export function findQualification(idOrName: string): QualificationWithAccredited
 // Every qualification in the directory, for pickers (an RPL/ARPL visit chooses its qualifications from it).
 export function listQualificationDirectory(): QualificationWithAccreditedSdps[] {
   return ACCREDITED_QUALIFICATIONS.map(withQpName);
+}
+
+// QCTO 29.21: the assessment centres accredited for one qualification (by its id or name), with
+// province and town. A qualification nobody is accredited for has none.
+export async function listAccreditedAssessmentCentres(qualificationIdOrName: string): Promise<AssessmentCentre[]> {
+  const qualification = findQualification(qualificationIdOrName);
+  if (!qualification) return [];
+  return ASSESSMENT_CENTRES.filter((c) => qualification.accreditedSdpIds.includes(c.centreId));
 }

@@ -82,4 +82,7 @@ export const ENROLLED_LEARNERS: EnrolledLearner[] = [
   { id: 'learner-068', fullName: 'Zodwa Mazibuko', idNumber: '9805014672086', sdpName: 'Lerato Training Institute' },
   { id: 'learner-069', fullName: 'Kgomotso Letsoalo', idNumber: '9910085809086', sdpName: 'Lerato Training Institute' },
   { id: 'learner-070', fullName: 'Siphesihle Mnguni', idNumber: '0003154946085', sdpName: 'Lerato Training Institute' },
+  // Batch T: two Khanya learners registered for a later Electrical Trades sitting, whose EISA Confirmation list is not shared yet.
+  { id: 'learner-071', fullName: 'Katlego Moloi', idNumber: '0106155116085', sdpName: 'Khanya Skills Academy' },
+  { id: 'learner-072', fullName: 'Sibusiso Radebe', idNumber: '9903206008084', sdpName: 'Khanya Skills Academy' },
 ];

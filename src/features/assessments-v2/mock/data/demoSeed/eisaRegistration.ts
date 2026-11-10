@@ -438,6 +438,25 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     .uploadSors('all', 3)
     .submit(2);
 
+  // Batch T — Lerato, Plumbing at today + 62: registered, registration closed since, so the EISA
+  // Confirmation list is shared (F16). Added last so no earlier registration changes id.
+  start(LERATO, sittingAt(sittings, 'Plumbing', 62), 'trades', 110)
+    .addLearners(['learner-011', 'learner-012'], 110)
+    .uploadSors('all', 109)
+    .supportingDocument('Assessment_Centre_Readiness_Declaration.pdf', 401_408, 109)
+    .submit(104)
+    .accept('all', RIAAN, 100)
+    .createNumber(RIAAN, 98);
+
+  // Batch T — Khanya, Electrical Trades (B1 3rd date): registered while registration is still open, so
+  // its EISA Confirmation list shows as "Will be shared on <closing date>".
+  start(KHANYA, b1Sitting(sittings, 2), 'trades', 24)
+    .addLearners(['learner-071', 'learner-072'], 24)
+    .uploadSors('all', 23)
+    .submit(20)
+    .accept('all', LINDIWE, 12)
+    .createNumber(LINDIWE, 10);
+
   // reg-create-number, in the order the numbers were created: EISA-REG-{year}-{nnnn}, then
   // the Non-Trades QP notification and the SDP notification that quote the number.
   pendingNumbers.sort((a, b) => a.at.localeCompare(b.at));

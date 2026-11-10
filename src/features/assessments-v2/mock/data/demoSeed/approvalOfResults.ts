@@ -58,6 +58,7 @@ import { markEntryIssues } from '../../../modules/approval-of-results/markEntry'
 import { isRecommendDeclineAction, isRequestEvidenceAction, RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
 import type { EisaLearnerResult, EisaReview, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft, ResultsFinalDecision } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
+import { isConfirmationAccepted } from '../../../modules/eisa-confirmation/workflow';
 import type { EisaRegistrationRecord } from '../../../modules/eisa-registration/types';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
@@ -203,7 +204,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     const qp = seedPerson(confirmation.qpId);
     const submittedAt = clock.at(daysAgo, 10);
     if (batches.some((b) => b.sittingId === confirmation.sittingId)) throw new Error(`Demo seed: ${confirmation.sittingDate} already has a results batch.`);
-    if (confirmation.workflow.stageId !== 'confirmed') throw new Error('Demo seed: the sitting must be fully confirmed before results can be submitted.');
+    if (!isConfirmationAccepted(confirmation)) throw new Error('Demo seed: the sitting must be fully confirmed before results can be submitted.');
     if (!confirmation.moderationDate || dateOf(submittedAt) <= confirmation.moderationDate) throw new Error('Demo seed: results submitted before moderation.');
     const codes = [...pattern].filter(isOutcomeCode);
     if (codes.length !== pattern.length || codes.length !== confirmation.learners.length) {

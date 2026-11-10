@@ -34,6 +34,8 @@
 //  S17 Plumbing           today + 150  Published — registration open; request R3 open at the Director
 // Added in Batch L2 (05.24):
 //  S18 Welding            today - 20   Published (past) — confirmed, awaiting results with a saved draft
+// Added in Batch T:
+//  S20 Plumbing           today + 62   Published — registration closed; its EISA Confirmation was returned to the QP
 // B1's three dates are published with registration open.
 //
 // Postponement and cancellation requests (QCTO feedback 2.4, changeRequests.ts), each with a
@@ -570,6 +572,11 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
       });
     }
   }
+
+  // Batch T (29.20): a Plumbing sitting whose registration has closed (about 2 months out), so its
+  // EISA Confirmation list is shared and its confirmation can be returned to the QP. Added after
+  // everything above so no seed id moves.
+  sittings.push(addDirect(plumbing, 62, THANDEKA, 130).sitting);
 
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,
   // and every future one has a date after today.
