@@ -49,4 +49,7 @@ export const USERS: AppUser[] = [
 
   { id: 'fundiswa-ngcobo', name: 'Fundiswa Ngcobo', role: 'Qualifications Development', teams: ['fisa'] },
   { id: 'ayesha-patel', name: 'Ayesha Patel', role: 'Qualifications Development', teams: ['fisa'] },
+
+  // Batch S ASSUMPTION: one mock super admin until QCTO says who holds the role.
+  { id: 'nomsa-khanyile', name: 'Nomsa Khanyile', role: 'Super Admin', teams: [] },
 ];

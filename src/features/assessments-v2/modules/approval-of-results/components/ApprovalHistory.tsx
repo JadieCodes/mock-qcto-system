@@ -1,3 +1,4 @@
+import { roleLabel } from '../../../shared/administration/roleLabels';
 import { SectionCard } from '../../../shared/ui/PageSections';
 import type { AuditEntry } from '../../../shared/audit/types';
 import { approvalHistoryFromAudit, stageLabel } from '../downloads';
@@ -33,7 +34,7 @@ export function ApprovalHistory({
               {step ? (
                 <>
                   <p className="text-gray-700">
-                    {step.actorName} ({step.actorRole}) on {step.date}
+                    {step.actorName} ({roleLabel(step.actorRole)}) on {step.date}
                   </p>
                   <p className="text-xs text-gray-500">Comment: {step.comment || 'None.'}</p>
                 </>

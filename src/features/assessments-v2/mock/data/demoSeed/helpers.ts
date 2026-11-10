@@ -160,7 +160,7 @@ export function audit(log: SeedLog, entry: Omit<AuditEntry, 'id' | 'actorId' | '
   log.audit.push({ id: crypto.randomUUID(), actorRole: actorRole ?? actor.role, actorId: actor.id, actorName: actor.name, ...rest });
 }
 
-export function notify(log: SeedLog, at: string, notification: Pick<AppNotification, 'recipientRole' | 'title' | 'body'>): void {
+export function notify(log: SeedLog, at: string, notification: Pick<AppNotification, 'recipientRole' | 'recipientPersonId' | 'title' | 'body'>): void {
   const ageDays = (Date.now() - new Date(at).getTime()) / (24 * 60 * 60 * 1000);
   log.notifications.push({ ...notification, id: crypto.randomUUID(), read: ageDays > READ_AFTER_DAYS, createdAt: at });
 }

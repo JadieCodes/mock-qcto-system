@@ -1,6 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { calcRegistrationClosingDate } from '../registrationClosing';
+import { ClosingDate } from './ClosingDate';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import { EisaSittingStatusBadge } from './StatusBadge';
 import { UNPUBLISHED_SITTING_STATUSES } from '../api';
@@ -19,6 +19,7 @@ export function SittingListView({
   openRequestSittingIds,
   onEdit,
   onDelete,
+  onChangeClosing,
   sittingIdsWithRegistrations,
 }: {
   sittings: EisaSitting[];
@@ -29,11 +30,13 @@ export function SittingListView({
   openRequestSittingIds?: Set<string>;
   onEdit?: (sitting: EisaSitting) => void;
   onDelete?: (sitting: EisaSitting) => void;
+  // Batch S (05.11): the super admin's "Change closing date" on a published sitting.
+  onChangeClosing?: (sitting: EisaSitting) => void;
   // Row 22/23 (D-17): sittings in this set already have registrations against them — Delete
   // is blocked for those.
   sittingIdsWithRegistrations?: Set<string>;
 }) {
-  const canManage = !!(onRequestPostponement || onRequestCancellation || onEdit || onDelete);
+  const canManage = !!(onRequestPostponement || onRequestCancellation || onEdit || onDelete || onChangeClosing);
   const sorted = [...sittings].sort((a, b) => a.date.localeCompare(b.date));
 
   if (sorted.length === 0) {
@@ -67,7 +70,7 @@ export function SittingListView({
                 <TableCell className="whitespace-nowrap font-mono text-xs">{qualificationIdOf(s)}</TableCell>
                 <TableCell className="max-w-[220px] truncate">{displayOrDash(s.qualificationTitle)}</TableCell>
                 <TableCell className="whitespace-nowrap">{displayOrDash(s.qpName)}</TableCell>
-                <TableCell className="whitespace-nowrap">{calcRegistrationClosingDate(s.date, s.onDemand)}</TableCell>
+                <TableCell className="whitespace-nowrap"><ClosingDate sitting={s} /></TableCell>
                 <TableCell>
                   <EisaSittingStatusBadge status={s.status} />
                   {s.status === 'rejected' && s.rejectionReason && <p className="mt-1 text-xs text-red-600">{s.rejectionReason}</p>}
@@ -81,6 +84,11 @@ export function SittingListView({
                 </TableCell>
                 {canManage && (
                   <TableCell className="whitespace-nowrap space-x-1">
+                    {s.status === 'published' && onChangeClosing && (
+                      <Button size="sm" variant="outline" onClick={() => onChangeClosing(s)}>
+                        Change closing date
+                      </Button>
+                    )}
                     {s.status === 'published' && openRequestSittingIds?.has(s.id) && (
                       <span className="text-xs text-amber-700">Request open</span>
                     )}

@@ -123,7 +123,7 @@ async function shareDueLists(): Promise<void> {
   for (const sitting of await listSittings()) {
     if (sitting.status !== 'published') continue;
     if (loadAll().some((r) => r.sittingId === sitting.id)) continue;
-    if (!isListShareable(sitting.date, today, sitting.onDemand)) continue;
+    if (!isListShareable(sitting, today)) continue;
 
     const registrations = await listRegisteredRegistrationsForSitting(sitting.id);
     if (registrations.length === 0) continue;
@@ -159,7 +159,7 @@ async function shareDueLists(): Promise<void> {
       resultsSubmissionDate: null,
       workflow: { stageId: 'qp-draft' },
       returns: [],
-      sharedAt: sharedAtFor(shareDateFor(sitting.date, sitting.onDemand)),
+      sharedAt: sharedAtFor(shareDateFor(sitting)),
       draftSavedAt: null,
       submittedAt: null,
       acceptedAt: null,
@@ -191,7 +191,7 @@ export async function listUpcomingShares(): Promise<UpcomingShare[]> {
   const upcoming: UpcomingShare[] = [];
   for (const sitting of await listSittings()) {
     if (sitting.status !== 'published' || shared.has(sitting.id)) continue;
-    if (isListShareable(sitting.date, today, sitting.onDemand)) continue;
+    if (isListShareable(sitting, today)) continue;
     const registrations = await listRegisteredRegistrationsForSitting(sitting.id);
     if (registrations.length === 0) continue;
     upcoming.push({
@@ -201,7 +201,7 @@ export async function listUpcomingShares(): Promise<UpcomingShare[]> {
       qpId: sitting.qpId,
       qpName: sitting.qpName,
       learnerCount: registrations.reduce((total, r) => total + r.learners.length, 0),
-      shareDate: shareDateFor(sitting.date, sitting.onDemand),
+      shareDate: shareDateFor(sitting),
     });
   }
   return upcoming.sort((a, b) => a.shareDate.localeCompare(b.shareDate));

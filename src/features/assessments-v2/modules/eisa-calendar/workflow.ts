@@ -1,4 +1,4 @@
-import { roleDescriptor } from '../../config/roles';
+import { roleLabel } from '../../shared/administration/roleLabels';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
 import {
   CALENDAR_REVIEWER_ROLE,
@@ -102,7 +102,8 @@ export function changeRequestStageLabel(request: EisaSittingChangeRequest): stri
 // "With the CEO for decision — DD: Recommend, Director: Do not recommend". The QP side shows
 // the plain stage label only (changeRequestStageLabel).
 export function recommendationRoleLabel(role: Role): string {
-  return role === 'Deputy Director' ? 'DD' : (roleDescriptor(role)?.label ?? role);
+  // Batch S: the short "DD" is kept until the super admin renames the role.
+  return role === 'Deputy Director' && roleLabel(role) === 'Deputy Director' ? 'DD' : roleLabel(role);
 }
 
 export function recommendationChoiceLabel(rec: ChangeRequestRecommendation): string {

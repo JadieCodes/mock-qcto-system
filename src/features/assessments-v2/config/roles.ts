@@ -35,6 +35,9 @@ export const ROLE_DESCRIPTORS: RoleDescriptor[] = [
   // QCTO feedback 2.1 / 2.9: the Director Office also quality-assures QASAs and FISA Standards before the IAC.
   { role: 'Director & Team', portal: 'internal', label: 'Director Office', teams: ['rpl-toolkit', 'qsa-evaluation', 'fisa'] },
   { role: 'Qualifications Development', portal: 'internal', label: 'Qualifications Development', teams: ['fisa'] },
+  // Batch S (29.1, 29.2, 05.11) ASSUMPTION: QCTO still has to say who the super admin is. No process teams —
+  // the role only sees Administration and sets a registration closing date in the EISA Calendar.
+  { role: 'Super Admin', portal: 'internal', label: 'Super Admin', teams: [] },
 ];
 
 export function rolesForPortal(portal: 'external' | 'internal'): RoleDescriptor[] {

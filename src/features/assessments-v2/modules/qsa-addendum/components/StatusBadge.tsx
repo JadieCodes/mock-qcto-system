@@ -2,6 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { qsaOverallStatusLabel, qsaOverallStatusTone, type QsaStatusTone } from '../workflow';
 import type { QsaAddendumApplication } from '../types';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
+import { relabel } from '../../../shared/administration/roleLabels';
 
 const TONE_CLASSES: Record<QsaStatusTone, string> = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -12,5 +14,6 @@ const TONE_CLASSES: Record<QsaStatusTone, string> = {
 
 export function QsaStatusBadge({ application }: { application: QsaAddendumApplication }) {
   const tone = qsaOverallStatusTone(application);
-  return <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>{qsaOverallStatusLabel(application)}</Badge>;
+  return <span className="inline-flex flex-wrap items-center gap-1">   <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>{relabel(qsaOverallStatusLabel(application))}</Badge>   <OverdueMark source="qasa" id={application.id} />
+      <OverdueMark source="qasa-letter" id={application.id} /> </span>;
 }

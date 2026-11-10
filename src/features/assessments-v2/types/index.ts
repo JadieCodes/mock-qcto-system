@@ -29,7 +29,9 @@ export type InternalRole =
   | 'CEO'
   | 'Sub Domain Admin'
   | 'Director & Team'
-  | 'Qualifications Development';
+  | 'Qualifications Development'
+  // Batch S ASSUMPTION: QCTO still has to say who the super admin is. One mock person.
+  | 'Super Admin';
 
 export type Role = ExternalRole | InternalRole;
 

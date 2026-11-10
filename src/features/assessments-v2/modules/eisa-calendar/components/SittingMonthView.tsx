@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { calcRegistrationClosingDate } from '../registrationClosing';
+import { closingDateOf } from '../registrationClosing';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import { SittingDetailsDialog } from './SittingDetailsDialog';
 import { StatusLegend } from './StatusBadge';
@@ -79,7 +79,7 @@ export function SittingMonthView({ sittings, onSelectSitting }: { sittings: Eisa
                       key={s.id}
                       type="button"
                       onClick={() => selectSitting(s)}
-                      title={`${qualificationIdOf(s)} ${displayOrDash(s.qualificationTitle)} — QP: ${displayOrDash(s.qpName)} — Registration closes ${calcRegistrationClosingDate(s.date, s.onDemand)} — ${s.status}`}
+                      title={`${qualificationIdOf(s)} ${displayOrDash(s.qualificationTitle)} — QP: ${displayOrDash(s.qpName)} — Registration closes ${closingDateOf(s)}${s.registrationClosingOverride ? ' (changed by the super admin)' : ''} — ${s.status}`}
                       className={cn('block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-medium', STATUS_CLASSES[s.status])}
                     >
                       {s.qualificationTitle}

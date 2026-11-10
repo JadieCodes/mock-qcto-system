@@ -16,6 +16,7 @@ import { RaiseChangeRequestDialog, type ChangeRequestTarget } from '../component
 import { SittingListView } from '../components/SittingListView';
 import { SittingMonthView } from '../components/SittingMonthView';
 import { UpcomingDeadlinesBanner } from '../components/UpcomingDeadlinesBanner';
+import { SUPER_ADMIN_ROLE } from '../../../config/administration';
 import { CALENDAR_REVIEWER_ROLE, REQUEST_RAISER_ROLES } from '../config';
 import {
   useAddSitting,
@@ -29,6 +30,7 @@ import { changeRequestWorkflow, isChangeRequestOpen } from '../workflow';
 import type { EisaSitting } from '../types';
 import { AddEditSittingDialog } from './AddEditSittingDialog';
 import { BatchReviewPanel } from './BatchReviewPanel';
+import { ClosingDateDialog } from './ClosingDateDialog';
 
 export function InternalCalendarView() {
   const { data: sittings = [] } = useEisaSittings();
@@ -36,7 +38,7 @@ export function InternalCalendarView() {
   const { data: sittingIdsWithRegistrations = [] } = useSittingIdsWithRegistrations();
   const sittingIdsWithRegistrationsSet = new Set(sittingIdsWithRegistrations);
   const { role, person } = useV2Role();
-  const { notifications, dismiss } = useNotifications(role);
+  const { notifications, dismiss } = useNotifications(role, person.id);
   const actorId = person.id;
   const actorName = person.name;
 
@@ -47,6 +49,7 @@ export function InternalCalendarView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EisaSitting | null>(null);
   const [requestTarget, setRequestTarget] = useState<ChangeRequestTarget | null>(null);
+  const [closingTarget, setClosingTarget] = useState<EisaSitting | null>(null);
   const [openRequestId, setOpenRequestId] = useState<string | null>(null);
   const [requestScope, setRequestScope] = useState<ListScope>('mine');
 
@@ -54,6 +57,8 @@ export function InternalCalendarView() {
   // proposals; the DD can raise a postponement or cancellation request on a published sitting.
   const canManage = role === CALENDAR_REVIEWER_ROLE;
   const canRaiseRequest = REQUEST_RAISER_ROLES.includes(role);
+  // Batch S (05.11): only the super admin changes a registration closing date.
+  const canChangeClosing = role === SUPER_ADMIN_ROLE;
   const openRequestSittingIds = new Set(requests.filter(isChangeRequestOpen).map((r) => r.sittingId));
 
   // "My items": requests this person raised or acted on, plus open ones waiting at a stage
@@ -137,6 +142,7 @@ export function InternalCalendarView() {
                 : undefined
             }
             onDelete={canManage ? (s) => deleteSitting.mutate({ id: s.id, actorId, actorName }) : undefined}
+            onChangeClosing={canChangeClosing ? setClosingTarget : undefined}
             sittingIdsWithRegistrations={sittingIdsWithRegistrationsSet}
           />
         </TabsContent>
@@ -159,6 +165,7 @@ export function InternalCalendarView() {
         }}
       />
 
+      <ClosingDateDialog sitting={closingTarget} onClose={() => setClosingTarget(null)} />
       <RaiseChangeRequestDialog target={requestTarget} onClose={() => setRequestTarget(null)} />
       <ChangeRequestDetailDialog request={openRequest} onClose={() => setOpenRequestId(null)} />
     </div>

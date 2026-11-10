@@ -3,7 +3,7 @@
 // verification reports now follow QCTO's own layouts (eisaVerificationReport.ts,
 // fisaVerificationReport.ts); this file keeps the page shell, the approval chain read from the audit
 // trail and the annexure (learner results, evidence, chain, audit trail) both reports end with.
-import { roleDescriptor } from '../../config/roles';
+import { roleLabel as displayRoleLabel } from '../../shared/administration/roleLabels';
 import type { AuditEntry } from '../../shared/audit/types';
 import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
 import type { DocBlock } from './documentModel';
@@ -65,7 +65,7 @@ export function stageLabel(stageId: string): string {
 }
 
 export function roleLabel(role: AuditEntry['actorRole']): string {
-  return roleDescriptor(role)?.label ?? role;
+  return displayRoleLabel(role);
 }
 
 interface ChainEntry {

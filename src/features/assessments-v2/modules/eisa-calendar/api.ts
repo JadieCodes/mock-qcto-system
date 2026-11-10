@@ -8,7 +8,9 @@ import { approvedSittingsOf } from '../qsa-addendum/assessmentDetails';
 import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listRegisteredSittingIds } from '../eisa-registration/api';
 import type { Role } from '../../types';
 import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR, REQUEST_RECOMMENDER_ROLE } from './config';
+import { SUPER_ADMIN_ROLE } from '../../config/administration';
 import { checkSittingDate } from './dateChecks';
+import { calcRegistrationClosingDate, closingDateOf } from './registrationClosing';
 import { BATCH_WORKFLOW, SITTING_LIFECYCLE_WORKFLOW } from './workflow';
 import type {
   AddSittingInput,
@@ -563,4 +565,91 @@ export async function registeredLearnerNames(sittingId: string): Promise<string[
 export function registeredLearnersNote(names: string[]): string {
   if (names.length === 0) return ' No learners are registered for this sitting yet.';
   return ` Learners already registered (they stay registered for this sitting and are not moved): ${names.join('; ')}.`;
+}
+
+// Batch S (05.11): the super admin moves one published sitting's registration closing date, earlier
+// or later than the calculated one but never after the sitting itself. SDPs and the QP are told.
+interface ClosingOverrideParams {
+  sittingId: string;
+  reason: string;
+  actorId: string;
+  actorName: string;
+  actorRole: Role;
+}
+
+function assertSuperAdmin(role: Role): void {
+  if (role !== SUPER_ADMIN_ROLE) throw new Error('Only the super admin can change a registration closing date.');
+}
+
+function notifyClosingDateChange(sitting: EisaSitting, from: string, to: string, reason: string, reset: boolean): void {
+  const what = reset ? `is back to the calculated date, ${to} (it was ${from})` : `has been changed by the super admin from ${from} to ${to}`;
+  for (const recipientRole of ['SDP', 'QP']) {
+    addNotification({
+      recipientRole,
+      title: 'Registration closing date changed',
+      body: `EISA sitting for "${sitting.qualificationTitle}" on ${sitting.date}: registration closing ${what}. Reason: ${reason}`,
+    });
+  }
+}
+
+export async function setRegistrationClosingOverride(params: ClosingOverrideParams & { date: string }): Promise<EisaSitting> {
+  assertSuperAdmin(params.actorRole);
+  const sittings = loadSittings();
+  const sitting = sittings.find((s) => s.id === params.sittingId);
+  if (!sitting) throw new Error('Sitting not found.');
+  if (sitting.status !== 'published') throw new Error('Only a published sitting can have its closing date changed.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(params.date)) throw new Error('Choose a closing date.');
+  if (params.date > sitting.date) throw new Error(`The closing date cannot be after the sitting date (${sitting.date}).`);
+  const calculated = calcRegistrationClosingDate(sitting.date, sitting.onDemand);
+  if (params.date === calculated) throw new Error('That is the calculated date. Use "Reset to calculated" instead.');
+  if (!params.reason.trim()) throw new Error('A reason is required.');
+
+  const before = closingDateOf(sitting);
+  const updated: EisaSitting = {
+    ...sitting,
+    registrationClosingOverride: {
+      date: params.date,
+      reason: params.reason.trim(),
+      calculatedDate: calculated,
+      changedByName: params.actorName,
+      changedAt: new Date().toISOString(),
+    },
+  };
+  saveSittings(sittings.map((s) => (s.id === sitting.id ? updated : s)));
+  appendAuditEntry({
+    recordType: 'eisa-calendar-sitting',
+    recordId: sitting.id,
+    actorRole: params.actorRole,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    action: `Registration closing date changed from ${before} to ${params.date}`,
+    note: params.reason.trim(),
+  });
+  notifyClosingDateChange(sitting, before, params.date, params.reason.trim(), false);
+  return updated;
+}
+
+export async function resetRegistrationClosingOverride(params: ClosingOverrideParams): Promise<EisaSitting> {
+  assertSuperAdmin(params.actorRole);
+  const sittings = loadSittings();
+  const sitting = sittings.find((s) => s.id === params.sittingId);
+  if (!sitting) throw new Error('Sitting not found.');
+  if (!sitting.registrationClosingOverride) throw new Error('This sitting already uses the calculated closing date.');
+  if (!params.reason.trim()) throw new Error('A reason is required.');
+
+  const before = closingDateOf(sitting);
+  const updated: EisaSitting = { ...sitting, registrationClosingOverride: null };
+  saveSittings(sittings.map((s) => (s.id === sitting.id ? updated : s)));
+  const calculated = closingDateOf(updated);
+  appendAuditEntry({
+    recordType: 'eisa-calendar-sitting',
+    recordId: sitting.id,
+    actorRole: params.actorRole,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    action: `Registration closing date reset to calculated: ${before} to ${calculated}`,
+    note: params.reason.trim(),
+  });
+  notifyClosingDateChange(sitting, before, calculated, params.reason.trim(), true);
+  return updated;
 }

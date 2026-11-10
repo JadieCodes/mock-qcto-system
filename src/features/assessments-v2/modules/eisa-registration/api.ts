@@ -10,7 +10,7 @@ import type { Role } from '../../types';
 import { toIsoDate } from '../../shared/dates/workingDays';
 import { listBatches as listResultsBatches } from '../approval-of-results/api';
 import { listPublishedSittings, listSittings } from '../eisa-calendar/api';
-import { calcRegistrationClosingDate, isRegistrationClosed } from '../eisa-calendar/registrationClosing';
+import { closingDateOf, isClosedFor } from '../eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from './config';
 import { monitoringBlockReason, sdpMonitoringStatusOf, type SdpMonitoringStatus } from './monitoring';
@@ -106,8 +106,9 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
   if (!sitting) throw new Error('That EISA sitting is not published.');
 
   // QCTO feedback 3.5: no new registrations once the sitting's closing date has passed.
-  if (isRegistrationClosed(sitting.date, undefined, sitting.onDemand)) {
-    throw new Error(`Registration for this sitting closed on ${calcRegistrationClosingDate(sitting.date, sitting.onDemand)}.`);
+  // Batch S (05.11): uses the super admin's closing date when there is one.
+  if (isClosedFor(sitting)) {
+    throw new Error(`Registration for this sitting closed on ${closingDateOf(sitting)}.`);
   }
 
   const compliant = await getSdpComplianceStatus(input.sdpName);

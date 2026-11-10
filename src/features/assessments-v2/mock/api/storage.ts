@@ -63,7 +63,9 @@ export function writeStore<T>(key: string, value: T): void {
 // registration for two learners whose earlier results were approved as Not yet competent.
 // 'A21' = Batch T: EISA Confirmation reversed — the system shares the consolidated learner list, the QP
 // builds the confirmation (accredited centres, allocation, dates) and the ASD accepts it or returns it.
-export const SEED_VERSION = 'A21';
+// 'A22' = Batch S: one active and one past acting appointment, and one published sitting whose registration
+// closing date the super admin changed (with a reason). No role name is seeded as renamed.
+export const SEED_VERSION = 'A22';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

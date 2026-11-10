@@ -1,6 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { resultsStatusLabel, resultsStatusTone, type ResultsStatusSource, type ResultsStatusTone } from '../workflow';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
+import { relabel } from '../../../shared/administration/roleLabels';
 
 const TONE_CLASSES: Record<ResultsStatusTone, string> = {
   gray: 'bg-gray-50 text-gray-700 border-gray-200',
@@ -16,8 +18,10 @@ const TONE_CLASSES: Record<ResultsStatusTone, string> = {
 export function ResultsBatchStatusBadge({ batch }: { batch: ResultsStatusSource }) {
   const tone = resultsStatusTone(batch);
   return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>
-      {resultsStatusLabel(batch)}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>{relabel(resultsStatusLabel(batch))}</Badge>
+      <OverdueMark source="results" id={batch.id ?? ''} />
+      <OverdueMark source="fisa-results" id={batch.id ?? ''} />
+    </span>
   );
 }

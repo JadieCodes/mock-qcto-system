@@ -14,7 +14,9 @@ import {
   proposeBulkSittingBatches,
   proposeSittingBatch,
   registeredLearnerNames,
+  resetRegistrationClosingOverride,
   resubmitBatch,
+  setRegistrationClosingOverride,
 } from './api';
 import { changeRequestKindLabel, listChangeRequests, performChangeRequestAction, raiseChangeRequest } from './changeRequests';
 import type { AddSittingInput, EditSittingInput, ProposeSittingBatchInput, RaiseChangeRequestInput } from './types';
@@ -182,6 +184,31 @@ export function useChangeRequestAction() {
     onSuccess: () => {
       invalidate();
       toast.success('Request updated.');
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
+}
+
+// Batch S (05.11): the super admin's closing-date override on a published sitting.
+export function useSetClosingOverride() {
+  const invalidate = useInvalidateCalendar();
+  return useMutation({
+    mutationFn: setRegistrationClosingOverride,
+    onSuccess: () => {
+      invalidate();
+      toast.success('Registration closing date changed. SDPs and the QP have been told.');
+    },
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
+}
+
+export function useResetClosingOverride() {
+  const invalidate = useInvalidateCalendar();
+  return useMutation({
+    mutationFn: resetRegistrationClosingOverride,
+    onSuccess: () => {
+      invalidate();
+      toast.success('Registration closing date is back to the calculated date.');
     },
     onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
   });

@@ -1,9 +1,11 @@
 import { cn } from '@/lib/utils';
-import { roleDescriptor } from '../../config/roles';
 import { LABELS } from '../../config/labels';
 import { navForPortal } from '../../config/nav';
 import { isModuleVisible } from '../visibility/moduleAccess';
 import type { Portal } from '../../types';
+import { roleLabel, useRoleLabelsVersion } from '../administration/roleLabels';
+import { NotificationBanner } from '../notifications/NotificationBanner';
+import { useNotifications } from '../notifications/useNotifications';
 import { useV2Role } from './useV2Role';
 
 // Cosmetic only — matches the accent each portal already gets in AssessmentsV2Layout.tsx, so
@@ -21,7 +23,9 @@ const SDP_MODULE_DESCRIPTIONS: Record<string, string> = {
 
 export function Dashboard({ portal }: { portal: Portal }) {
   const { role, person } = useV2Role();
-  const descriptor = roleDescriptor(role);
+  useRoleLabelsVersion();
+  // Batch S: reassignments, acting appointments and overdue escalations land here.
+  const { notifications, dismiss } = useNotifications(role, person.id);
   // 09-visibility-matrix.md item 1: tiles are filtered by the active role's teams (internal)
   // or QP/SDP ownership rules (external) — the same rule the nav and route guard use.
   const modules = navForPortal(portal).filter((item) => item.path !== 'dashboard' && isModuleVisible(portal, item.path, role));
@@ -31,9 +35,10 @@ export function Dashboard({ portal }: { portal: Portal }) {
       <div className={cn('rounded-2xl border bg-white p-6 shadow-sm', PORTAL_ACCENT[portal])}>
         <p className="text-sm font-medium text-gray-500">Acting as</p>
         <p className="text-lg font-bold text-gray-900">
-          {person.name} <span className="font-medium text-gray-500">— {descriptor?.label ?? role}</span>
+          {person.name} <span className="font-medium text-gray-500">— {roleLabel(role)}</span>
         </p>
       </div>
+      <NotificationBanner notifications={notifications} onDismiss={dismiss} />
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-gray-50/80 border-b">
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Modules</p>

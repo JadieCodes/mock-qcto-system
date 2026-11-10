@@ -2,6 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { rplOverallStatusLabel, rplOverallStatusTone, type RplStatusTone } from '../workflow';
 import type { RplToolkitApplication } from '../types';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
+import { relabel } from '../../../shared/administration/roleLabels';
 
 const TONE_CLASSES: Record<RplStatusTone, string> = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -13,8 +15,10 @@ const TONE_CLASSES: Record<RplStatusTone, string> = {
 
 export function RplToolkitStatusBadge({ application }: { application: RplToolkitApplication }) {
   return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[rplOverallStatusTone(application)])}>
-      {rplOverallStatusLabel(application)}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[rplOverallStatusTone(application)])}>{relabel(rplOverallStatusLabel(application))}</Badge>
+      <OverdueMark source="rpl" id={application.id} />
+      <OverdueMark source="rpl-letter" id={application.id} />
+    </span>
   );
 }

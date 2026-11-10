@@ -1,5 +1,6 @@
 import { Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { relabel } from '../administration/roleLabels';
 import type { AppNotification } from './types';
 
 export function NotificationBanner({
@@ -23,8 +24,8 @@ export function NotificationBanner({
         >
           <Bell className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <div className="flex-1">
-            <p className="font-semibold">{n.title}</p>
-            <p className="text-blue-700">{n.body}</p>
+            <p className="font-semibold">{relabel(n.title)}</p>
+            <p className="text-blue-700">{relabel(n.body)}</p>
           </div>
           <button
             type="button"

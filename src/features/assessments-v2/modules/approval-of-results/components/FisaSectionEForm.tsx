@@ -1,4 +1,5 @@
 import { Input } from '@/components/ui/input';
+import { relabel } from '../../../shared/administration/roleLabels';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -123,7 +124,7 @@ export function FisaSectionE2({ batch, editable }: { batch: FisaResultsBatch; ed
       <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
         {[model.recommendedBy, model.approvedBy].map((s) => (
           <div key={s.role} className="rounded-xl border p-3">
-            <dt className="text-xs text-gray-500">{s.role}</dt>
+            <dt className="text-xs text-gray-500">{relabel(s.role)}</dt>
             <dd className="font-medium text-gray-800">{s.name || '—'}</dd>
             <dd className="text-xs text-gray-500">{s.date || 'Date: —'}</dd>
           </div>

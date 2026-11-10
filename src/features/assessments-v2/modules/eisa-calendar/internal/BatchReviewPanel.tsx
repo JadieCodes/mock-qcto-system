@@ -6,6 +6,7 @@ import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
 import { DatesWithClosing } from '../components/RegistrationCloses';
 import { EisaSittingStatusBadge } from '../components/StatusBadge';
 import { useBatchAction, useEisaSittingBatches } from '../hooks';
@@ -75,6 +76,7 @@ export function BatchReviewPanel() {
                     </TableCell>
                     <TableCell>
                       <EisaSittingStatusBadge status={status} />
+                      <OverdueMark source="cal-batch" id={batch.id} />
                       {batch.rejectionHistory.map((entry, i) => (
                         <p key={i} className="mt-1 text-xs text-red-600">
                           {entry.reason}

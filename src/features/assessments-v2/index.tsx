@@ -14,6 +14,9 @@ import { QasaStatusView } from './modules/qasa-status';
 import { FisaStatusView } from './modules/fisa-status';
 import { RplToolkitExternal, RplToolkitInternal } from './modules/rpl-toolkit';
 import { SiteVisitsExternal, SiteVisitsInternal, VisitOutcomesExternal } from './modules/site-visits';
+import { ActingAppointmentsPage } from './shared/administration/ActingAppointmentsPage';
+import { OverdueItemsPage } from './shared/administration/OverdueItemsPage';
+import { RoleNamesPage } from './shared/administration/RoleNamesPage';
 import { AssessmentsV2Layout } from './shared/ui/AssessmentsV2Layout';
 import { ComingSoon } from './shared/ui/ComingSoon';
 import { Dashboard } from './shared/ui/Dashboard';
@@ -41,6 +44,10 @@ function ModuleRoute({ item, portal }: { item: NavItem; portal: Portal }) {
   const { role } = useV2Role();
   if (!isModuleVisible(portal, item.path, role)) return <RoleBlocked />;
 
+  // Batch S: the Super Admin's Administration screens (blocked above for every other role).
+  if (item.path === 'administration/role-names') return <RoleNamesPage />;
+  if (item.path === 'administration/acting') return <ActingAppointmentsPage />;
+  if (item.path === 'administration/overdue') return <OverdueItemsPage />;
   if (item.path === 'qsa-addendum') return portal === 'internal' ? <QsaAddendumInternal /> : <QsaAddendumExternal />;
   if (item.path === 'instrument-validation') {
     return portal === 'internal' ? <InstrumentValidationInternal /> : <InstrumentValidationExternal />;

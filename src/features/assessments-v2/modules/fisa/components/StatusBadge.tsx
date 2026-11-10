@@ -9,6 +9,8 @@ import {
   type FisaValidationStatusTone,
 } from '../workflow';
 import type { FisaStandardRecord, FisaValidationRecord } from '../types';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
+import { relabel } from '../../../shared/administration/roleLabels';
 
 const TONE_CLASSES: Record<FisaStandardStatusTone | FisaValidationStatusTone, string> = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -20,16 +22,18 @@ const TONE_CLASSES: Record<FisaStandardStatusTone | FisaValidationStatusTone, st
 
 export function FisaStandardStatusBadge({ record }: { record: FisaStandardRecord }) {
   return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[fisaStandardStatusTone(record)])}>
-      {fisaStandardStatusLabel(record)}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[fisaStandardStatusTone(record)])}>{relabel(fisaStandardStatusLabel(record))}</Badge>
+      <OverdueMark source="fisa-standard" id={record.id} />
+    </span>
   );
 }
 
 export function FisaValidationStatusBadge({ record }: { record: FisaValidationRecord }) {
   return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[fisaValidationStatusTone(record)])}>
-      {fisaValidationStatusLabel(record)}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[fisaValidationStatusTone(record)])}>{relabel(fisaValidationStatusLabel(record))}</Badge>
+      <OverdueMark source="fisa-validation" id={record.id} />
+    </span>
   );
 }

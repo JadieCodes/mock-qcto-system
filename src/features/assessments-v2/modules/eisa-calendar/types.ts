@@ -27,8 +27,19 @@ export interface EisaSitting {
   // QCTO feedback 29.13: the approved QASA says EISA sittings are on demand, so the shorter notice
   // and the five-working-day registration closing apply. Optional so older sittings still load.
   onDemand?: boolean;
+  // Batch S (05.11): the super admin moved this sitting's registration closing date. When set it
+  // replaces the calculated date everywhere (registrationClosing.ts closingDateOf).
+  registrationClosingOverride?: RegistrationClosingOverride | null;
   createdBy: string;
   createdAt: string;
+}
+
+export interface RegistrationClosingOverride {
+  date: string; // ISO yyyy-mm-dd
+  reason: string;
+  calculatedDate: string;
+  changedByName: string;
+  changedAt: string;
 }
 
 export interface BatchRejectionHistoryEntry {

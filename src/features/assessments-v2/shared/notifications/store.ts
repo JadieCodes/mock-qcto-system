@@ -16,8 +16,11 @@ export function addNotification(notification: Omit<AppNotification, 'id' | 'read
   return full;
 }
 
-export function getNotifications(recipientRole: string): AppNotification[] {
-  return readStore<AppNotification[]>(KEY, []).filter((n) => n.recipientRole === recipientRole);
+export function getNotifications(recipientRole: string, personId?: string): AppNotification[] {
+  return readStore<AppNotification[]>(KEY, []).filter((n) => {
+    if (n.recipientPersonId) return n.recipientPersonId === personId;
+    return n.recipientRole === recipientRole;
+  });
 }
 
 export function markNotificationRead(id: string): void {

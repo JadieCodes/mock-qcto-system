@@ -1,5 +1,6 @@
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { relabel } from '../administration/roleLabels';
 import type { GeneratedLetter } from './types';
 
 function RefField({ label, value }: { label: string; value: string }) {
@@ -33,18 +34,18 @@ export function LetterView({ letter }: { letter: GeneratedLetter }) {
           <RefField label="Date" value={data.date} />
         </div>
 
-        <div className="px-6 py-5 text-sm leading-relaxed whitespace-pre-wrap">{body}</div>
+        <div className="px-6 py-5 text-sm leading-relaxed whitespace-pre-wrap">{relabel(body)}</div>
 
         <div className="px-6 py-5 border-t bg-gray-50/60">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Signed</p>
           {data.signatoryName ? (
             <p className="text-sm font-medium text-gray-900">
               {data.signatoryName}
-              {data.signatoryTitle ? `, ${data.signatoryTitle}` : ''}
+              {data.signatoryTitle ? `, ${relabel(data.signatoryTitle)}` : ''}
             </p>
           ) : (
             <p className="text-sm text-gray-400 italic">
-              Signature pending{data.signatoryTitle ? ` — ${data.signatoryTitle}` : ''}
+              Signature pending{data.signatoryTitle ? ` — ${relabel(data.signatoryTitle)}` : ''}
             </p>
           )}
         </div>

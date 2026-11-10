@@ -1,5 +1,6 @@
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { relabel } from '../../../shared/administration/roleLabels';
 import { downloadLetterModel, type LetterBlock, type LetterModel } from '../outcomeLetters';
 import { DraftBanner } from './DocumentView';
 
@@ -16,7 +17,7 @@ function Block({ block }: { block: LetterBlock }) {
         </p>
       );
     case 'p':
-      return <p className="text-sm text-gray-700">{block.text}</p>;
+      return <p className="text-sm text-gray-700">{relabel(block.text)}</p>;
     case 'heading':
       return <p className="text-sm font-semibold text-gray-900">{block.text}</p>;
     case 'table':
@@ -61,7 +62,7 @@ function Block({ block }: { block: LetterBlock }) {
       return (
         <ol className="list-decimal space-y-1 pl-5 text-sm text-gray-700">
           {block.items.map((item, i) => (
-            <li key={`${item}-${i}`}>{item}</li>
+            <li key={`${item}-${i}`}>{relabel(item)}</li>
           ))}
         </ol>
       );
@@ -71,7 +72,7 @@ function Block({ block }: { block: LetterBlock }) {
           <p>{block.closing}</p>
           <p>
             <span className="block font-semibold text-gray-900">{block.name}</span>
-            <span className="block">{block.title}</span>
+            <span className="block">{relabel(block.title)}</span>
             <span className="block">{block.date}</span>
           </p>
         </div>
@@ -83,7 +84,7 @@ function Block({ block }: { block: LetterBlock }) {
             {block.entries.map((e) => (
               <tr key={e.role} className="border-b">
                 <th scope="row" className="w-1/3 px-3 py-2 text-left font-medium text-gray-600">
-                  {e.role}
+                  {relabel(e.role)}
                 </th>
                 <td className="px-3 py-2 text-gray-800">{e.name}</td>
                 <td className="px-3 py-2 text-gray-600">Date: {e.date}</td>

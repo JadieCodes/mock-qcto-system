@@ -106,7 +106,7 @@ export const FISA_RESULTS_WORKFLOW: WorkflowDefinition = {
 export type ResultsStatusTone = 'gray' | 'amber' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'red';
 
 // What the status badge needs — shared by EISA and FISA batches.
-export type ResultsStatusSource = Pick<ResultsBatch, 'workflow' | 'cycleCount' | 'recommendation'>;
+export type ResultsStatusSource = Pick<ResultsBatch, 'workflow' | 'cycleCount' | 'recommendation'> & { id?: string };
 
 export function resultsStatusLabel(batch: ResultsStatusSource): string {
   switch (batch.workflow.stageId) {

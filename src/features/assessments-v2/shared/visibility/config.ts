@@ -56,5 +56,9 @@ export const INTERNAL_MODULE_ROLE_OVERRIDE: Partial<Record<string, Role[]>> = {
   // domain only. Every role's access to the FISA module itself is unchanged.
   'fisa-status': ['Qualifications Development'],
   // QCTO feedback 2.4: the DD, Director and CEO act on postponement and cancellation requests.
-  'eisa-calendar': ['ASD', 'Deputy Director', 'Director', 'CEO'],
+  'eisa-calendar': ['ASD', 'Deputy Director', 'Director', 'CEO', 'Super Admin'],
+  // Batch S: the Administration screens are the Super Admin's alone (config/administration.ts).
+  'administration/role-names': ['Super Admin'],
+  'administration/acting': ['Super Admin'],
+  'administration/overdue': ['Super Admin'],
 };

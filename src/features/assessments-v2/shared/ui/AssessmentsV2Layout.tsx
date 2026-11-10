@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Award,
@@ -13,12 +13,19 @@ import {
   ListChecks,
   LogOut,
   MapPin,
+  ShieldCheck,
+  UserCog,
+  Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { navForPortal } from '../../config/nav';
 import { resetDemoData } from '../../mock/api/storage';
+import { useQueryClient } from '@tanstack/react-query';
+import { escalateOverdueItems } from '../administration/overdue';
+import { OVERDUE_QUERY_KEY } from '../administration/useOverdue';
+import { useRoleLabelsVersion } from '../administration/roleLabels';
 import { isModuleVisible } from '../visibility/moduleAccess';
 import type { Portal } from '../../types';
 import { DemoBanner } from './DemoBanner';
@@ -41,6 +48,9 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   fisa: BookOpen,
   'fisa-status': ListChecks,
   'rpl-toolkit': Award,
+  'administration/role-names': ShieldCheck,
+  'administration/acting': UserCog,
+  'administration/overdue': Clock,
 };
 
 const NAV_LINK_CLASSES =
@@ -69,10 +79,55 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useV2Role();
+  useRoleLabelsVersion();
+  const queryClient = useQueryClient();
+  // Batch S (29.2): an internal screen opening is the moment overdue items are noticed and the next
+  // level is told (once per item). Children wait for the first pass so the dashboard banner is current.
+  const [escalated, setEscalated] = useState(portal !== 'internal');
+  useEffect(() => {
+    if (portal !== 'internal') return;
+    let cancelled = false;
+    escalateOverdueItems()
+      .catch(() => 0)
+      .then(() => {
+        if (cancelled) return;
+        setEscalated(true);
+        queryClient.invalidateQueries({ queryKey: OVERDUE_QUERY_KEY });
+      });
+    return () => {
+      cancelled = true;
+  };
+  }, [portal, location.pathname, queryClient]);
   const basePath = `/assessments-v2/${portal}`;
   const accent = PORTAL_ACCENT[portal];
   // 09-visibility-matrix.md Tables A/B, enforced in one place: shared/visibility/moduleAccess.ts.
   const navItems = navForPortal(portal).filter((item) => isModuleVisible(portal, item.path, role));
+
+  const mainItems = navItems.filter((item) => !item.path.startsWith('administration/'));
+  const adminItems = navItems.filter((item) => item.path.startsWith('administration/'));
+
+  const renderNavItem = (item: (typeof navItems)[number]) => {
+    const to = `${basePath}/${item.path}`;
+    const active = location.pathname === to;
+    const Icon = NAV_ICONS[item.path] ?? FileText;
+    return (
+      <Link
+        key={item.path}
+        to={to}
+        title={item.label}
+        aria-current={active ? 'page' : undefined}
+        className={cn(NAV_LINK_CLASSES, active ? accent.active : 'text-gray-600 hover:bg-gray-100')}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="hidden truncate md:inline">{item.label}</span>
+        {item.comingInPhase && (
+          <span className="ml-auto hidden text-[10px] font-semibold text-gray-400 md:inline">
+            Phase {item.comingInPhase}
+          </span>
+        )}
+      </Link>
+    );
+  };
 
   const handleResetDemoData = () => {
     resetDemoData();
@@ -118,28 +173,11 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
             </div>
           </div>
           <nav aria-label="Primary" className="flex-1 space-y-1.5 overflow-y-auto px-2 py-4 md:px-3">
-            {navItems.map((item) => {
-              const to = `${basePath}/${item.path}`;
-              const active = location.pathname === to;
-              const Icon = NAV_ICONS[item.path] ?? FileText;
-              return (
-                <Link
-                  key={item.path}
-                  to={to}
-                  title={item.label}
-                  aria-current={active ? 'page' : undefined}
-                  className={cn(NAV_LINK_CLASSES, active ? accent.active : 'text-gray-600 hover:bg-gray-100')}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="hidden truncate md:inline">{item.label}</span>
-                  {item.comingInPhase && (
-                    <span className="ml-auto hidden text-[10px] font-semibold text-gray-400 md:inline">
-                      Phase {item.comingInPhase}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+            {mainItems.map(renderNavItem)}
+            {adminItems.length > 0 && (
+              <p className="hidden px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400 md:block">Administration</p>
+            )}
+            {adminItems.map(renderNavItem)}
           </nav>
           <div className="border-t px-2 py-3 md:px-3">
             <button
@@ -153,7 +191,7 @@ export function AssessmentsV2Layout({ portal, children }: { portal: Portal; chil
             </button>
           </div>
         </aside>
-        <main className="flex-1 min-w-0 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 min-w-0 p-4 sm:p-6">{escalated ? children : null}</main>
       </div>
     </div>
   );

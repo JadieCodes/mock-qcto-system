@@ -1,4 +1,5 @@
 import { isWorkingDay, subtractWorkingDays, toIsoDate } from '../../shared/dates/workingDays';
+import type { EisaSitting } from './types';
 import { ON_DEMAND_REGISTRATION_CLOSE_WORKING_DAYS, REGISTRATION_CLOSING_MONTHS_BEFORE } from './config';
 
 // QCTO feedback 3.5: the registration closing date is always calculated from the sitting date,
@@ -24,4 +25,17 @@ export function calcRegistrationClosingDate(sittingDate: string, onDemand = fals
 // Registration is still open on the closing date itself; it is closed from the day after.
 export function isRegistrationClosed(sittingDate: string, todayIso: string = toIsoDate(new Date()), onDemand = false): boolean {
   return todayIso > calcRegistrationClosingDate(sittingDate, onDemand);
+}
+
+// Batch S (05.11): the date registration really closes for one sitting — the super admin's date
+// when there is one, otherwise the calculated rule above. Every "registration closed" check on a
+// sitting goes through these two, never through calcRegistrationClosingDate directly.
+export type ClosingSitting = Pick<EisaSitting, 'date' | 'onDemand' | 'registrationClosingOverride'>;
+
+export function closingDateOf(sitting: ClosingSitting): string {
+  return sitting.registrationClosingOverride?.date ?? calcRegistrationClosingDate(sitting.date, sitting.onDemand);
+}
+
+export function isClosedFor(sitting: ClosingSitting, todayIso: string = toIsoDate(new Date())): boolean {
+  return todayIso > closingDateOf(sitting);
 }

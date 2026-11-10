@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { calcRegistrationClosingDate } from '../registrationClosing';
+import { ClosingDate } from './ClosingDate';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import type { EisaSitting } from '../types';
 import { EisaSittingStatusBadge } from './StatusBadge';
@@ -25,7 +25,7 @@ export function SittingDetailsDialog({ sitting, onClose }: { sitting: EisaSittin
               <dt className="text-gray-500">QP</dt>
               <dd>{displayOrDash(sitting.qpName)}</dd>
               <dt className="text-gray-500">Registration closes</dt>
-              <dd>{calcRegistrationClosingDate(sitting.date, sitting.onDemand)}</dd>
+              <dd><ClosingDate sitting={sitting} /></dd>
               <dt className="text-gray-500">Status</dt>
               <dd>
                 <EisaSittingStatusBadge status={sitting.status} />

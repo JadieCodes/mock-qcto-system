@@ -86,13 +86,13 @@ export function seedEisaConfirmations(log: SeedLog, sittings: EisaSitting[], reg
     // shareDueLists(): once per sitting, only after registration closed, and only when every
     // registration for the sitting is Registered.
     if (records.some((r) => r.sittingId === sitting.id)) throw new Error(`Demo seed: ${sitting.date} already has an EISA Confirmation.`);
-    if (!isListShareable(sitting.date, todayIso(), sitting.onDemand)) throw new Error(`Demo seed: registration for ${sitting.qualificationTitle} ${sitting.date} has not closed.`);
+    if (!isListShareable(sitting, todayIso())) throw new Error(`Demo seed: registration for ${sitting.qualificationTitle} ${sitting.date} has not closed.`);
     const forSitting = registrations.filter((r) => r.sittingId === sitting.id);
     const registered = forSitting.filter((r) => r.workflow.stageId === 'registered');
     if (registered.length === 0 || registered.length !== forSitting.length) {
       throw new Error(`Demo seed: registration is not yet complete for ${sitting.qualificationTitle} ${sitting.date}.`);
     }
-    const sharedAt = sharedAtFor(shareDateFor(sitting.date, sitting.onDemand));
+    const sharedAt = sharedAtFor(shareDateFor(sitting));
     if (registered.some((r) => r.createdAt >= sharedAt)) throw new Error('Demo seed: list shared before its registrations.');
 
     const learners: ConsolidatedLearnerRow[] = registered.flatMap((r) =>

@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_ROLE } from '../../config/administration';
 import { roleDescriptor } from '../../config/roles';
 import type { Portal, Role } from '../../types';
 import {
@@ -13,6 +14,8 @@ import {
 // link would have given.
 export function isModuleVisible(portal: Portal, modulePath: string, role: Role): boolean {
   if (modulePath === 'dashboard') return true;
+  // Batch S: the Super Admin sees the Administration section and the EISA Calendar (closing dates), nothing else.
+  if (role === SUPER_ADMIN_ROLE) return portal === 'internal' && (modulePath === 'eisa-calendar' || modulePath.startsWith('administration/'));
   if (MODULES_VISIBLE_TO_ALL_ROLES.includes(modulePath)) return true;
 
   if (portal === 'external') {

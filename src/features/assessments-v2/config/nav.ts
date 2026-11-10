@@ -30,6 +30,13 @@ export const INTERNAL_NAV: NavItem[] = [
   { path: 'rpl-toolkit', label: 'RPL Toolkit' },
 ];
 
+// Batch S: the Super Admin's Administration section (shared/visibility/config.ts hides it from every other role).
+export const ADMIN_NAV: NavItem[] = [
+  { path: 'administration/role-names', label: 'Role names' },
+  { path: 'administration/acting', label: 'Acting appointments' },
+  { path: 'administration/overdue', label: 'Overdue items' },
+];
+
 export const EXTERNAL_NAV: NavItem[] = [
   { path: 'dashboard', label: 'Dashboard' },
   { path: 'qsa-addendum', label: 'QAS Addendum (QASA)' },
@@ -47,7 +54,7 @@ export const EXTERNAL_NAV: NavItem[] = [
 ];
 
 export function navForPortal(portal: Portal): NavItem[] {
-  const items = portal === 'internal' ? INTERNAL_NAV : EXTERNAL_NAV;
+  const items = portal === 'internal' ? [...INTERNAL_NAV, ...ADMIN_NAV] : EXTERNAL_NAV;
   // PM-09: hide the RPL Toolkit nav entry entirely (not just block the route) while the
   // feature flag is off — flip the flag once QCTO raises the change request.
   return RPL_TOOLKIT_ENABLED ? items : items.filter((item) => item.path !== 'rpl-toolkit');

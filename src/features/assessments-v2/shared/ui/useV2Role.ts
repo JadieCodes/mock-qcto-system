@@ -9,7 +9,12 @@ export interface RoleContextValue {
   portal: Portal;
   role: Role;
   setRole: (role: Role) => void;
+  // Batch S (29.2): while acting, `person` carries the acting role and the name
+  // "<name> (acting <role>)", so everything recorded from a screen reads correctly with no
+  // change to the module code. basePerson is the same human in their own role.
   person: Person;
+  basePerson: Person;
+  actingRole: Role | null;
   personId: string;
   setPersonId: (id: string) => void;
 }
@@ -29,6 +34,7 @@ export function useV2Role(): RoleContextValue {
 export function clearStoredPerson(portal: Portal): void {
   try {
     localStorage.removeItem(`assessmentsV2:activePersonId:v2:${portal}`);
+    localStorage.removeItem(`assessmentsV2:actingRole:v2:${portal}`);
   } catch {
     // storage unavailable — nothing persisted to clear
   }

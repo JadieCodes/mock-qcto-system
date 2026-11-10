@@ -16,6 +16,7 @@
 //   fisaValidation.ts        6 FISA Instrument Validations against the approved FISA Standard (phase C3;
 //                            the 6th, Approved with conditions, added with QCTO's report form in 3.10)
 //   rplToolkit.ts            11 RPL Toolkit submissions at every stage (phase C3)
+//   administration.ts        2 acting appointments (one active this week, one past) and 1 registration closing date override (Batch S)
 // FISA Standards keep their own fallback seed (mock/data/fisaStandardsSeed.ts).
 //
 // Order matters: the calendar reads the approved QASAs' sittings per year; Instrument
@@ -38,6 +39,8 @@ import { KEY as AUDIT_KEY } from '../../../shared/audit/auditLog';
 import { KEY as NOTIFICATIONS_KEY } from '../../../shared/notifications/store';
 import { KEY as MONITORING_ITEMS_KEY } from '../../api/siteVisitsStore';
 import { clearWorkflowStores, isSeedCurrent, markSeedCurrent, writeStore } from '../../api/storage';
+import { ACTING_KEY } from '../../../shared/administration/acting';
+import { applyClosingOverride, seedActingAppointments } from './administration';
 import { seedResultsBatches, seedResultsDrafts } from './approvalOfResults';
 import { seedEisaCalendar } from './eisaCalendar';
 import { seedEisaConfirmations } from './eisaConfirmation';
@@ -62,10 +65,14 @@ export function seedDemoData(): void {
   const fisaValidations = seedFisaValidations(log);
   const fisaResults = seedFisaResultsBatches(log);
   const rplToolkits = seedRplToolkits(log);
+  // Batch S: acting appointments and the one closing-date override (no role names are seeded).
+  const actingAppointments = seedActingAppointments(log);
+  const sittings = applyClosingOverride(log, calendar.sittings, confirmations, calendar.requests);
 
   writeStore(QASA_KEY, qasa);
   writeStore(BATCHES_KEY, calendar.batches);
-  writeStore(SITTINGS_KEY, calendar.sittings);
+  writeStore(SITTINGS_KEY, sittings);
+  writeStore(ACTING_KEY, actingAppointments);
   writeStore(CHANGE_REQUESTS_KEY, calendar.requests);
   writeStore(INSTRUMENT_VALIDATION_KEY, validations);
   writeStore(REGISTRATION_KEY, registrations);

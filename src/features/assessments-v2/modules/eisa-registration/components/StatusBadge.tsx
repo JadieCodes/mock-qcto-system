@@ -2,6 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { registrationStatusLabel, registrationStatusTone, type RegistrationStatusTone } from '../workflow';
 import type { EisaRegistrationRecord } from '../types';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
+import { relabel } from '../../../shared/administration/roleLabels';
 
 const TONE_CLASSES: Record<RegistrationStatusTone, string> = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -13,8 +15,9 @@ const TONE_CLASSES: Record<RegistrationStatusTone, string> = {
 export function RegistrationStatusBadge({ record }: { record: EisaRegistrationRecord }) {
   const tone = registrationStatusTone(record);
   return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>
-      {registrationStatusLabel(record)}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className={cn('whitespace-nowrap font-medium', TONE_CLASSES[tone])}>{relabel(registrationStatusLabel(record))}</Badge>
+      <OverdueMark source="registration" id={record.id} />
+    </span>
   );
 }

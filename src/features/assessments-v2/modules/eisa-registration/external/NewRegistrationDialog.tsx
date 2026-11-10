@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listSdps } from '../../../mock/api/qaDomain';
 import { useV2Role } from '../../../shared/ui/useV2Role';
-import { calcRegistrationClosingDate, isRegistrationClosed } from '../../eisa-calendar/registrationClosing';
+import { closingDateOf, isClosedFor } from '../../eisa-calendar/registrationClosing';
 import { useRegistrableSittings, useStartRegistration } from '../hooks';
 import type { RegistrationCategory } from '../types';
 
@@ -71,12 +71,13 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
               <SelectContent>
                 {/* QCTO feedback 3.5: closed sittings stay listed, disabled, with their closing date. */}
                 {sittings.map((s) => {
-                  const closing = calcRegistrationClosingDate(s.date, s.onDemand);
-                  const closed = isRegistrationClosed(s.date, undefined, s.onDemand);
+                  const closing = closingDateOf(s);
+                  const closed = isClosedFor(s);
                   return (
                     <SelectItem key={s.id} value={s.id} disabled={closed}>
                       {s.qualificationTitle} — {s.date} ·{' '}
                       {closed ? `Registration closed on ${closing}` : `Registration closes ${closing}`}
+                      {s.registrationClosingOverride && ' (changed by the super admin)'}
                     </SelectItem>
                   );
                 })}

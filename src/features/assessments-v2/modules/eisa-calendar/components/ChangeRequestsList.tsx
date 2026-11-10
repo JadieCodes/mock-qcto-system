@@ -2,6 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { OverdueMark } from '../../../shared/administration/OverdueMark';
+import { relabel } from '../../../shared/administration/roleLabels';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { changeRequestKindLabel } from '../changeRequests';
 import type { EisaSittingChangeRequest } from '../types';
@@ -17,9 +19,12 @@ export function ChangeRequestStatusBadge({ request }: { request: EisaSittingChan
         ? 'bg-red-50 text-red-700 border-red-200'
         : 'bg-amber-50 text-amber-700 border-amber-200';
   return (
-    <Badge variant="outline" className={cn('whitespace-normal font-medium', tone)}>
-      {portal === 'internal' ? changeRequestInternalStatusLabel(request) : changeRequestStageLabel(request)}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className={cn('whitespace-normal font-medium', tone)}>
+        {relabel(portal === 'internal' ? changeRequestInternalStatusLabel(request) : changeRequestStageLabel(request))}
+      </Badge>
+      <OverdueMark source="cal-request" id={request.id} />
+    </span>
   );
 }
 

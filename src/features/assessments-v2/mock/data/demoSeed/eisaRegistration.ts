@@ -49,7 +49,7 @@
 import type { RplArplMonitoringItem } from '../../api/siteVisitsStore';
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
 import { SDP_DIRECTORY } from '../sdpDirectory';
-import { calcRegistrationClosingDate, isRegistrationClosed } from '../../../modules/eisa-calendar/registrationClosing';
+import { closingDateOf, isClosedFor } from '../../../modules/eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from '../../../modules/eisa-registration/config';
 import { learnerCountText } from '../../../modules/eisa-registration/summary';
@@ -120,11 +120,11 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     const clock = createClock();
     const sdp = seedPerson(sdpId);
     const createdAt = clock.at(daysAgo, 9);
-    const closing = calcRegistrationClosingDate(sitting.date, sitting.onDemand);
+    const closing = closingDateOf(sitting);
 
     // startRegistration(): published sitting (checked by the caller's lookup), registration still
     // open on the day, compliant SDP, no other open registration for the same SDP and sitting.
-    if (isRegistrationClosed(sitting.date, dateOf(createdAt), sitting.onDemand)) {
+    if (isClosedFor(sitting, dateOf(createdAt))) {
       throw new Error(`Demo seed: registration for ${sitting.qualificationTitle} ${sitting.date} closed on ${closing}.`);
     }
     if (createdAt < sitting.createdAt) throw new Error(`Demo seed: registration started before the ${sitting.date} sitting existed.`);
