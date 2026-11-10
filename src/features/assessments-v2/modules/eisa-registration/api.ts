@@ -3,21 +3,27 @@ import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import { verifyLearnerIdentity } from '../../mock/integrations/homeAffairs';
 import { validateSorAgainstModules } from '../../mock/integrations/qualificationsModules';
-import { getSdpComplianceStatus, listEnrolledLearners } from '../../mock/api/qaDomain';
+import { getSdpComplianceStatus, getSdpLastMonitoringDate, listEnrolledLearners } from '../../mock/api/qaDomain';
 import { createMonitoringItem } from '../../mock/api/siteVisitsStore';
 import { readStore, writeStore } from '../../mock/api/storage';
 import type { Role } from '../../types';
-import { listPublishedSittings } from '../eisa-calendar/api';
+import { toIsoDate } from '../../shared/dates/workingDays';
+import { listBatches as listResultsBatches } from '../approval-of-results/api';
+import { listPublishedSittings, listSittings } from '../eisa-calendar/api';
 import { calcRegistrationClosingDate, isRegistrationClosed } from '../eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from './config';
+import { monitoringBlockReason, sdpMonitoringStatusOf, type SdpMonitoringStatus } from './monitoring';
+import { learnerCountText } from './summary';
 import { REGISTRATION_WORKFLOW } from './workflow';
 import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SorStatus, SupportingDocument } from './types';
 
 export const KEY = 'eisaRegistration:records';
 
+// Batch R1: a record stored before declined learners and returns existed reads as having none
+// (idempotent, nothing is written back).
 function loadAll(): EisaRegistrationRecord[] {
-  return readStore<EisaRegistrationRecord[]>(KEY, []);
+  return readStore<EisaRegistrationRecord[]>(KEY, []).map((r) => ({ ...r, declinedLearners: r.declinedLearners ?? [], returns: r.returns ?? [] }));
 }
 
 function saveAll(records: EisaRegistrationRecord[]): void {
@@ -54,16 +60,40 @@ export async function listEnrollableLearners(sdpName: string) {
   return listEnrolledLearners(sdpName);
 }
 
-// CR-040: a learner already sitting inside any other registration (at any stage) is blocked —
-// "active or concurrent" is read as "already in a registration process", not just "Registered".
-export async function findConcurrentRegistration(
-  learnerId: string,
-  excludeRegistrationId?: string,
-): Promise<EisaRegistrationRecord | null> {
-  const all = loadAll();
-  return (
-    all.find((r) => r.id !== excludeRegistrationId && r.learners.some((l) => l.learnerId === learnerId)) ?? null
+// Batch R1 (CR-040, corrected per QCTO 6 Aug 2:06:39): why a learner cannot join another
+// registration.
+export interface LearnerBlock {
+  registration: EisaRegistrationRecord;
+  reason: 'open' | 'results-pending';
+}
+
+// A learner is blocked while they are in another registration that is still open (not yet
+// registered), or registered for a sitting whose EISA results batch containing them is not yet
+// approved (competent or not). Once that batch is approved the block lifts. Not blocking: a
+// registration the learner was declined from (they are not in `learners`) and a cancelled sitting.
+// A batch that was declined (final) is not approved, so it keeps blocking (open question).
+export async function findConcurrentRegistration(learnerId: string, excludeRegistrationId?: string): Promise<LearnerBlock | null> {
+  const sittings = await listSittings();
+  const cancelledSittingIds = new Set(sittings.filter((s) => s.status === 'cancelled').map((s) => s.id));
+  const others = loadAll().filter(
+    (r) => r.id !== excludeRegistrationId && !cancelledSittingIds.has(r.sittingId) && r.learners.some((l) => l.learnerId === learnerId),
   );
+  const open = others.find((r) => r.workflow.stageId !== 'registered');
+  if (open) return { registration: open, reason: 'open' };
+
+  const batches = await listResultsBatches();
+  const pending = others.find(
+    (r) =>
+      !batches.some(
+        (b) => b.sittingId === r.sittingId && b.finalDecision?.outcome === 'approved' && b.learnerResults.some((res) => res.learnerId === learnerId),
+      ),
+  );
+  return pending ? { registration: pending, reason: 'results-pending' } : null;
+}
+
+// Batch R1 (29.18): the SDP's QA monitoring status, from the simulated QA domain.
+export async function getSdpMonitoringStatus(sdpName: string): Promise<SdpMonitoringStatus> {
+  return sdpMonitoringStatusOf(await getSdpLastMonitoringDate(sdpName), toIsoDate(new Date()));
 }
 
 // CR-041: the SDP compliance gate check blocks starting a registration at all.
@@ -106,6 +136,8 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
     category: input.category,
     workflow: { stageId: 'sdp-submission', submittedBy: input.createdBy, submittedById: input.createdById },
     learners: [],
+    declinedLearners: [],
+    returns: [],
     supportingDocuments: [],
     registrationNumber: null,
     nonTradesHandoff: null,
@@ -153,10 +185,18 @@ export async function addLearner(registrationId: string, learnerId: string): Pro
   const learner = enrolled.find((l) => l.id === learnerId);
   if (!learner) throw new Error('That learner is not enrolled with this SDP.');
 
+  if (record.declinedLearners.some((l) => l.learnerId === learnerId)) {
+    throw new Error(`${learner.fullName} was declined from this registration by the ASD and cannot be added to it again.`);
+  }
+
   const concurrent = await findConcurrentRegistration(learnerId, record.id);
   if (concurrent) {
+    const until =
+      concurrent.reason === 'open'
+        ? 'until that registration is complete and the results for that sitting are approved'
+        : 'until the results for that sitting are approved';
     throw new Error(
-      `${learner.fullName} already has an active EISA registration (${concurrent.qualificationTitle}, sitting ${concurrent.sittingDate}) — cannot register for another at the same time.`,
+      `${learner.fullName} already has an active EISA registration (${concurrent.registration.qualificationTitle}, sitting ${concurrent.registration.sittingDate}) — cannot register for another at the same time ${until}.`,
     );
   }
 
@@ -299,6 +339,58 @@ export async function flagLearnerSor(
   return updated;
 }
 
+export function declinedLearnerNotificationBody(learnerName: string, qualificationTitle: string, sittingDate: string, reason: string): string {
+  return `${learnerName} will not be registered for ${qualificationTitle} (EISA ${sittingDate}): ${reason}`;
+}
+
+// Batch R1 (QCTO 6 Aug 2:03:42 to 2:05:06): the ASD declines one learner (most often a
+// non-compliant SOR). The learner leaves the active list, stays visible as declined with the
+// reason, and the SDP is told. Does not move the registration's stage.
+export async function declineLearner(
+  registrationId: string,
+  learnerId: string,
+  reason: string,
+  actorId: string,
+  actorName: string,
+): Promise<EisaRegistrationRecord> {
+  const trimmed = reason.trim();
+  if (!trimmed) throw new Error('A reason is required to decline a learner.');
+  const all = loadAll();
+  const record = getOrThrow(all, registrationId);
+  if (record.workflow.stageId !== 'ad-review') {
+    throw new Error('Learners can only be declined while the registration is with the ASD.');
+  }
+  const learner = record.learners.find((l) => l.learnerId === learnerId);
+  if (!learner) throw new Error('Learner not found on this registration.');
+
+  const updated: EisaRegistrationRecord = {
+    ...record,
+    learners: record.learners.filter((l) => l.learnerId !== learnerId),
+    declinedLearners: [
+      ...record.declinedLearners,
+      { ...learner, declinedReason: trimmed, declinedAt: new Date().toISOString(), declinedBy: actorName, declinedById: actorId },
+    ],
+  };
+  saveAll(replace(all, updated));
+
+  appendAuditEntry({
+    recordType: 'eisa-registration',
+    recordId: record.id,
+    actorRole: REGISTRATION_PROCESSOR_ROLE,
+    actorId,
+    actorName,
+    action: `Declined ${learner.fullName} — will not be registered`,
+    note: trimmed,
+  });
+  addNotification({
+    recipientRole: 'SDP',
+    title: 'Learner will not be registered',
+    body: declinedLearnerNotificationBody(learner.fullName, record.qualificationTitle, record.sittingDate, trimmed),
+  });
+
+  return updated;
+}
+
 // Row 25 (E-10): the ASD's own two non-flag review outcomes — starting a
 // review, and accepting the SOR outright. Neither moves the registration's own stage, same
 // as the existing flag action.
@@ -364,10 +456,12 @@ export async function acceptLearnerSor(
 
 interface RegistrationActionParams {
   registrationId: string;
-  actionId: 'reg-submit' | 'reg-create-number';
+  actionId: 'reg-submit' | 'reg-create-number' | 'reg-return-to-sdp';
   actorRole: Role;
   actorId: string;
   actorName: string;
+  // Batch R1: the mandatory reason for 'reg-return-to-sdp'.
+  note?: string;
 }
 
 export async function performRegistrationAction(params: RegistrationActionParams): Promise<EisaRegistrationRecord> {
@@ -379,9 +473,24 @@ export async function performRegistrationAction(params: RegistrationActionParams
     if (record.learners.some((l) => !l.sor)) throw new Error('Every learner needs an uploaded SOR before submitting.');
   }
   if (params.actionId === 'reg-create-number') {
+    // Batch R1: declined learners are not in `learners`, so they no longer block; a registration
+    // with none left cannot get a number.
+    if (record.learners.length === 0) {
+      throw new Error(
+        record.declinedLearners.length > 0
+          ? 'Every learner on this registration has been declined, so no registration number can be created. Return it to the SDP to add learners.'
+          : 'Add at least one learner before creating the registration number.',
+      );
+    }
     if (record.learners.some((l) => l.sorStatus === 'flagged')) {
       throw new Error('Resolve every flagged SOR before creating the registration number.');
     }
+    // Batch R1 (29.18): expired or never-monitored SDP. The SDP can still build and submit.
+    const monitoring = await getSdpMonitoringStatus(record.sdpName);
+    if (monitoring.blocksRegistrationNumber) throw new Error(monitoringBlockReason(monitoring));
+  }
+  if (params.actionId === 'reg-return-to-sdp' && !params.note?.trim()) {
+    throw new Error('A reason is required to return the registration to the SDP.');
   }
 
   const nextWorkflow = performAction({
@@ -393,6 +502,7 @@ export async function performRegistrationAction(params: RegistrationActionParams
     actorName: params.actorName,
     recordType: 'eisa-registration',
     recordId: record.id,
+    note: params.note?.trim(),
   });
 
   let updated: EisaRegistrationRecord = { ...record, workflow: nextWorkflow };
@@ -400,8 +510,22 @@ export async function performRegistrationAction(params: RegistrationActionParams
   if (params.actionId === 'reg-submit') {
     addNotification({
       recipientRole: REGISTRATION_PROCESSOR_ROLE,
-      title: 'New EISA registration submitted',
-      body: `${record.sdpName} submitted a registration for "${record.qualificationTitle}" (${record.learners.length} learner(s)).`,
+      title: record.returns.length > 0 ? 'EISA registration resubmitted' : 'New EISA registration submitted',
+      body: `${record.sdpName} submitted a registration for "${record.qualificationTitle}" — ${learnerCountText(record)}.`,
+    });
+  }
+
+  if (params.actionId === 'reg-return-to-sdp') {
+    const cycle = record.returns.length + 1;
+    const reason = params.note?.trim() ?? '';
+    updated = {
+      ...updated,
+      returns: [...record.returns, { cycle, reason, returnedAt: new Date().toISOString(), returnedBy: params.actorName, returnedById: params.actorId }],
+    };
+    addNotification({
+      recipientRole: 'SDP',
+      title: 'Registration returned to you',
+      body: `Your registration for "${record.qualificationTitle}" (EISA ${record.sittingDate}) was returned by the ASD (cycle ${cycle}): ${reason}`,
     });
   }
 

@@ -19,8 +19,13 @@
 //  G5  Khanya Skills Academy      Electrical Trades, today+35 Non-Trades  Registered — files prepared for the QP, SDP list shared with QA
 //  G6  Thabo Technical College    Electrical Trades, today+35 Trades      Registered (same sitting as G5)
 //  G7  Lerato Training Institute  Plumbing, today + 150       Trades      Just submitted to the ASD, no SOR reviewed yet
+//  G8  Thabo Technical College    Electrical Trades, B1 2nd   Trades      With the ASD (Batch R1) — two learners registered again after their
+//                                                                         results (today - 170) were approved as Not yet competent; Thabo was never
+//                                                                         monitored (29.18), so the registration number is blocked
 //  —   Vuma Trade Centre          —                           —           None: Vuma is non-compliant (CR-041), so "Start Registration" is
 //                                                                         blocked for it; nothing is seeded around that rule.
+// SDP monitoring (mock/data/sdpMonitoring.ts, Batch R1): Khanya and Vuma valid, Lerato expired (G7 shows
+// the block), Thabo never monitored (G8). G3 (Khanya, valid) has the flagged SOR to try "Decline learner".
 //
 // Completed registrations behind the past sittings (all Trades, all Registered, each started
 // about 160 days before its sitting). They feed eisaConfirmation.ts and approvalOfResults.ts:
@@ -47,6 +52,7 @@ import { SDP_DIRECTORY } from '../sdpDirectory';
 import { calcRegistrationClosingDate, isRegistrationClosed } from '../../../modules/eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from '../../../modules/eisa-registration/config';
+import { learnerCountText } from '../../../modules/eisa-registration/summary';
 import { REGISTRATION_WORKFLOW } from '../../../modules/eisa-registration/workflow';
 import type { EisaRegistrationRecord, RegistrationCategory, SorStatus } from '../../../modules/eisa-registration/types';
 import { audit, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
@@ -79,7 +85,9 @@ function b1Sitting(sittings: EisaSitting[], index: number): EisaSitting {
 
 // One method per api function, chained in the order the steps happened.
 interface RegistrationSeedBuilder {
-  addLearners: (learnerIds: string[], atDaysAgo: number) => RegistrationSeedBuilder;
+  // `again`: the learners were on an earlier registration whose results batch is approved
+  // (Batch R1), so addLearner() lets them join this one.
+  addLearners: (learnerIds: string[], atDaysAgo: number, again?: boolean) => RegistrationSeedBuilder;
   rplArpl: (learnerIds: string[]) => RegistrationSeedBuilder;
   uploadSors: (learnerIds: string[] | 'all', atDaysAgo: number) => RegistrationSeedBuilder;
   supportingDocument: (fileName: string, fileSize: number, atDaysAgo: number) => RegistrationSeedBuilder;
@@ -139,6 +147,8 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
       category,
       workflow: { stageId: 'sdp-submission', submittedBy: sdp.name, submittedById: sdp.id },
       learners: [],
+      declinedLearners: [],
+      returns: [],
       supportingDocuments: [],
       registrationNumber: null,
       nonTradesHandoff: null,
@@ -168,13 +178,15 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     }
 
     const api: RegistrationSeedBuilder = {
-      // addLearner(): enrolled with this SDP, not already on any registration (CR-040).
-      addLearners(learnerIds: string[], atDaysAgo: number) {
+      // addLearner(): enrolled with this SDP, not blocked by another registration (CR-040).
+      addLearners(learnerIds: string[], atDaysAgo: number, again = false) {
         if (record.workflow.stageId !== 'sdp-submission') throw new Error('Demo seed: learners can only be added while the registration is being built.');
         for (const learnerId of learnerIds) {
           const learner = ENROLLED_LEARNERS.find((l) => l.id === learnerId);
           if (!learner || learner.sdpName !== sdp.name) throw new Error(`Demo seed: ${learnerId} is not enrolled with ${sdp.name}.`);
-          if (usedLearnerIds.has(learnerId)) throw new Error(`Demo seed: ${learner.fullName} is already on another EISA registration.`);
+          if (again ? !usedLearnerIds.has(learnerId) : usedLearnerIds.has(learnerId)) {
+            throw new Error(`Demo seed: ${learner.fullName} ${again ? 'has no earlier registration to register again from' : 'is already on another EISA registration'}.`);
+          }
           usedLearnerIds.add(learnerId);
           const addedAt = clock.at(atDaysAgo, 10);
           set({
@@ -223,7 +235,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
         notify(log, at, {
           recipientRole: REGISTRATION_PROCESSOR_ROLE,
           title: 'New EISA registration submitted',
-          body: `${record.sdpName} submitted a registration for "${record.qualificationTitle}" (${record.learners.length} learner(s)).`,
+          body: `${record.sdpName} submitted a registration for "${record.qualificationTitle}" — ${learnerCountText(record)}.`,
         });
         return api;
       },
@@ -415,6 +427,16 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
   start(KHANYA, b1Sitting(sittings, 1), 'trades', 4)
     .addLearners(['learner-013', 'learner-014'], 4)
     .uploadSors(['learner-013'], 2);
+
+  // G8 — Thabo, Electrical Trades (B1 2nd date): just submitted. Both learners sat the Electrical
+  // Trades sitting at today - 170, whose results batch is approved with each of them Not yet
+  // competent, so the duplicate-registration block no longer applies (Batch R1). One is RPL/ARPL.
+  // Thabo has never been monitored, so the ASD cannot create the number (29.18).
+  start(THABO, b1Sitting(sittings, 1), 'trades', 4)
+    .addLearners(['learner-005', 'learner-052'], 4, true)
+    .rplArpl(['learner-052'])
+    .uploadSors('all', 3)
+    .submit(2);
 
   // reg-create-number, in the order the numbers were created: EISA-REG-{year}-{nnnn}, then
   // the Non-Trades QP notification and the SDP notification that quote the number.

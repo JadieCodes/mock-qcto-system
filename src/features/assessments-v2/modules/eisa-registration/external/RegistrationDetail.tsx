@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { MonitoringStatusLine } from '../components/MonitoringStatusLine';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import { SorStatusBadge } from '../components/SorStatusBadge';
 import {
@@ -24,11 +25,13 @@ import {
   useEnrollableLearners,
   useRegistrationAction,
   useRegistrationRecord,
+  useSdpMonitoringStatus,
   useSetLearnerRplArpl,
   useUploadLearnerSor,
   useUploadSupportingDocument,
   useWithdrawRegistration,
 } from '../hooks';
+import { learnerCountText } from '../summary';
 import type { EisaRegistrationRecord } from '../types';
 
 function LearnerSorCell({
@@ -88,7 +91,7 @@ function AddLearnerPanel({ record }: { record: EisaRegistrationRecord }) {
   const addLearner = useAddLearner();
   const [error, setError] = useState<string | null>(null);
 
-  const addedIds = new Set(record.learners.map((l) => l.learnerId));
+  const addedIds = new Set([...record.learners, ...record.declinedLearners].map((l) => l.learnerId));
   const available = enrollable.filter((l) => !addedIds.has(l.id));
 
   return (
@@ -144,6 +147,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
   const uploadSupportingDocument = useUploadSupportingDocument();
   const registrationAction = useRegistrationAction();
   const withdrawRegistration = useWithdrawRegistration();
+  const { data: monitoring } = useSdpMonitoringStatus(record?.sdpName ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!record) {
@@ -160,6 +164,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
   const canAct = role === 'SDP';
   const canSubmit = canAct && isBuilding && record.learners.length > 0 && record.learners.every((l) => !!l.sor);
   const flaggedLearners = record.learners.filter((l) => l.sorStatus === 'flagged');
+  const latestReturn = record.returns[record.returns.length - 1];
 
   return (
     <Dialog open={!!recordId} onOpenChange={(open) => !open && onClose()}>
@@ -187,7 +192,28 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
               <p className="text-xs text-gray-400 uppercase">Category</p>
               <p className="font-medium capitalize">{record.category}</p>
             </div>
+            <div>
+              <p className="text-xs text-gray-400 uppercase">Learners</p>
+              <p className="font-medium">{learnerCountText(record)}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-gray-400 uppercase">SDP QA monitoring</p>
+              <MonitoringStatusLine sdpName={record.sdpName} />
+              {monitoring?.blocksRegistrationNumber && (
+                <p className="text-xs text-gray-500 mt-0.5">You can still build and submit; the ASD cannot create the registration number until the SDP's monitoring is valid.</p>
+              )}
+            </div>
           </div>
+
+          {isBuilding && latestReturn && (
+            <Alert className="border-amber-400 bg-amber-50">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                Returned to SDP (cycle {latestReturn.cycle}) by {latestReturn.returnedBy} on {latestReturn.returnedAt.slice(0, 10)}: {latestReturn.reason} You can
+                change learners or SORs and submit again.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {flaggedLearners.length > 0 && (
             <Alert className="border-amber-400 bg-amber-50">
@@ -244,6 +270,24 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
               </div>
             )}
           </div>
+
+          {record.declinedLearners.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Declined learners</p>
+              <div className="rounded-2xl border border-red-200 bg-red-50 divide-y divide-red-100">
+                {record.declinedLearners.map((l) => (
+                  <div key={l.learnerId} className="px-4 py-2 text-sm text-red-900">
+                    <p className="font-medium">
+                      {l.fullName} <span className="text-xs font-normal text-red-700">will not be registered</span>
+                    </p>
+                    <p className="text-xs">
+                      {l.declinedReason} — {l.declinedBy}, {l.declinedAt.slice(0, 10)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {canAct && isBuilding && (
             <div className="space-y-2">

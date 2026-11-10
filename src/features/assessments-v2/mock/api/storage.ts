@@ -58,7 +58,10 @@ export function writeStore<T>(key: string, value: T): void {
 // and the data the tracking registers need (source info on EISA batches, first submission on FISA).
 // 'A19' = Batch Q1: "Do not recommend" on EISA postponement/cancellation requests, and the on-demand
 // EISA sitting rules (one month's notice, registration closes five working days before).
-export const SEED_VERSION = 'A19';
+// 'A20' = Batch R1: learner EISA registration — declined learners, "Return to SDP", SDP QA monitoring
+// dates, the duplicate-registration block lifting once a results batch is approved, and a Thabo
+// registration for two learners whose earlier results were approved as Not yet competent.
+export const SEED_VERSION = 'A20';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

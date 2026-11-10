@@ -15,6 +15,8 @@ export const REGISTRATION_WORKFLOW: WorkflowDefinition = {
   actions: [
     { id: 'reg-submit', label: 'Submit to ASD', fromStage: 'sdp-submission', toStage: 'ad-review', kind: 'advance' },
     { id: 'reg-create-number', label: 'Create registration number', fromStage: 'ad-review', toStage: 'registered', kind: 'complete' },
+    // Batch R1 (QCTO process map "EISA Registration": validation "No" goes back to the SDP).
+    { id: 'reg-return-to-sdp', label: 'Return to SDP', fromStage: 'ad-review', toStage: 'sdp-submission', kind: 'send-back', requiresNote: true },
   ],
 };
 
@@ -25,6 +27,7 @@ export function registrationStatusLabel(record: EisaRegistrationRecord): string 
   if (record.workflow.stageId === 'ad-review') {
     return record.learners.some((l) => l.sorStatus === 'flagged') ? 'With ASD — SOR flagged' : 'With ASD';
   }
+  if (record.returns.length > 0) return `Returned to SDP (cycle ${record.returns.length})`;
   return 'Building registration';
 }
 

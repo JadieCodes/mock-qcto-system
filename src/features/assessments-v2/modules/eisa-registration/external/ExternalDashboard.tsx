@@ -6,6 +6,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import { useRegistrationRecords } from '../hooks';
+import { learnerCountText } from '../summary';
 import { NewRegistrationDialog } from './NewRegistrationDialog';
 import { RegistrationDetail } from './RegistrationDetail';
 
@@ -61,7 +62,7 @@ export function ExternalDashboard() {
                     <TableCell>{record.sdpName}</TableCell>
                     <TableCell className="whitespace-nowrap">{record.sittingDate}</TableCell>
                     <TableCell className="capitalize">{record.category}</TableCell>
-                    <TableCell>{record.learners.length}</TableCell>
+                    <TableCell className="whitespace-nowrap">{learnerCountText(record)}</TableCell>
                     <TableCell>
                       <RegistrationStatusBadge record={record} />
                     </TableCell>

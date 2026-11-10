@@ -4,7 +4,7 @@
 //   eisaCalendar.ts          3 QP batches, 25 sittings — 7 from the batches, 18 added by the ASD (phases C1, C2, Batch L2);
 //                            3 postponement/cancellation requests (QCTO feedback 2.4)
 //   instrumentValidation.ts  4 EISA Instrument Validations (phase C1)
-//   eisaRegistration.ts      21 Learner EISA Registrations — 7 open-demo, 13 behind past sittings (phase C2)
+//   eisaRegistration.ts      23 Learner EISA Registrations — 8 open-demo, 15 behind past sittings (phase C2, Batch R1)
 //   eisaConfirmation.ts      13 EISA Confirmations — 1 ready to confirm, 12 confirmed (phases C2, L2)
 //   approvalOfResults.ts     10 results batches at every stage, 2 sittings awaiting submission (phase C2);
 //                            marks per component from the approved QASAs, some learners absent (Batch L1);

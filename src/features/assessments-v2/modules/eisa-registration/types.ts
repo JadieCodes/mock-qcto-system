@@ -32,6 +32,24 @@ export interface RegistrationLearner {
   addedAt: string;
 }
 
+// Batch R1 (QCTO 6 Aug 2:03:42): a learner the ASD will not register. The learner leaves the
+// registration's active list (`learners`) and is kept here with the reason.
+export interface DeclinedLearner extends RegistrationLearner {
+  declinedReason: string;
+  declinedAt: string;
+  declinedBy: string;
+  declinedById: string;
+}
+
+// Batch R1: one "Return to SDP" by the ASD. `cycle` counts the returns (1 = the first).
+export interface ReturnToSdpEntry {
+  cycle: number;
+  reason: string;
+  returnedAt: string;
+  returnedBy: string;
+  returnedById: string;
+}
+
 // PM-08: the Non-Trades path additionally prepares files for the QP and shares the SDP list
 // with Quality Assurance once the registration number is created.
 export interface NonTradesHandoff {
@@ -57,6 +75,11 @@ export interface EisaRegistrationRecord {
   workflow: WorkflowRecordState;
 
   learners: RegistrationLearner[];
+  // Batch R1: learners the ASD declined; never counted and never blocking.
+  declinedLearners: DeclinedLearner[];
+  // Batch R1: every "Return to SDP", oldest first. The last one is shown to the SDP while the
+  // registration is back in their building stage.
+  returns: ReturnToSdpEntry[];
   supportingDocuments: SupportingDocument[];
   registrationNumber: string | null;
   nonTradesHandoff: NonTradesHandoff | null;

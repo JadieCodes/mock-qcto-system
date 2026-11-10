@@ -9,6 +9,7 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import { useRegistrationRecords } from '../hooks';
+import { learnerCountText } from '../summary';
 import { REGISTRATION_WORKFLOW } from '../workflow';
 import { RegistrationWorkspace } from './RegistrationWorkspace';
 import type { EisaRegistrationRecord } from '../types';
@@ -53,7 +54,7 @@ function RecordsTable({ records, onSelect }: { records: EisaRegistrationRecord[]
               <TableCell className="font-semibold whitespace-nowrap">{record.sdpName}</TableCell>
               <TableCell className="max-w-[200px] truncate">{record.qualificationTitle}</TableCell>
               <TableCell className="whitespace-nowrap">{record.sittingDate}</TableCell>
-              <TableCell>{record.learners.length}</TableCell>
+              <TableCell className="whitespace-nowrap">{learnerCountText(record)}</TableCell>
               <TableCell>
                 <RegistrationStatusBadge record={record} />
               </TableCell>

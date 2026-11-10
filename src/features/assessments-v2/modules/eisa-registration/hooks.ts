@@ -3,8 +3,10 @@ import { toast } from 'sonner';
 import {
   acceptLearnerSor,
   addLearner,
+  declineLearner,
   flagLearnerSor,
   getRecord,
+  getSdpMonitoringStatus,
   listEnrollableLearners,
   listRecords,
   listRegistrableSittings,
@@ -95,6 +97,22 @@ export function useFlagLearnerSor() {
     (args: { registrationId: string; learnerId: string; reason: string; actorId: string; actorName: string }) =>
       flagLearnerSor(args.registrationId, args.learnerId, args.reason, args.actorId, args.actorName),
   );
+}
+
+export function useDeclineLearner() {
+  return useRegistrationMutation(
+    (args: { registrationId: string; learnerId: string; reason: string; actorId: string; actorName: string }) =>
+      declineLearner(args.registrationId, args.learnerId, args.reason, args.actorId, args.actorName),
+  );
+}
+
+// Batch R1 (29.18): the SDP's QA monitoring status, shown on the ASD workspace and SDP detail.
+export function useSdpMonitoringStatus(sdpName: string | null) {
+  return useQuery({
+    queryKey: ['eisa-registration', 'sdp-monitoring', sdpName ?? 'none'] as const,
+    queryFn: () => getSdpMonitoringStatus(sdpName as string),
+    enabled: !!sdpName,
+  });
 }
 
 export function useMarkLearnerSorUnderReview() {
