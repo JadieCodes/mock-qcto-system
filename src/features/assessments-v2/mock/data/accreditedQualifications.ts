@@ -28,6 +28,14 @@ export const ACCREDITED_QUALIFICATIONS: AccreditedQualificationEntry[] = [
     qpId: 'qp-precious-mahlangu',
     accreditedSdpIds: ['sdp-vuma-trade-centre', 'sdp-khanya-skills-academy'],
   },
+  // Batch Q1 (QCTO 29.13): the Gas Practitioner QASA is on demand, so it needs an accredited SDP
+  // for the on-demand calendar rules to be demoable. The id is the SAQA id in the QASA seed.
+  {
+    qualificationId: '101941',
+    qualificationName: 'Gas Practitioner',
+    qpId: 'qp-johan-van-der-merwe',
+    accreditedSdpIds: ['sdp-lerato-training-institute'],
+  },
   // No accredited SDPs yet, so no EISA date can be proposed for it.
   {
     qualificationId: '91890',

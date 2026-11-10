@@ -67,7 +67,7 @@ export function SittingListView({
                 <TableCell className="whitespace-nowrap font-mono text-xs">{qualificationIdOf(s)}</TableCell>
                 <TableCell className="max-w-[220px] truncate">{displayOrDash(s.qualificationTitle)}</TableCell>
                 <TableCell className="whitespace-nowrap">{displayOrDash(s.qpName)}</TableCell>
-                <TableCell className="whitespace-nowrap">{calcRegistrationClosingDate(s.date)}</TableCell>
+                <TableCell className="whitespace-nowrap">{calcRegistrationClosingDate(s.date, s.onDemand)}</TableCell>
                 <TableCell>
                   <EisaSittingStatusBadge status={s.status} />
                   {s.status === 'rejected' && s.rejectionReason && <p className="mt-1 text-xs text-red-600">{s.rejectionReason}</p>}

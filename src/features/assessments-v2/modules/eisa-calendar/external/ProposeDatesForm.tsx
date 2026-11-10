@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LABELS } from '../../../config/labels';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { RegistrationCloses } from '../components/RegistrationCloses';
@@ -31,6 +32,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
   const eligible = filterExternalRecords(allEligible, person, { qpIdOf: (q) => q.qpId });
   const selected = eligible.find((q) => q.qualificationId === qualificationId);
   const requiredCount = selected?.sittingsPerYear ?? null;
+  const onDemand = selected?.onDemand === true;
   const minimum = selected ? minimumDateCount(selected.sittingsPerYear, selected.onDemand) : 1;
 
   const onSelectQualification = (id: string) => {
@@ -44,7 +46,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
   };
 
   const filledDates = dates.filter((d) => d.trim() !== '');
-  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d) }));
+  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d, undefined, onDemand) }));
   const yearMismatch = filledDates.filter((d) => Number(d.slice(0, 4)) !== year);
   const duplicates = filledDates.length !== new Set(filledDates).size;
   const countMatches = requiredCount != null && filledDates.length >= minimum;
@@ -120,6 +122,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
               QP: <span className="font-medium">{selected.qpName}</span> · Required sittings per year:{' '}
               <span className="font-medium">{requiredCountText(selected.sittingsPerYear, selected.onDemand)}</span>
               {selected.sittingsPerYearIsDefault && <span> (default)</span>}
+              {onDemand && <span className="mt-1 block text-gray-700">{LABELS.eisaOnDemandHint}</span>}
             </div>
           )}
 
@@ -149,7 +152,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
             </div>
             <div className="space-y-2">
               {dates.map((d, idx) => {
-                const check = d.trim() ? checkSittingDate(d) : null;
+                const check = d.trim() ? checkSittingDate(d, undefined, onDemand) : null;
                 return (
                   <div key={idx} className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -171,7 +174,7 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
                         </Button>
                       )}
                     </div>
-                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" />}
+                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" onDemand={onDemand} />}
                     {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
                     {check && check.ok && Number(d.slice(0, 4)) !== year && (
                       <p className="text-xs text-red-600">This date is not in {year}.</p>

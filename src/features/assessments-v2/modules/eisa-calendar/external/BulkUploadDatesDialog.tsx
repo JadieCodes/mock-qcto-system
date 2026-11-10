@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { LABELS } from '../../../config/labels';
 import { downloadCsvFile, EXCEL_UPLOAD_TIP } from '../../../shared/csv/csv';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
@@ -146,6 +147,7 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
                         <TableCell className="whitespace-nowrap">{r.registrationCloses ?? '—'}</TableCell>
                         <TableCell className="whitespace-nowrap">{person.name}</TableCell>
                         <TableCell className="min-w-[240px]">
+                          {r.qualification?.onDemand && <p className="mb-1 text-xs text-gray-500">{LABELS.eisaOnDemandHint}</p>}
                           {r.errors.length === 0 ? (
                             <span className="text-xs text-emerald-700">OK</span>
                           ) : (

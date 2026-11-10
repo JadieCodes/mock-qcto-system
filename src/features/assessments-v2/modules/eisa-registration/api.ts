@@ -76,8 +76,8 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
   if (!sitting) throw new Error('That EISA sitting is not published.');
 
   // QCTO feedback 3.5: no new registrations once the sitting's closing date has passed.
-  if (isRegistrationClosed(sitting.date)) {
-    throw new Error(`Registration for this sitting closed on ${calcRegistrationClosingDate(sitting.date)}.`);
+  if (isRegistrationClosed(sitting.date, undefined, sitting.onDemand)) {
+    throw new Error(`Registration for this sitting closed on ${calcRegistrationClosingDate(sitting.date, sitting.onDemand)}.`);
   }
 
   const compliant = await getSdpComplianceStatus(input.sdpName);

@@ -24,6 +24,9 @@ export interface EisaSitting {
   // and the audit trail. No negotiation; the QP/SDP cannot counter it.
   proposedNewDate: string | null;
   cancellationReason: string | null;
+  // QCTO feedback 29.13: the approved QASA says EISA sittings are on demand, so the shorter notice
+  // and the five-working-day registration closing apply. Optional so older sittings still load.
+  onDemand?: boolean;
   createdBy: string;
   createdAt: string;
 }
@@ -120,6 +123,8 @@ export interface ChangeRequestRecommendation {
   role: Role;
   personId: string;
   personName: string;
+  // QCTO 05.10: "Recommend" or "Do not recommend". Optional so older records read as "Recommend".
+  recommends?: boolean;
   comment: string | null;
   at: string;
 }
@@ -148,6 +153,8 @@ export interface EisaSittingChangeRequest {
   decisionComment: string | null;
   decidedBy: string | null;
   decidedAt: string | null;
+  // QCTO 05.10: the roles whose "Do not recommend" the decider approved against.
+  decidedAgainst?: Role[];
 }
 
 export interface RaiseChangeRequestInput {

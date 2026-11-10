@@ -79,7 +79,7 @@ export function SittingMonthView({ sittings, onSelectSitting }: { sittings: Eisa
                       key={s.id}
                       type="button"
                       onClick={() => selectSitting(s)}
-                      title={`${qualificationIdOf(s)} ${displayOrDash(s.qualificationTitle)} — QP: ${displayOrDash(s.qpName)} — Registration closes ${calcRegistrationClosingDate(s.date)} — ${s.status}`}
+                      title={`${qualificationIdOf(s)} ${displayOrDash(s.qualificationTitle)} — QP: ${displayOrDash(s.qpName)} — Registration closes ${calcRegistrationClosingDate(s.date, s.onDemand)} — ${s.status}`}
                       className={cn('block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-medium', STATUS_CLASSES[s.status])}
                     >
                       {s.qualificationTitle}

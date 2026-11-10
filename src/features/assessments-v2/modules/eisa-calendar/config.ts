@@ -25,3 +25,13 @@ export const DEFAULT_SITTINGS_PER_YEAR = 2;
 // QCTO feedback 3.5: assumption pending QCTO — registration closes this many calendar months
 // before the sitting (moved back to the previous working day if that is a weekend or holiday).
 export const REGISTRATION_CLOSING_MONTHS_BEFORE = 3;
+
+// QCTO feedback 29.13 (29 Oct 2026): a qualification whose approved QASA says EISA sittings are
+// "on demand" (trade tests) needs less notice. QCTO suggested trying one calendar month as a
+// pilot and still has to confirm it. Replaces the normal lead-time rule for these sittings only.
+export const ON_DEMAND_MIN_NOTICE_MONTHS = 1;
+
+// ASSUMPTION for QCTO to confirm: registration for an on-demand sitting closes this many working
+// days before the EISA date (weekends and SA public holidays skipped, open until midnight of
+// that day), not REGISTRATION_CLOSING_MONTHS_BEFORE months.
+export const ON_DEMAND_REGISTRATION_CLOSE_WORKING_DAYS = 5;

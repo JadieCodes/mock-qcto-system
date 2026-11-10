@@ -106,10 +106,10 @@ export function parseBulkFile(
     } else if (!date) {
       errors.push(`"${dateText}" is not a valid date. Use the format YYYY-MM-DD.`);
     } else {
-      const check = checkSittingDate(date, todayIso);
+      const check = checkSittingDate(date, todayIso, qualification?.onDemand === true);
       errors.push(...check.reasons);
-      if (isRegistrationClosed(date, todayIso)) {
-        errors.push(`The registration closing date (${calcRegistrationClosingDate(date)}) has already passed.`);
+      if (isRegistrationClosed(date, todayIso, qualification?.onDemand === true)) {
+        errors.push(`The registration closing date (${calcRegistrationClosingDate(date, qualification?.onDemand === true)}) has already passed.`);
       }
       if (
         qualification &&
@@ -129,7 +129,7 @@ export function parseBulkFile(
       credits: cell(cells, 'credits'),
       dateText,
       date,
-      registrationCloses: date ? calcRegistrationClosingDate(date) : null,
+      registrationCloses: date ? calcRegistrationClosingDate(date, qualification?.onDemand === true) : null,
       qualification,
       errors,
     };

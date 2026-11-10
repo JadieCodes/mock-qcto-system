@@ -104,7 +104,7 @@ export function QpCalendarView() {
                         <TableCell className="max-w-[220px] truncate font-medium">{batch.qualificationTitle}</TableCell>
                         <TableCell>{batch.year}</TableCell>
                         <TableCell>
-                          <DatesWithClosing dates={batch.dates} />
+                          <DatesWithClosing dates={batch.dates} onDemand={batch.onDemand} />
                         </TableCell>
                         <TableCell>
                           <EisaSittingStatusBadge status={batchDisplayStatus(batch)} />

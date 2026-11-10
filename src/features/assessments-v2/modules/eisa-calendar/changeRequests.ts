@@ -5,14 +5,16 @@ import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
 import { applyApprovedSittingChange, listSittings } from './api';
-import { REQUEST_RAISER_ROLES, REQUEST_RECOMMENDER_ROLE } from './config';
+import { CANCELLATION_SECOND_RECOMMENDER_ROLE, REQUEST_RAISER_ROLES, REQUEST_RECOMMENDER_ROLE } from './config';
 import { checkSittingDate } from './dateChecks';
 import type { ChangeRequestKind, EisaSittingChangeRequest, RaiseChangeRequestInput } from './types';
-import { changeRequestWorkflow, isChangeRequestOpen, type ChangeRequestActionId } from './workflow';
+import { changeRequestWorkflow, isChangeRequestOpen, recommendationRoleLabel, type ChangeRequestActionId } from './workflow';
 
 // QCTO feedback 2.4 (29 Oct 2026): a published sitting is postponed or cancelled only through a
 // request. Postponement: DD recommends -> Director decides. Cancellation: DD recommends ->
 // Director recommends -> CEO decides. The QP is told at every step.
+// QCTO 05.10: each recommender chooses Recommend or Do not recommend (comment required); the
+// request moves on either way, and the decider sees every recommendation.
 export const CHANGE_REQUESTS_KEY = 'eisaCalendar:changeRequests';
 export const CHANGE_REQUEST_RECORD_TYPE = 'eisa-calendar-request';
 
@@ -54,7 +56,7 @@ export async function raiseChangeRequest(input: RaiseChangeRequestInput): Promis
     proposedNewDate = input.proposedNewDate?.trim() || null;
     if (!proposedNewDate) throw new Error('Enter the proposed new date.');
     if (proposedNewDate <= sitting.date) throw new Error('The new date must be after the current sitting date.');
-    const check = checkSittingDate(proposedNewDate);
+    const check = checkSittingDate(proposedNewDate, undefined, sitting.onDemand === true);
     if (!check.ok) throw new Error(`${proposedNewDate}: ${check.reasons.join(' ')}`);
   }
 
@@ -99,6 +101,12 @@ export async function raiseChangeRequest(input: RaiseChangeRequestInput): Promis
     title: `EISA sitting ${kindLabel} request`,
     body: `A ${kindLabel} request for "${sitting.qualificationTitle}" on ${sitting.date} is waiting for your recommendation.`,
   });
+  // QCTO 05.10: the Director hears about every request from the start, not only when it reaches them.
+  addNotification({
+    recipientRole: CANCELLATION_SECOND_RECOMMENDER_ROLE,
+    title: `EISA sitting ${kindLabel} request raised`,
+    body: `A ${kindLabel} request for "${sitting.qualificationTitle}" on ${sitting.date} was raised and is with the DD.`,
+  });
   addNotification({
     recipientRole: 'QP',
     title: `EISA sitting ${kindLabel} request raised`,
@@ -135,6 +143,7 @@ export async function performChangeRequestAction(params: ChangeRequestActionPara
   if (hasActedOnRequest(request.id, params.actorId)) throw new Error(DIFFERENT_PERSON_MESSAGE);
 
   const comment = params.comment?.trim() || undefined;
+  const isRecommendation = params.actionId === 'request-recommend' || params.actionId === 'request-not-recommend';
   if (params.actionId === 'request-approve') {
     const sitting = (await listSittings()).find((s) => s.id === request.sittingId);
     if (sitting?.status !== 'published') throw new Error('This sitting is no longer published, so the request cannot be approved.');
@@ -154,37 +163,67 @@ export async function performChangeRequestAction(params: ChangeRequestActionPara
   });
 
   const now = new Date().toISOString();
-  const decided = params.actionId !== 'request-recommend';
+  const decided = !isRecommendation;
+  // QCTO 05.10: approving a request that someone chose not to recommend is allowed; it is recorded.
+  const decidedAgainst: Role[] =
+    params.actionId === 'request-approve' ? request.recommendations.filter((r) => r.recommends === false).map((r) => r.role) : [];
   const updated: EisaSittingChangeRequest = {
     ...request,
     state: nextState,
     recommendations: decided
       ? request.recommendations
-      : [...request.recommendations, { role: params.actorRole, personId: params.actorId, personName: params.actorName, comment: comment ?? null, at: now }],
+      : [
+          ...request.recommendations,
+          { role: params.actorRole, personId: params.actorId, personName: params.actorName, recommends: params.actionId === 'request-recommend', comment: comment ?? null, at: now },
+        ],
     decision: params.actionId === 'request-approve' ? 'approved' : params.actionId === 'request-decline' ? 'declined' : null,
     decisionComment: decided ? (comment ?? null) : null,
     decidedBy: decided ? params.actorName : null,
     decidedAt: decided ? now : null,
+    decidedAgainst: decidedAgainst.length > 0 ? decidedAgainst : undefined,
   };
   saveRequests(requests.map((r) => (r.id === request.id ? updated : r)));
 
   const kindLabel = changeRequestKindLabel(request.kind).toLowerCase();
   const subject = `"${request.qualificationTitle}" on ${request.sittingDate}`;
-  if (params.actionId === 'request-recommend') {
+  if (isRecommendation) {
     const nextStage = definition.stages.find((s) => s.id === nextState.stageId);
     const nextRole = nextStage?.allowedRoles[0];
+    const choice = params.actionId === 'request-recommend' ? 'recommended' : 'not recommended';
     if (nextRole) {
       addNotification({
         recipientRole: nextRole,
         title: `EISA sitting ${kindLabel} request`,
-        body: `A ${kindLabel} request for ${subject} was recommended by the ${params.actorRole === 'Deputy Director' ? 'DD' : params.actorRole} and is waiting for you.`,
+        body: `A ${kindLabel} request for ${subject} was ${choice} by the ${recommendationRoleLabel(params.actorRole)} and is waiting for you.`,
       });
     }
+    // The QP is only told the stage — never the recommendation or its comment (QCTO 05.10).
     addNotification({
       recipientRole: 'QP',
-      title: `EISA sitting ${kindLabel} request recommended`,
-      body: `The ${kindLabel} request for ${subject} was recommended. It is now ${nextStage?.label.toLowerCase() ?? 'with the next official'}.`,
+      title: `EISA sitting ${kindLabel} request update`,
+      body: `The ${kindLabel} request for ${subject} is now ${nextStage?.label.toLowerCase() ?? 'with the next official'}.`,
     });
+  }
+  if (params.actionId === 'request-approve' && decidedAgainst.length > 0) {
+    appendAuditEntry({
+      recordType: CHANGE_REQUEST_RECORD_TYPE,
+      recordId: request.id,
+      actorRole: params.actorRole,
+      actorId: params.actorId,
+      actorName: params.actorName,
+      action: `Decided against the recommendation of ${decidedAgainst.map(recommendationRoleLabel).join(' and ')}`,
+      note: 'Approved although the recommendation was "Do not recommend".',
+    });
+  }
+  if (decided) {
+    // QCTO 05.10: the DD and the Director are told about every decision (the QP is told below).
+    for (const recipientRole of [REQUEST_RECOMMENDER_ROLE, CANCELLATION_SECOND_RECOMMENDER_ROLE]) {
+      addNotification({
+        recipientRole,
+        title: `EISA sitting ${kindLabel} request ${updated.decision}`,
+        body: `The ${kindLabel} request for ${subject} was ${updated.decision} by ${params.actorName}.`,
+      });
+    }
   }
   if (params.actionId === 'request-approve') {
     await applyApprovedSittingChange({

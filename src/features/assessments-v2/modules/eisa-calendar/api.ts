@@ -7,7 +7,7 @@ import { listApplications, listApprovedQsaAddenda } from '../qsa-addendum/api';
 import { approvedSittingsOf } from '../qsa-addendum/assessmentDetails';
 import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listRegisteredSittingIds } from '../eisa-registration/api';
 import type { Role } from '../../types';
-import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR } from './config';
+import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR, REQUEST_RECOMMENDER_ROLE } from './config';
 import { checkSittingDate } from './dateChecks';
 import { BATCH_WORKFLOW, SITTING_LIFECYCLE_WORKFLOW } from './workflow';
 import type {
@@ -100,11 +100,31 @@ function assertValidBatchDates(dates: string[], year: number, title: string, req
     if (Number(date.slice(0, 4)) !== year) {
       throw new Error(`${date} is not in ${year}.`);
     }
-    const check = checkSittingDate(date);
+    const check = checkSittingDate(date, undefined, onDemand === true);
     if (!check.ok) {
       throw new Error(`${date}: ${check.reasons.join(' ')}`);
     }
   }
+}
+
+// QCTO feedback 29.13: the calendar reviewer and the DD are told when a QP sets or changes the
+// dates of an on-demand qualification.
+function notifyOnDemandScheduleChange(batch: EisaSittingBatch): void {
+  if (!batch.onDemand) return;
+  for (const recipientRole of [CALENDAR_REVIEWER_ROLE, REQUEST_RECOMMENDER_ROLE]) {
+    addNotification({
+      recipientRole,
+      title: 'On-demand schedule updated',
+      body: `${batch.qpName} updated the on-demand schedule for ${batch.qualificationTitle} (${batch.dates.length} dates)`,
+    });
+  }
+}
+
+// Directly added or edited sittings carry the flag too, so their closing date follows the right rule.
+async function isOnDemandQualification(qualificationId: string | null, qpId: string): Promise<boolean> {
+  if (!qualificationId) return false;
+  const eligible = await listEligibleQualifications();
+  return eligible.some((q) => q.qualificationId === qualificationId && q.qpId === qpId && q.onDemand);
 }
 
 function proposedSittingRows(batch: EisaSittingBatch, createdBy: string): EisaSitting[] {
@@ -122,6 +142,7 @@ function proposedSittingRows(batch: EisaSittingBatch, createdBy: string): EisaSi
     postponementReason: null,
     proposedNewDate: null,
     cancellationReason: null,
+    onDemand: batch.onDemand === true ? true : undefined,
     createdBy,
     createdAt: new Date().toISOString(),
   }));
@@ -169,6 +190,7 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
 
   saveBatches([batch, ...loadBatches()]);
   saveSittings([...proposedSittingRows(batch, input.submittedBy), ...loadSittings()]);
+  notifyOnDemandScheduleChange(batch);
   return batch;
 }
 
@@ -307,6 +329,7 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
     title: 'EISA sitting dates resubmitted',
     body: `"${batch.qualificationTitle}" (${batch.year}) dates were corrected and resubmitted for review.`,
   });
+  notifyOnDemandScheduleChange(updatedBatch);
 
   return updatedBatch;
 }
@@ -362,6 +385,7 @@ export async function editBatchDates(params: EditBatchParams): Promise<EisaSitti
     title: 'EISA sitting dates edited',
     body: `The QP edited the proposed dates for "${batch.qualificationTitle}" (${batch.year}). Please review them again.`,
   });
+  notifyOnDemandScheduleChange(updatedBatch);
 
   return updatedBatch;
 }
@@ -389,6 +413,7 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
     postponementReason: null,
     proposedNewDate: null,
     cancellationReason: null,
+    onDemand: (await isOnDemandQualification(input.qualificationId, input.qpId)) || undefined,
     createdBy: input.createdBy,
     createdAt: new Date().toISOString(),
   };
@@ -420,7 +445,7 @@ export async function editSitting(id: string, patch: EditSittingInput, actorId: 
   if (!existing) throw new Error('Sitting not found.');
   assertUnpublished(existing, 'updated');
 
-  const updated: EisaSitting = { ...existing, ...patch };
+  const updated: EisaSitting = { ...existing, ...patch, onDemand: (await isOnDemandQualification(patch.qualificationId, patch.qpId)) || undefined };
   saveSittings(sittings.map((s) => (s.id === id ? updated : s)));
   appendAuditEntry({
     recordType: 'eisa-calendar-sitting',

@@ -71,8 +71,8 @@ export function NewRegistrationDialog({ open, onOpenChange }: { open: boolean; o
               <SelectContent>
                 {/* QCTO feedback 3.5: closed sittings stay listed, disabled, with their closing date. */}
                 {sittings.map((s) => {
-                  const closing = calcRegistrationClosingDate(s.date);
-                  const closed = isRegistrationClosed(s.date);
+                  const closing = calcRegistrationClosingDate(s.date, s.onDemand);
+                  const closed = isRegistrationClosed(s.date, undefined, s.onDemand);
                   return (
                     <SelectItem key={s.id} value={s.id} disabled={closed}>
                       {s.qualificationTitle} — {s.date} ·{' '}

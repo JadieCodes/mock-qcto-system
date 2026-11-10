@@ -42,7 +42,7 @@ function RaiseChangeRequestForm({ target, onClose }: { target: ChangeRequestTarg
   const isPostponement = kind === 'postponement';
   const label = changeRequestKindLabel(kind);
 
-  const dateCheck = isPostponement && newDate ? checkSittingDate(newDate) : null;
+  const dateCheck = isPostponement && newDate ? checkSittingDate(newDate, undefined, sitting.onDemand === true) : null;
   const dateNotAfter = isPostponement && !!newDate && newDate <= sitting.date;
   const dateOk = !isPostponement || (!!newDate && !!dateCheck?.ok && !dateNotAfter);
   const canSubmit = !!reason.trim() && !!letter && dateOk;
@@ -79,7 +79,7 @@ function RaiseChangeRequestForm({ target, onClose }: { target: ChangeRequestTarg
           <div className="space-y-2">
             <Label htmlFor="request-new-date">Proposed new date *</Label>
             <Input id="request-new-date" type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
-            {/^\d{4}-\d{2}-\d{2}$/.test(newDate) && <RegistrationCloses sittingDate={newDate} passedNotice="short" />}
+            {/^\d{4}-\d{2}-\d{2}$/.test(newDate) && <RegistrationCloses sittingDate={newDate} passedNotice="short" onDemand={sitting.onDemand} />}
             {dateNotAfter && <p className="text-xs text-red-600">The new date must be after {sitting.date}.</p>}
             {dateCheck && !dateCheck.ok && <p className="text-xs text-red-600">{dateCheck.reasons.join(' ')}</p>}
           </div>

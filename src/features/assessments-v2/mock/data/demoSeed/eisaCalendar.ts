@@ -41,6 +41,11 @@
 //  R1  S6   Postponement  Johan van der Merwe   DD recommended, Director approved (decided)
 //  R2  S8   Postponement  Precious Mahlangu     waiting for the DD's recommendation
 //  R3  S17  Cancellation  Johan van der Merwe   DD recommended, waiting for the Director's recommendation
+// Added in Batch Q1 (QCTO 05.10, 29.13), after everything above so no seed id moves:
+//  R4  S5   Cancellation  Precious Mahlangu     at the CEO: DD "Recommend", Director "Do not recommend", both with comments
+//  R5  S4   Postponement  Nomvula Dlamini       at the Director: DD "Do not recommend" (with a comment)
+//  B4  Gas Practitioner   Johan van der Merwe   On-demand proposal about 6 weeks out, one date, waiting for ASD review —
+//      its registration closes five working days before the date (the Gas Practitioner QASA is on demand)
 //
 // Batch sittings-per-year counts come from the approved QASA (qasa.ts: Electrical Trades 3,
 // Plumbing 2, Welding 2), the same rule as eisa-calendar/api.ts listEligibleQualifications().
@@ -48,6 +53,7 @@ import { findQualification } from '../../api/accreditation';
 import { CHANGE_REQUEST_RECORD_TYPE } from '../../../modules/eisa-calendar/changeRequests';
 import {
   CALENDAR_REVIEWER_ROLE,
+  CANCELLATION_SECOND_RECOMMENDER_ROLE,
   DEFAULT_SITTINGS_PER_YEAR,
   POSTPONEMENT_DECIDER_ROLE,
   REQUEST_RECOMMENDER_ROLE,
@@ -93,6 +99,7 @@ interface CalendarQualification {
   qpId: string;
   qpName: string;
   sittingsPerYear: number;
+  onDemand: boolean;
 }
 
 function calendarQualification(name: string, qasa: QsaAddendumApplication[]): CalendarQualification {
@@ -107,6 +114,7 @@ function calendarQualification(name: string, qasa: QsaAddendumApplication[]): Ca
     qpId: q.qpId,
     qpName: q.qpName,
     sittingsPerYear: (approved ? approvedSittingsOf(approved).sittingsPerYear : null) ?? DEFAULT_SITTINGS_PER_YEAR,
+    onDemand: approved ? approvedSittingsOf(approved).onDemand : false,
   };
 }
 
@@ -125,6 +133,7 @@ function sittingRow(id: string, q: CalendarQualification, date: string, batchId:
     postponementReason: null,
     proposedNewDate: null,
     cancellationReason: null,
+    onDemand: q.onDemand ? true : undefined,
     createdBy,
     createdAt,
   };
@@ -304,6 +313,11 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
       body: `A ${kind} request for "${sitting.qualificationTitle}" on ${sitting.date} is waiting for your recommendation.`,
     });
     notify(log, raisedAt, {
+      recipientRole: CANCELLATION_SECOND_RECOMMENDER_ROLE,
+      title: `EISA sitting ${kind} request raised`,
+      body: `A ${kind} request for "${sitting.qualificationTitle}" on ${sitting.date} was raised and is with the DD.`,
+    });
+    notify(log, raisedAt, {
       recipientRole: 'QP',
       title: `EISA sitting ${kind} request raised`,
       body: `Your ${kind} request for "${sitting.qualificationTitle}" on ${sitting.date} has been received and is with the DD.`,
@@ -311,31 +325,31 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
     return { request, clock };
   }
 
-  // changeRequests.ts performChangeRequestAction('request-recommend').
-  function recommend(entry: ReturnType<typeof raiseRequest>, actorId: string, daysAgo: number, comment: string) {
+  // changeRequests.ts performChangeRequestAction('request-recommend' / 'request-not-recommend').
+  function recommend(entry: ReturnType<typeof raiseRequest>, actorId: string, daysAgo: number, comment: string, recommends = true) {
     const { request, clock } = entry;
     const actor = seedPerson(actorId);
     const at = clock.at(daysAgo, 11);
     const definition = request.kind === 'postponement' ? POSTPONEMENT_REQUEST_WORKFLOW : CANCELLATION_REQUEST_WORKFLOW;
-    const next = step(log, { definition, state: request.state, actionId: 'request-recommend', actor, at, recordType: CHANGE_REQUEST_RECORD_TYPE, recordId: request.id, note: comment });
+    const next = step(log, { definition, state: request.state, actionId: recommends ? 'request-recommend' : 'request-not-recommend', actor, at, recordType: CHANGE_REQUEST_RECORD_TYPE, recordId: request.id, note: comment });
     const nextStage = definition.stages.find((s) => s.id === next.stageId);
     const subject = `"${request.qualificationTitle}" on ${request.sittingDate}`;
     if (nextStage?.allowedRoles[0]) {
       notify(log, at, {
         recipientRole: nextStage.allowedRoles[0],
         title: `EISA sitting ${request.kind} request`,
-        body: `A ${request.kind} request for ${subject} was recommended by the DD and is waiting for you.`,
+        body: `A ${request.kind} request for ${subject} was ${recommends ? 'recommended' : 'not recommended'} by the ${actor.role === 'Deputy Director' ? 'DD' : actor.role} and is waiting for you.`,
       });
     }
     notify(log, at, {
       recipientRole: 'QP',
-      title: `EISA sitting ${request.kind} request recommended`,
-      body: `The ${request.kind} request for ${subject} was recommended. It is now ${nextStage?.label.toLowerCase() ?? 'with the next official'}.`,
+      title: `EISA sitting ${request.kind} request update`,
+      body: `The ${request.kind} request for ${subject} is now ${nextStage?.label.toLowerCase() ?? 'with the next official'}.`,
     });
     const recommended: EisaSittingChangeRequest = {
       ...request,
       state: next,
-      recommendations: [...request.recommendations, { role: actor.role, personId: actor.id, personName: actor.name, comment, at }],
+      recommendations: [...request.recommendations, { role: actor.role, personId: actor.id, personName: actor.name, recommends, comment, at }],
     };
     return { request: recommended, clock };
   }
@@ -368,6 +382,13 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
       title: 'EISA sitting postponement request approved',
       body: `The postponement request for "${sitting.qualificationTitle}" on ${sitting.date} was approved.`,
     });
+    for (const recipientRole of [REQUEST_RECOMMENDER_ROLE, CANCELLATION_SECOND_RECOMMENDER_ROLE]) {
+      notify(log, at, {
+        recipientRole,
+        title: 'EISA sitting postponement request approved',
+        body: `The postponement request for "${sitting.qualificationTitle}" on ${sitting.date} was approved by ${actor.name}.`,
+      });
+    }
     return {
       request: { ...request, state: decided, decision: 'approved' as const, decisionComment: null, decidedBy: actor.name, decidedAt: at },
       sitting: { ...sitting, status: next.stageId as EisaSitting['status'], postponementReason: request.reason, proposedNewDate: newDate },
@@ -471,7 +492,84 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
   // Batch N1: a past sitting whose results batch was declined (final). Added last so no seed id moves.
   const s19 = addDirect(electrical, -190, SIPHO, 390).sitting;
 
+  // Batch Q1 (QCTO 05.10): a cancellation at the CEO whose two recommenders disagree, and a
+  // postponement at the Director with a "Do not recommend" from the DD. Raised last so no seed id moves.
+  const r4 = recommend(
+    recommend(
+      raiseRequest(
+        4,
+        'cancellation',
+        s1to5[4],
+        9,
+        'Only two learners are expected to sit on this date, and the assessment centre asked to combine it with a later sitting.',
+        null,
+      ),
+      GRACE,
+      7,
+      'Supported. The centre confirmed in writing that the later sitting has space.',
+    ),
+    ZANELE,
+    4,
+    'The learners already paid for this date and the QP did not offer them a refund or transfer in the letter. I cannot support the cancellation as submitted.',
+    false,
+  );
+  const r5 = recommend(
+    raiseRequest(
+      5,
+      'postponement',
+      s1to5[3],
+      6,
+      'The QP wants to move the sitting a few weeks so that more learners can complete their practical portfolios first.',
+      workingDateFromToday(100),
+    ),
+    PETER,
+    3,
+    'Not recommended. The portfolio deadline is the learners own, and a postponement would delay the whole group.',
+    false,
+  );
+  requests.push(r4.request, r5.request);
+
   sittings.push(...s1to5, r1.sitting, s7, s8, ...s9to16, s17, s18, s19);
+
+  // Batch Q1 (QCTO 29.13): the QP proposes one date for an on-demand qualification, about six
+  // weeks out, so the shorter notice and the five-working-day registration closing show.
+  // Added after every other sitting so no seed id moves.
+  {
+    const gas = calendarQualification('Gas Practitioner', qasa);
+    if (!gas.onDemand) throw new Error('Demo seed: the Gas Practitioner QASA should be on demand.');
+    const clock = createClock();
+    const qp = seedPerson(gas.qpId);
+    const date = workingDateFromToday(42);
+    const check = checkSittingDate(date, undefined, true);
+    if (!check.ok) throw new Error(`Demo seed: on-demand date ${date} — ${check.reasons.join(' ')}`);
+    const submittedAt = clock.at(2, 10);
+    const batch: EisaSittingBatch = {
+      id: seedId(BATCH_ID_GROUP, 4),
+      qualificationId: gas.qualificationId,
+      qualificationTitle: gas.qualificationTitle,
+      qpId: gas.qpId,
+      qpName: gas.qpName,
+      year: yearOf(date),
+      requiredCount: 0,
+      onDemand: true,
+      dates: [date],
+      state: { stageId: 'qcto-review', submittedBy: qp.name, submittedById: qp.id },
+      rejectionReason: null,
+      rejectionHistory: [],
+      submittedBy: qp.name,
+      submittedAt,
+    };
+    batches.push(batch);
+    sittings.push({ ...sittingRow(nextSittingId(), gas, date, batch.id, qp.name, submittedAt), status: 'proposed' });
+    // api.ts notifyOnDemandScheduleChange: the calendar reviewer and the DD.
+    for (const recipientRole of [CALENDAR_REVIEWER_ROLE, REQUEST_RECOMMENDER_ROLE]) {
+      notify(log, submittedAt, {
+        recipientRole,
+        title: 'On-demand schedule updated',
+        body: `${batch.qpName} updated the on-demand schedule for ${batch.qualificationTitle} (${batch.dates.length} dates)`,
+      });
+    }
+  }
 
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,
   // and every future one has a date after today.

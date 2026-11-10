@@ -2,9 +2,9 @@ import { calcRegistrationClosingDate, isRegistrationClosed } from '../registrati
 
 // QCTO feedback 3.5: read-only "Registration closes" line, always calculated from the date.
 // "full" explains the passed date on the propose form; "short" just flags it in tables.
-export function RegistrationCloses({ sittingDate, passedNotice }: { sittingDate: string; passedNotice?: 'full' | 'short' }) {
-  const closing = calcRegistrationClosingDate(sittingDate);
-  const passed = isRegistrationClosed(sittingDate);
+export function RegistrationCloses({ sittingDate, passedNotice, onDemand }: { sittingDate: string; passedNotice?: 'full' | 'short'; onDemand?: boolean }) {
+  const closing = calcRegistrationClosingDate(sittingDate, onDemand);
+  const passed = isRegistrationClosed(sittingDate, undefined, onDemand);
   return (
     <span className="block text-xs text-gray-500">
       Registration closes: <span className="font-medium text-gray-700">{closing}</span>
@@ -19,13 +19,13 @@ export function RegistrationCloses({ sittingDate, passedNotice }: { sittingDate:
 }
 
 // The batch tables list several dates in one cell — one line per date with its closing date.
-export function DatesWithClosing({ dates }: { dates: string[] }) {
+export function DatesWithClosing({ dates, onDemand }: { dates: string[]; onDemand?: boolean }) {
   return (
     <div className="space-y-1">
       {dates.map((date) => (
         <div key={date} className="text-xs">
           <span className="font-medium text-gray-700">{date}</span>
-          <RegistrationCloses sittingDate={date} passedNotice="short" />
+          <RegistrationCloses sittingDate={date} passedNotice="short" onDemand={onDemand} />
         </div>
       ))}
     </div>

@@ -21,6 +21,9 @@ export const LABELS = {
   sdpDashboardFisa: 'Develop your FISA instrument and get it validated. FISA learner results are submitted under Approval of Results → FISA.',
   sdpDashboardApprovalOfResults: 'Submit your FISA learner results here. Your FISA instrument is developed and validated in the FISA section.',
 
+  // QCTO feedback 29.13 — shown on the propose form and the bulk-upload preview.
+  eisaOnDemandHint: "On-demand (trade test): at least one month's notice. QCTO is trying this as a pilot.",
+
   // PM-04 — open question, placeholders until QCTO confirms the real names.
   eisaReadinessNoticePlaceholder: 'EISA Readiness Notice',
   markingModerationVisitRequestPlaceholder: 'Marking & Moderation Visit Request',

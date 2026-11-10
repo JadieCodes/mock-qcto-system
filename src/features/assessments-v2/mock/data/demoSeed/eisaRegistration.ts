@@ -112,11 +112,11 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
     const clock = createClock();
     const sdp = seedPerson(sdpId);
     const createdAt = clock.at(daysAgo, 9);
-    const closing = calcRegistrationClosingDate(sitting.date);
+    const closing = calcRegistrationClosingDate(sitting.date, sitting.onDemand);
 
     // startRegistration(): published sitting (checked by the caller's lookup), registration still
     // open on the day, compliant SDP, no other open registration for the same SDP and sitting.
-    if (isRegistrationClosed(sitting.date, dateOf(createdAt))) {
+    if (isRegistrationClosed(sitting.date, dateOf(createdAt), sitting.onDemand)) {
       throw new Error(`Demo seed: registration for ${sitting.qualificationTitle} ${sitting.date} closed on ${closing}.`);
     }
     if (createdAt < sitting.createdAt) throw new Error(`Demo seed: registration started before the ${sitting.date} sitting existed.`);

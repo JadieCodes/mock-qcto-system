@@ -25,7 +25,7 @@ export function SittingDetailsDialog({ sitting, onClose }: { sitting: EisaSittin
               <dt className="text-gray-500">QP</dt>
               <dd>{displayOrDash(sitting.qpName)}</dd>
               <dt className="text-gray-500">Registration closes</dt>
-              <dd>{calcRegistrationClosingDate(sitting.date)}</dd>
+              <dd>{calcRegistrationClosingDate(sitting.date, sitting.onDemand)}</dd>
               <dt className="text-gray-500">Status</dt>
               <dd>
                 <EisaSittingStatusBadge status={sitting.status} />

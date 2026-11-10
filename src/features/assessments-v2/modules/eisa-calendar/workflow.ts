@@ -1,3 +1,4 @@
+import { roleDescriptor } from '../../config/roles';
 import type { WorkflowDefinition } from '../../shared/workflow/types';
 import {
   CALENDAR_REVIEWER_ROLE,
@@ -6,7 +7,8 @@ import {
   POSTPONEMENT_DECIDER_ROLE,
   REQUEST_RECOMMENDER_ROLE,
 } from './config';
-import type { ChangeRequestKind, EisaSittingBatch, EisaSittingChangeRequest, EisaSittingStatus } from './types';
+import type { Role } from '../../types';
+import type { ChangeRequestKind, ChangeRequestRecommendation, EisaSittingBatch, EisaSittingChangeRequest, EisaSittingStatus } from './types';
 
 // CR-028: QP proposes dates -> QCTO approves or rejects (with reason) -> QCTO publishes to the
 // calendar. Kept as three distinct actions, not one combined "approve & publish" step, so QCTO
@@ -49,6 +51,8 @@ export const SITTING_LIFECYCLE_WORKFLOW: WorkflowDefinition = {
 // QCTO feedback 2.4: requests raised by the QP (or the DD) on a published sitting. Each step
 // must be a different person from the one before it (requiresDifferentActor); changeRequests.ts
 // also refuses anyone who already acted on the same request at an earlier step.
+// QCTO 05.10: at a recommendation stage the person chooses "Recommend" or "Do not recommend" —
+// both need a comment and both move the request to the same next stage.
 export const POSTPONEMENT_REQUEST_WORKFLOW: WorkflowDefinition = {
   id: 'eisa-calendar-postponement-request',
   stages: [
@@ -58,7 +62,8 @@ export const POSTPONEMENT_REQUEST_WORKFLOW: WorkflowDefinition = {
     { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],
   actions: [
-    { id: 'request-recommend', label: 'Recommend', fromStage: 'dd-recommendation', toStage: 'director-decision', kind: 'advance', requiresDifferentActor: true },
+    { id: 'request-recommend', label: 'Recommend', fromStage: 'dd-recommendation', toStage: 'director-decision', kind: 'advance', requiresDifferentActor: true, requiresNote: true },
+    { id: 'request-not-recommend', label: 'Do not recommend', fromStage: 'dd-recommendation', toStage: 'director-decision', kind: 'advance', requiresDifferentActor: true, requiresNote: true },
     { id: 'request-approve', label: 'Approve postponement', fromStage: 'director-decision', toStage: 'approved', kind: 'complete', requiresDifferentActor: true },
     { id: 'request-decline', label: 'Decline postponement', fromStage: 'director-decision', toStage: 'declined', kind: 'reject', requiresDifferentActor: true, requiresNote: true },
   ],
@@ -74,14 +79,16 @@ export const CANCELLATION_REQUEST_WORKFLOW: WorkflowDefinition = {
     { id: 'declined', label: 'Declined', allowedRoles: [] },
   ],
   actions: [
-    { id: 'request-recommend', label: 'Recommend', fromStage: 'dd-recommendation', toStage: 'director-recommendation', kind: 'advance', requiresDifferentActor: true },
-    { id: 'request-recommend', label: 'Recommend', fromStage: 'director-recommendation', toStage: 'ceo-decision', kind: 'advance', requiresDifferentActor: true },
+    { id: 'request-recommend', label: 'Recommend', fromStage: 'dd-recommendation', toStage: 'director-recommendation', kind: 'advance', requiresDifferentActor: true, requiresNote: true },
+    { id: 'request-not-recommend', label: 'Do not recommend', fromStage: 'dd-recommendation', toStage: 'director-recommendation', kind: 'advance', requiresDifferentActor: true, requiresNote: true },
+    { id: 'request-recommend', label: 'Recommend', fromStage: 'director-recommendation', toStage: 'ceo-decision', kind: 'advance', requiresDifferentActor: true, requiresNote: true },
+    { id: 'request-not-recommend', label: 'Do not recommend', fromStage: 'director-recommendation', toStage: 'ceo-decision', kind: 'advance', requiresDifferentActor: true, requiresNote: true },
     { id: 'request-approve', label: 'Approve cancellation', fromStage: 'ceo-decision', toStage: 'approved', kind: 'complete', requiresDifferentActor: true },
     { id: 'request-decline', label: 'Decline cancellation', fromStage: 'ceo-decision', toStage: 'declined', kind: 'reject', requiresDifferentActor: true, requiresNote: true },
   ],
 };
 
-export type ChangeRequestActionId = 'request-recommend' | 'request-approve' | 'request-decline';
+export type ChangeRequestActionId = 'request-recommend' | 'request-not-recommend' | 'request-approve' | 'request-decline';
 
 export function changeRequestWorkflow(kind: ChangeRequestKind): WorkflowDefinition {
   return kind === 'postponement' ? POSTPONEMENT_REQUEST_WORKFLOW : CANCELLATION_REQUEST_WORKFLOW;
@@ -89,6 +96,23 @@ export function changeRequestWorkflow(kind: ChangeRequestKind): WorkflowDefiniti
 
 export function changeRequestStageLabel(request: EisaSittingChangeRequest): string {
   return changeRequestWorkflow(request.kind).stages.find((s) => s.id === request.state.stageId)?.label ?? request.state.stageId;
+}
+
+// QCTO 05.10: internal status text adds the recommendations so far, e.g.
+// "With the CEO for decision — DD: Recommend, Director: Do not recommend". The QP side shows
+// the plain stage label only (changeRequestStageLabel).
+export function recommendationRoleLabel(role: Role): string {
+  return role === 'Deputy Director' ? 'DD' : (roleDescriptor(role)?.label ?? role);
+}
+
+export function recommendationChoiceLabel(rec: ChangeRequestRecommendation): string {
+  return rec.recommends === false ? 'Do not recommend' : 'Recommend';
+}
+
+export function changeRequestInternalStatusLabel(request: EisaSittingChangeRequest): string {
+  const stage = changeRequestStageLabel(request);
+  if (request.recommendations.length === 0) return stage;
+  return `${stage} — ${request.recommendations.map((r) => `${recommendationRoleLabel(r.role)}: ${recommendationChoiceLabel(r)}`).join(', ')}`;
 }
 
 export function isChangeRequestOpen(request: EisaSittingChangeRequest): boolean {

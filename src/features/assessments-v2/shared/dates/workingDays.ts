@@ -34,6 +34,26 @@ export function addWorkingDays(startIso: string, days: number): string {
   return toIsoDate(d);
 }
 
+// Mirror of addWorkingDays: the working day that is `days` working days before `startIso`.
+export function subtractWorkingDays(startIso: string, days: number): string {
+  const d = new Date(`${startIso}T00:00:00Z`);
+  let removed = 0;
+  while (removed < days) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    if (isWorkingDay(toIsoDate(d))) removed++;
+  }
+  return toIsoDate(d);
+}
+
+// Same day-of-month `months` calendar months later, clamped to the last day of a shorter month
+// (31 Jan + 1 month -> 28/29 Feb).
+export function addCalendarMonths(startIso: string, months: number): string {
+  const [year, month, day] = startIso.split('-').map(Number);
+  const targetMonthIndex = month - 1 + months;
+  const lastDayOfTargetMonth = new Date(Date.UTC(year, targetMonthIndex + 1, 0)).getUTCDate();
+  return toIsoDate(new Date(Date.UTC(year, targetMonthIndex, Math.min(day, lastDayOfTargetMonth))));
+}
+
 // Counts working days strictly after `startIso` up to and including `endIso`.
 export function workingDaysBetween(startIso: string, endIso: string): number {
   const start = new Date(`${startIso}T00:00:00Z`);

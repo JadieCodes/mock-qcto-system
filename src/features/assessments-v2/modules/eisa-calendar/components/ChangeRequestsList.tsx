@@ -2,11 +2,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { useV2Role } from '../../../shared/ui/useV2Role';
 import { changeRequestKindLabel } from '../changeRequests';
 import type { EisaSittingChangeRequest } from '../types';
-import { changeRequestStageLabel } from '../workflow';
+import { changeRequestInternalStatusLabel, changeRequestStageLabel } from '../workflow';
 
+// QCTO 05.10: only the internal side sees the recommendations in the status; the QP sees the stage.
 export function ChangeRequestStatusBadge({ request }: { request: EisaSittingChangeRequest }) {
+  const { portal } = useV2Role();
   const tone =
     request.state.stageId === 'approved'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -14,8 +17,8 @@ export function ChangeRequestStatusBadge({ request }: { request: EisaSittingChan
         ? 'bg-red-50 text-red-700 border-red-200'
         : 'bg-amber-50 text-amber-700 border-amber-200';
   return (
-    <Badge variant="outline" className={cn('whitespace-nowrap font-medium', tone)}>
-      {changeRequestStageLabel(request)}
+    <Badge variant="outline" className={cn('whitespace-normal font-medium', tone)}>
+      {portal === 'internal' ? changeRequestInternalStatusLabel(request) : changeRequestStageLabel(request)}
     </Badge>
   );
 }

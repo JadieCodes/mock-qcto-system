@@ -81,7 +81,8 @@ function AddEditSittingForm({
   const [year, setYear] = useState<number>(sitting?.year ?? YEAR_OPTIONS[0]);
   const [date, setDate] = useState(sitting?.date ?? '');
 
-  const warning = date ? checkSittingDate(date) : null;
+  const onDemand = eligible.some((q) => q.qualificationId === qualificationId && q.qpId === qpId && q.onDemand);
+  const warning = date ? checkSittingDate(date, undefined, onDemand) : null;
   const ready = qualificationTitle.trim() !== '' && qpName.trim() !== '' && date !== '';
 
   return (

@@ -47,7 +47,7 @@ function ResubmitBatchForm({ batch, mode, onClose }: { batch: EisaSittingBatch; 
   const [dates, setDates] = useState<string[]>(() => [...batch.dates, ...Array<string>(Math.max(minimum - batch.dates.length, 0)).fill('')]);
 
   const filledDates = dates.filter((d) => d.trim() !== '');
-  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d) }));
+  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d, undefined, batch.onDemand === true) }));
   const yearMismatch = filledDates.filter((d) => Number(d.slice(0, 4)) !== batch.year);
   const duplicates = filledDates.length !== new Set(filledDates).size;
   const countMatches = filledDates.length >= minimum;
@@ -99,7 +99,7 @@ function ResubmitBatchForm({ batch, mode, onClose }: { batch: EisaSittingBatch; 
             </div>
             <div className="space-y-2">
               {dates.map((d, idx) => {
-                const check = d.trim() ? checkSittingDate(d) : null;
+                const check = d.trim() ? checkSittingDate(d, undefined, batch.onDemand === true) : null;
                 return (
                   <div key={idx} className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -114,7 +114,7 @@ function ResubmitBatchForm({ batch, mode, onClose }: { batch: EisaSittingBatch; 
                         </Button>
                       )}
                     </div>
-                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" />}
+                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" onDemand={batch.onDemand} />}
                     {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
                     {check && check.ok && Number(d.slice(0, 4)) !== batch.year && (
                       <p className="text-xs text-red-600">This date is not in {batch.year}.</p>
