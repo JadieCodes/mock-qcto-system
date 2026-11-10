@@ -54,6 +54,10 @@ function ActionButton({ action, onRun, disabled }: { action: WorkflowAction; onR
   );
 }
 
+function isPrimary(action: WorkflowAction): boolean {
+  return action.kind !== 'reject' && action.kind !== 'send-back' && !action.id.endsWith('-recommend-decline');
+}
+
 export function ResultsActionBar({
   definition,
   stageId,
@@ -73,9 +77,12 @@ export function ResultsActionBar({
   if (!canActInStage(definition, stageId, role)) return null;
   const actions = availableActions(definition, stageId).filter((a) => !hiddenActionIds?.includes(a.id));
   if (actions.length === 0) return null;
+  // Batch N.1: secondary actions (request more evidence, recommend decline, decline) on the left,
+  // the primary action on the right, in the same order on every stage.
+  const ordered = [...actions].sort((a, b) => Number(isPrimary(a)) - Number(isPrimary(b)));
   return (
-    <div className="flex flex-wrap gap-2 pt-2">
-      {actions.map((action) => (
+    <div className="flex flex-wrap justify-end gap-2 pt-2">
+      {ordered.map((action) => (
         <ActionButton key={action.id} action={action} disabled={disabledActionIds?.includes(action.id)} onRun={(note) => onRun(action.id, note)} />
       ))}
     </div>

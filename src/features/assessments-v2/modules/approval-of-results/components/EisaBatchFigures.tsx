@@ -1,3 +1,4 @@
+import { StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { batchFiguresOf } from '../calculation';
 import type { ResultsBatch } from '../types';
 
@@ -16,16 +17,12 @@ export function EisaBatchFigures({ batch }: { batch: Pick<ResultsBatch, 'compone
   ];
   return (
     <div className="space-y-1.5">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+      <StatTileGrid className="grid-cols-2 sm:grid-cols-4">
         {tiles.map((t) => (
-          <div key={t.label} className="rounded-xl border bg-gray-50 px-3 py-2">
-            <p className="text-lg font-bold text-gray-900">{t.value}</p>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.label}</p>
-          </div>
+          <StatTile key={t.label} label={t.label} value={t.value} />
         ))}
-      </div>
+      </StatTileGrid>
       <p className="text-xs text-gray-500">Competency rate = competent ÷ wrote. Absenteeism = absent ÷ registered. Throughput rate = wrote ÷ registered.</p>
     </div>
   );
 }
-

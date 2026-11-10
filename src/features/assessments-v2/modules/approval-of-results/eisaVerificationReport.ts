@@ -7,17 +7,8 @@ import { qpDirectoryEntryFor } from '../../mock/data/qpDirectory';
 import { sdpDirectoryEntryByName } from '../../mock/data/sdpDirectory';
 import type { AuditEntry } from '../../shared/audit/types';
 import { batchFiguresOf, competenceRateText, throughputRateText } from './calculation';
-import {
-  annexHtml,
-  definitionList,
-  downloadHtmlFile,
-  eisaLearnerTable,
-  escapeHtml,
-  fileSafe,
-  page,
-  signOffFromAudit,
-  table,
-} from './downloads';
+import { annexBlocks, eisaLearnerTable, fileSafe, signOffFromAudit } from './downloads';
+import { downloadDoc, type DocBlock, type DocModel } from './documentModel';
 import { eisaEvidenceTagLabel, onFileChoiceText, RESULTS_AD_ROLE, RESULTS_DD_ROLE, RESULTS_DIRECTOR_ROLE } from './config';
 import { eisaReviewRows } from './eisaReview';
 import { ddCheckedIdsOf, ddCompletedText, ddLetterTable, DD_LETTER_CHECK_LINES } from './letterChecklist';
@@ -201,71 +192,116 @@ function signOffRows(audit: AuditEntry[]): string[][] {
   return [row('COMPILED BY (ASD)', RESULTS_AD_ROLE), row('CHECKED BY (Deputy Director)', RESULTS_DD_ROLE), row('RECOMMENDED BY (Director)', RESULTS_DIRECTOR_ROLE)];
 }
 
-export function ddChecklistHtml(batch: ResultsBatch): string {
+export type DocAudience = 'internal' | 'external';
+
+// The Approval of Results letter checklist (the Deputy Director's), internal only.
+export function ddChecklistBlocks(batch: ResultsBatch): DocBlock[] {
   const ticked = new Set(ddCheckedIdsOf(batch));
-  return `<h2>Approval of Results letter checklist</h2>
-${table(['Item', 'Detail'], ddLetterTable(batch))}
-${table(['Checked', 'Line'], DD_LETTER_CHECK_LINES.map((l) => [ticked.has(l.id) ? 'Yes' : 'No', l.text]))}
-<p class="muted">Completed by ${escapeHtml(ddCompletedText(batch.ddChecklist))}.</p>`;
+  return [
+    { kind: 'h2', text: 'Approval of Results letter checklist' },
+    { kind: 'table', headers: ['Item', 'Detail'], rows: ddLetterTable(batch) },
+    { kind: 'table', headers: ['Checked', 'Line'], rows: DD_LETTER_CHECK_LINES.map((l) => [ticked.has(l.id) ? 'Yes' : 'No', l.text]) },
+    { kind: 'p', muted: true, text: `Completed by ${ddCompletedText(batch.ddChecklist)}.` },
+  ];
 }
 
-export function eisaVerificationReportHtml(batch: ResultsBatch, audit: AuditEntry[], ctx: EisaReportContext = NO_REPORT_CONTEXT): string {
+export function ddLetterChecklistModel(batch: ResultsBatch): DocModel {
+  return {
+    pageTitle: 'Approval of Results letter checklist',
+    heading: 'Approval of Results letter checklist (EISA)',
+    draft: !batch.finalDecision,
+    fileName: `Approval_of_Results_Letter_Checklist_EISA_${fileSafe(batch.qualificationTitle)}_${batch.sittingDate}.html`,
+    blocks: ddChecklistBlocks(batch).slice(1),
+  };
+}
+
+// QCTO's EISA report. The QP gets the report without the ASD's compliance review (section 2), the
+// "E. QA Verification" lines (the recommendation letter, the checklist, the tracking register), the
+// Deputy Director's letter checklist and the approval chain and audit trail (Batch N.1).
+export function eisaVerificationReportModel(
+  batch: ResultsBatch,
+  audit: AuditEntry[],
+  ctx: EisaReportContext = NO_REPORT_CONTEXT,
+  audience: DocAudience = 'internal',
+): DocModel {
+  const internal = audience === 'internal';
   const d = eisaReportDetails(batch);
   const s = eisaStatistics(batch);
   const f = batchFiguresOf(batch);
-  const admin = eisaAdministrationRows(batch, ctx);
+  const admin = eisaAdministrationRows(batch, ctx).filter((r) => internal || !r.group.startsWith('E.'));
   const placeHeaders = ['No.', 'Name', 'Address', 'Accreditation Number'];
-  return page(
-    'EISA Quality Assurance Verification Report',
-    `<h1>EISA QUALITY ASSURANCE VERIFICATION REPORT</h1>
-<p class="muted">Generated on ${escapeHtml(new Date().toLocaleString('en-ZA'))}. Verification code: ${escapeHtml(batch.finalDecision?.verificationCode ?? 'issued at the final decision')}.</p>
-<h2>1. DETAILS OF EXTERNAL INTEGRATED SUMMATIVE ASSESSMENT</h2>
-${definitionList(d.details.map(([label, value]) => ({ label, value })))}
-${table(['Component', 'Dates', 'Type of assessment', 'Weighting', 'Duration (days)', 'Time (from/to)', 'Required pass mark'], d.componentRows)}
-<p><strong>Overall Pass Mark or Competency Rating:</strong> ${escapeHtml(d.passMark)}</p>
-<h3>Assessment Centres/Sites used</h3>
-${table(placeHeaders, d.centreRows)}
-<h3>Skills Development Providers that took part in this EISA</h3>
-${table(placeHeaders, d.sdpRows)}
-<h2>2. COMPLIANCE REVIEW</h2>
-${table(['Ref', 'Requirement', 'Answer', 'Comment'], eisaReviewRows(batch.eisaReview).map((r) => [r.id, r.text, r.answer, r.comment]))}
-<h2>4. STATISTICS</h2>
-${definitionList([
-  { label: 'Number of candidates that registered for the EISA (File 4)', value: String(s.registered) },
-  { label: 'Number of candidates that sat for the EISA (File 3)', value: String(s.sat) },
-  { label: 'Number of candidates that passed the EISA (File 3)', value: String(s.passed) },
-  { label: '% Pass Rate (passed ÷ sat)', value: s.passRate },
-  { label: 'Competency rate', value: competenceRateText(f) },
-  { label: 'Throughput rate', value: throughputRateText(f) },
-])}
-<h2>5. APPROVAL OF LEARNER ACHIEVEMENTS</h2>
-${definitionList(eisaSectionFive(batch).map(([label, value]) => ({ label, value })))}
-<h2>Administration completed and confirmed</h2>
-<p class="muted">A line is ticked when the document is on file in the system.</p>
-${table(
-  ['Group', 'Document', 'On file in the system', 'Date'],
-  admin.map((r) => [r.group, r.optional ? `${r.label} (optional)` : r.label, r.onFile ? 'Yes' : 'No', r.date]),
-)}
-<h2>Sign-off</h2>
-${table(['', 'Name', 'Date'], signOffRows(audit))}
-${ddChecklistHtml(batch)}
-${annexHtml({
-  learnerTable: eisaLearnerTable(batch),
-  evidence: batch.evidenceDocuments.map((doc) => ({ ...doc, tag: eisaEvidenceTagLabel(doc.tag) })),
-  onFile: batch.onFileDocuments.map((doc) => ({ label: doc.label, fileName: doc.replacement?.fileName ?? doc.fileName, choice: onFileChoiceText(doc) })),
-  declineHistory: batch.declineHistory,
-  audit,
-})}`,
+  const blocks: DocBlock[] = [
+    { kind: 'p', muted: true, text: `Verification code: ${batch.finalDecision?.verificationCode ?? 'issued at the final decision'}.` },
+    { kind: 'h2', text: '1. DETAILS OF EXTERNAL INTEGRATED SUMMATIVE ASSESSMENT' },
+    { kind: 'dl', items: d.details },
+    {
+      kind: 'table',
+      headers: ['Component', 'Dates', 'Type of assessment', 'Weighting', 'Duration (days)', 'Time (from/to)', 'Required pass mark'],
+      rows: d.componentRows,
+    },
+    { kind: 'p', text: `Overall Pass Mark or Competency Rating: ${d.passMark}` },
+    { kind: 'h3', text: 'Assessment Centres/Sites used' },
+    { kind: 'table', headers: placeHeaders, rows: d.centreRows },
+    { kind: 'h3', text: 'Skills Development Providers that took part in this EISA' },
+    { kind: 'table', headers: placeHeaders, rows: d.sdpRows },
+  ];
+  if (internal) {
+    blocks.push(
+      { kind: 'h2', text: '2. COMPLIANCE REVIEW' },
+      { kind: 'table', headers: ['Ref', 'Requirement', 'Answer', 'Comment'], rows: eisaReviewRows(batch.eisaReview).map((r) => [r.id, r.text, r.answer, r.comment]) },
+    );
+  }
+  blocks.push(
+    { kind: 'h2', text: '4. STATISTICS' },
+    {
+      kind: 'dl',
+      items: [
+        ['Number of candidates that registered for the EISA (File 4)', String(s.registered)],
+        ['Number of candidates that sat for the EISA (File 3)', String(s.sat)],
+        ['Number of candidates that passed the EISA (File 3)', String(s.passed)],
+        ['% Pass Rate (passed ÷ sat)', s.passRate],
+        ['Competency rate', competenceRateText(f)],
+        ['Throughput rate', throughputRateText(f)],
+      ],
+    },
+    { kind: 'h2', text: '5. APPROVAL OF LEARNER ACHIEVEMENTS' },
+    { kind: 'dl', items: eisaSectionFive(batch).filter(([label]) => internal || !['Recommendation for further action', 'Bad Practices', 'Good Practices'].includes(label)) },
+    { kind: 'h2', text: 'Administration completed and confirmed' },
+    { kind: 'p', muted: true, text: 'A line is ticked when the document is on file in the system.' },
+    {
+      kind: 'table',
+      headers: ['Group', 'Document', 'On file in the system', 'Date'],
+      rows: admin.map((r) => [r.group, r.optional ? `${r.label} (optional)` : r.label, r.onFile ? 'Yes' : 'No', r.date]),
+    },
+    { kind: 'h2', text: 'Sign-off' },
+    { kind: 'table', headers: ['', 'Name', 'Date'], rows: signOffRows(audit) },
   );
+  if (internal) blocks.push(...ddChecklistBlocks(batch));
+  blocks.push(
+    ...annexBlocks(
+      {
+        learnerTable: eisaLearnerTable(batch),
+        evidence: batch.evidenceDocuments.map((doc) => ({ ...doc, tag: eisaEvidenceTagLabel(doc.tag) })),
+        onFile: batch.onFileDocuments.map((doc) => ({ label: doc.label, fileName: doc.replacement?.fileName ?? doc.fileName, choice: onFileChoiceText(doc) })),
+        declineHistory: batch.declineHistory,
+        audit,
+      },
+      audience,
+    ),
+  );
+  return {
+    pageTitle: 'EISA Quality Assurance Verification Report',
+    heading: 'EISA QUALITY ASSURANCE VERIFICATION REPORT',
+    draft: !batch.finalDecision,
+    fileName: `Verification_Report_EISA_${fileSafe(batch.qualificationTitle)}_${batch.sittingDate}.html`,
+    blocks,
+  };
 }
 
-export function downloadEisaVerificationReport(batch: ResultsBatch, audit: AuditEntry[], ctx: EisaReportContext = NO_REPORT_CONTEXT): void {
-  downloadHtmlFile(`Verification_Report_EISA_${fileSafe(batch.qualificationTitle)}_${batch.sittingDate}.html`, eisaVerificationReportHtml(batch, audit, ctx));
+export function downloadEisaVerificationReport(batch: ResultsBatch, audit: AuditEntry[], ctx: EisaReportContext = NO_REPORT_CONTEXT, audience: DocAudience = 'internal'): void {
+  downloadDoc(eisaVerificationReportModel(batch, audit, ctx, audience));
 }
 
 export function downloadDdLetterChecklist(batch: ResultsBatch): void {
-  downloadHtmlFile(
-    `Approval_of_Results_Letter_Checklist_EISA_${fileSafe(batch.qualificationTitle)}_${batch.sittingDate}.html`,
-    page('Approval of Results letter checklist', `<h1>Approval of Results letter checklist (EISA)</h1>${ddChecklistHtml(batch)}`),
-  );
+  downloadDoc(ddLetterChecklistModel(batch));
 }

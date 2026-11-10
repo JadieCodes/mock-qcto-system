@@ -1581,6 +1581,63 @@ Rows 29.29, 29.28, 29.35, plus QCTO's templates. EISA and FISA tabs. Built 10 No
 
 **Checked:** 7-weekday seed check (14 runs) and the N2 behaviour checks (all pass in all 14 runs): headings, 32/21 cells per row, date format, formulas, quarter labels (31 March, 1 April), working days around Good Friday / Family Day 2027, DD and ASD gates, FISA refusals, audit range filter, portal document lists, migration, resubmit. eslint and the scoped `tsc -p` check pass clean.
 
+## Batch N.1 (Approval of Results — tab layout, documents on screen, N1/N2 test fixes)
+
+Reorganised only: no feature, field, button or check was removed. `SEED_VERSION` is unchanged (A17): no seed change was needed.
+
+### Bugs
+- **A1 (FISA documents invisible to internal roles).** The seed and the code expose them: the approved Khanya FISA batch (R4) has a final decision with code `QCTOSP/20260929/C26-01`, an SP outcome letter, an SP certification recommendation letter and the ASD's recommendations text. No tab or box was gated on a role or on the ASD stage (the Outcome Letter and Certification Recommendation tabs were driven by `finalDecision` only). **I could not reproduce a gate in the code, so the cause is not proven.** The likeliest reasons they were missed: they sat behind a wrapping row of tabs, and the ASD's "Recommendations for improvements" box was one of seven blocks in the Compliance Review tab, greyed out once the batch moved on. Fix: the documents now have their own tabs, the recommendations box is on the Section E tab for every internal role (read-only past the ASD stage) and on the Summary of a decided batch, and the code is on the Summary. The seed check proves each of the four internal roles gets the code, outcome letter, recommendation letter, report and recommendations text on screen. If it is still seen in the browser, use "Reset demo data" first (stale data from an older seed would explain it) and note the role and tab.
+- **A2 (leaks to the QP and SDP).** A real leak was found and fixed: the QP's and SDP's verification report contained the ASD's section 2 compliance review, the Deputy Director's letter checklist, the "E. QA Verification" lines (recommendation letter, checklist, tracking register), the ASD's bad/good practices and recommendation, the approval chain and the audit trail (with QCTO's comments). The external report is now a separate audience of the same model: no section 2, no E lines, no DD checklist, no ASD free text, annexures A and B only. The FISA SDP report has no Section E (outcome only). The QP/SDP tabs and Documents card never list the recommendation letter, checklist or tracking register.
+
+### New files
+- `documentModel.ts` (report/checklist model and HTML), `tabs.ts` (which tabs, pure), `nextStep.ts` (Next step card text), `components/DocumentView.tsx`, `Documents.tsx` (one component per document), `BatchTabs.tsx` (sideways-scrolling tab bar), `NextStepCard.tsx`, `ApprovalHistory.tsx`, `external/FisaSubmittedView.tsx`. `BatchDownloads.tsx` was removed (its two buttons are now the Download button on the Outcome Letter and Verification Report tabs, and the Documents card).
+- The reports and the DD checklist are built as a model first; the screen and the download both read it. Letters already did (`outcomeLetters.ts`). Before the final decision the Outcome Letter, Verification Report and Letter Checklist carry a Draft banner on screen and in the download.
+
+### Tab layout
+Internal EISA: Summary, Learner Results, Evidence, Compliance Review, Letter Checklist, Approval Chain, Outcome Letter, Verification Report, Certification Recommendation, Audit Trail. Internal FISA: the same with Section E in place of Compliance Review and no Letter Checklist. QP/SDP: Summary, Learner Results, Evidence, Outcome Letter, Verification Report. Hidden when they do not apply: Letter Checklist and Outcome Letter before the Deputy Director stage; Certification Recommendation unless approved; the QP's and SDP's Outcome Letter and Verification Report until decided. There is no Progress tab: this module has no progress view for the QP or SDP (the request said "if the module has it").
+
+Details-tab mapping (EISA):
+
+| Was on Details | Now on |
+|---|---|
+| Status badge | Summary |
+| Final decision notice, evidence dates | Summary |
+| QP, Qualification, EISA date, Submission | Summary |
+| Batch figures | Summary (as stat tiles) |
+| Post-EISA banner | Summary |
+| Learner results table and learner detail | Learner Results |
+| Marking & Moderation monitoring status | Compliance Review |
+| Evidence documents, Already on file, Declaration | Evidence |
+| Documents for this batch card | Evidence |
+
+Also moved: the ASD's action bar (was at the bottom of Compliance Review) and the DD/Director/CD bar (Approval Chain) are now ONE bar at the bottom of Approval Chain; the Download buttons that sat in Approval Chain are on the document tabs; the DD letter checklist moved from the Outcome Letter tab to Letter Checklist; the duplicate evidence lists inside Compliance Review are shown once, on Evidence ("Add an evidence file" stays in Compliance Review).
+
+Details-tab mapping (FISA):
+
+| Was on Details | Now on |
+|---|---|
+| Status, final decision notice, evidence dates | Summary |
+| SDP, Skills Programme, Date of FISA, Submitted | Summary |
+| Competency and throughput rate | Summary (stat tiles) |
+| Declaration | Evidence |
+| Learner list | Learner Results |
+| Evidence list, Documents for this batch | Evidence |
+
+The old FISA Compliance Review tab (notes, evidence notes, recommendations, E1, folder checklist) and the E2 form that sat in Approval Chain are now all on **Section E** (E2 shows a short note until the batch reaches the Deputy Director).
+
+Buttons: secondary actions (Request more evidence, Recommend decline, Decline) are on the left and the primary action on the right, in the same order on every stage (`ResultsActionBar.tsx`).
+
+### SDP signposting
+A card at the top of the FISA module (SDP) with "Go to FISA results"; the matching card on Approval of Results → FISA with a button back; one-line descriptions on the SDP dashboard rows for FISA and Approval of Results. Wording is in `config/labels.ts`.
+
+### Assumptions
+- The QP's EISA report omits the ASD's recommendation, bad practices and good practices from section 5 (they come from the ASD's section 2 review).
+- The Letter Checklist tab shows the interactive checklist to the Deputy Director at the DD stage and the read-only document to everyone else.
+- "Generated on" was dropped from the report header so the screen and the download are identical.
+
+### Checked
+Scratchpad check (`n1check.tsx`, bundled with esbuild and rendered with react-dom/server for every seeded EISA and FISA batch): 1,220 checks pass, 0 fail. Approved FISA batch: all four internal roles get the code, outcome letter, SP recommendation letter, report (title, Section E, A–D line) and recommendations text on screen; no Draft banner on final documents. Every document tab renders for approved, declined and in-progress batches (EISA and FISA, all four internal roles, QP and SDP). QP/SDP tabs never contain the compliance review, E1/E2, the letter checklist, the tracking register, the recommendation letter or annexures C/D. The Draft banner is present exactly when the batch is undecided. `eslint src/features/assessments-v2` and the scoped `tsc -p` check pass clean.
+
 ## Change log
 
 - **2026-10-20** — Phase 0 foundation built: skeleton, config (roles/teams/nav/labels/flags), v2-local role switcher, workflow engine, shared checklist component, letters, audit trail, in-app notifications, mock persistence layer, backend-dependent stubs, old checklist/form wording copied into mock data, module folder skeleton, entry point with its own QueryClientProvider. Router mount (`/assessments-v2/*` in `src/App.tsx`) approved and applied.
@@ -1628,3 +1685,4 @@ Rows 29.29, 29.28, 29.35, plus QCTO's templates. EISA and FISA tabs. Built 10 No
 - **2026-11-09** — Batch V1 (change request doc v14, rows 05.13, 05.14): a Marking & Moderation or RPL/ARPL visit lists several qualifications (Marking & Moderation: each with its own published EISA sitting), shown on Details, Planning, All Visits ("and N more"), the QP's Visit Outcomes and the booking notification; script verification rows choose their qualification with the sample size per qualification and in total. The DD's report approval is now "Approved (final)" or "Approved with remediation" (items required, shared with the stakeholder automatically); the QP (or the ASD, for a visit without a QP) answers with evidence and a response, the DD accepts or asks for further remediation; every round is kept and audited, and Complete Visit needs Approved (final). `SEED_VERSION = 'A15'` (4 visits added). QCTO still has to confirm the status names. 7-weekday seed check (14 runs), `npx eslint src/features/assessments-v2` and the scoped `tsc -p` check pass clean. See "Batch V1" above.
 - **2026-11-09** — Batch N1 (change request doc v14, rows 29.27, 05.19, 29.30, 05.20, 05.16): verification codes per financial year (EISA `QCTO/.../V<yy>-<n>`, FISA `QCTOSP/.../C<yy>-<nn>`); every QCTO stage can Request more evidence (the old decline loop, new stage More evidence requested, with the request and received dates), the Deputy Director and the Director can Recommend decline, only the Chief Director can Decline results (final, with irregularities and corrective actions, no resubmit, no Post-EISA visit); Outcome Letter (QCTO's EISA approval/decline and SP approval/decline wording, DRAFT from the DD stage, signed by the Chief Director) and the Certification recommendation letter (approved only, internal only) with downloads and an internal Sent to Certification tab; FISA absent learners, FISA date and the ASD's recommendations for improvement; EISA and FISA throughput rate. `SEED_VERSION` A16: codes and letters on approved batches, A11 is More evidence requested, new declined batch A12. 7-weekday seed check (14 runs, 126 checks) passes; eslint and the scoped `tsc -p` check pass clean.
 - **2026-11-10** — Batch N2 (change request doc v14, rows 29.29, 29.28, 29.35): EISA Compliance Review replaced by section 2 of QCTO's verification report (17 lines, pre-filled lines, previous checklists read-only); EISA verification report download; FISA Section E1/E2; DD Approval of Results letter checklist required before Send on; EISA (32) and FISA (21) tracking registers by quarter; per-batch audit trail CSV. `SEED_VERSION` A17. Checks and lint pass.
+- **2026-11-10** — Batch N.1 (Approval of Results tab layout): Summary / Learner Results / Evidence / Compliance Review (FISA: Section E) / Letter Checklist / Approval Chain / Outcome Letter / Verification Report / Certification Recommendation / Audit Trail, every letter, report and checklist on screen from the same model as its download, Draft banners, one action bar, QP/SDP verification report leak fixed, SDP signposting between FISA and Approval of Results. No seed change (A17). Checks and lint pass.

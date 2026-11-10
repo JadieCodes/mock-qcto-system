@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { roleDescriptor } from '../../config/roles';
+import { LABELS } from '../../config/labels';
 import { navForPortal } from '../../config/nav';
 import { isModuleVisible } from '../visibility/moduleAccess';
 import type { Portal } from '../../types';
@@ -10,6 +11,12 @@ import { useV2Role } from './useV2Role';
 const PORTAL_ACCENT: Record<Portal, string> = {
   internal: 'border-l-4 border-l-blue-500',
   external: 'border-l-4 border-l-teal-500',
+};
+
+// Batch N.1: one line under a module the SDP could mix up (FISA instrument vs FISA results).
+const SDP_MODULE_DESCRIPTIONS: Record<string, string> = {
+  fisa: LABELS.sdpDashboardFisa,
+  'approval-of-results': LABELS.sdpDashboardApprovalOfResults,
 };
 
 export function Dashboard({ portal }: { portal: Portal }) {
@@ -34,7 +41,10 @@ export function Dashboard({ portal }: { portal: Portal }) {
         <div className="divide-y">
           {modules.map((m) => (
             <div key={m.path} className="px-4 py-3 flex items-center justify-between transition-colors hover:bg-gray-50">
-              <span className="text-sm font-medium text-gray-700">{m.label}</span>
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-gray-700">{m.label}</span>
+                {role === 'SDP' && SDP_MODULE_DESCRIPTIONS[m.path] && <p className="text-xs text-gray-500 mt-0.5">{SDP_MODULE_DESCRIPTIONS[m.path]}</p>}
+              </div>
               <span
                 className={cn(
                   'rounded-full px-2.5 py-0.5 text-xs font-semibold',

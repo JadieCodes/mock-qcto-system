@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LABELS } from '../../../config/labels';
+import { SectionCard } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
 import { FisaValidationStatusBadge } from '../components/StatusBadge';
@@ -27,6 +30,16 @@ export function ExternalDashboard() {
         <h2 className="text-xl font-bold text-gray-900">FISA — Skills Programme Track</h2>
         <p className="text-sm text-gray-500 mt-1">Develop and submit your instrument.</p>
       </div>
+
+      {/* Batch N.1: the two FISA places, for the SDP. Nothing moves. */}
+      <SectionCard>
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-700">{LABELS.fisaSignpostInstrument}</p>
+          <Button asChild size="sm" className="shrink-0">
+            <Link to="../approval-of-results">{LABELS.fisaSignpostInstrumentButton}</Link>
+          </Button>
+        </div>
+      </SectionCard>
 
       <Tabs defaultValue="validation">
         <TabsList>

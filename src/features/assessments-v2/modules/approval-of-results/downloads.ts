@@ -6,6 +6,7 @@
 import { roleDescriptor } from '../../config/roles';
 import type { AuditEntry } from '../../shared/audit/types';
 import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
+import type { DocBlock } from './documentModel';
 import type { Role } from '../../types';
 import {
   RESULTS_AD_ROLE,
@@ -144,13 +145,6 @@ export function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
   };
 }
 
-export function table(headers: string[], rows: string[][]): string {
-  if (rows.length === 0) return '<p class="muted">None.</p>';
-  const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('');
-  const body = rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
-  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-}
-
 export function page(title: string, content: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -163,7 +157,7 @@ h1 { font-size: 22px; margin: 4px 0 16px; } h2 { font-size: 16px; margin: 28px 0
 .org { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; }
 .muted { color: #6b7280; font-size: 13px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-th { background: #f9fafb; } dl { display: grid; grid-template-columns: 200px 1fr; gap: 4px 12px; font-size: 14px; } dt { color: #6b7280; }
+th { background: #f9fafb; } .draft { border: 2px solid #d97706; background: #fffbeb; color: #92400e; padding: 8px 12px; font-weight: bold; } dl { display: grid; grid-template-columns: 200px 1fr; gap: 4px 12px; font-size: 14px; } dt { color: #6b7280; }
 .body { white-space: pre-wrap; font-size: 14px; }
 </style>
 </head>
@@ -174,40 +168,73 @@ ${content}
 </html>`;
 }
 
-export function definitionList(items: { label: string; value: string }[]): string {
-  return `<dl>${items.map((i) => `<dt>${escapeHtml(i.label)}</dt><dd>${escapeHtml(i.value)}</dd>`).join('')}</dl>`;
+// Batch N.1: who acted at each approval stage in the deciding cycle, with their comment (the
+// Approval Chain tab).
+export interface ApprovalHistoryStep {
+  stageId: string;
+  stage: string;
+  actorName: string;
+  actorRole: string;
+  date: string;
+  comment: string;
 }
 
-// The annexure both verification reports end with.
-export function annexHtml(input: AnnexInput): string {
+export function approvalHistoryFromAudit(audit: AuditEntry[]): ApprovalHistoryStep[] {
+  return chainEntriesFromAudit(audit).map(({ stageId, entry }) => ({
+    stageId,
+    stage: stageLabel(stageId),
+    actorName: entry.actorName,
+    actorRole: roleLabel(entry.actorRole),
+    date: entry.timestamp.slice(0, 10),
+    comment: entry.note ?? '',
+  }));
+}
+
+// The annexure both verification reports end with. The QP and the SDP get annexures A and B only:
+// the approval chain and the audit trail carry QCTO's internal comments.
+export function annexBlocks(input: AnnexInput, audience: 'internal' | 'external'): DocBlock[] {
+  const blocks: DocBlock[] = [
+    { kind: 'h2', text: 'Annexure A: learner results' },
+    { kind: 'table', headers: input.learnerTable.headers, rows: input.learnerTable.rows },
+    { kind: 'h2', text: 'Annexure B: evidence' },
+    {
+      kind: 'table',
+      headers: ['File', 'Tag', 'Type', 'Size', 'Uploaded'],
+      rows: input.evidence.map((d) => [d.fileName, d.tag ?? '—', d.fileType ?? '—', formatFileSize(d.fileSize), d.uploadedAt.slice(0, 10)]),
+    },
+  ];
+  if (input.onFile && input.onFile.length > 0) {
+    blocks.push(
+      { kind: 'h3', text: 'Already on file' },
+      { kind: 'table', headers: ['Document', 'File', 'QP choice'], rows: input.onFile.map((d) => [d.label, d.fileName, d.choice]) },
+    );
+  }
+  if (audience === 'external') return blocks;
   const chain = approvalChainFromAudit(input.audit);
   const audit = [...input.audit].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  return `<h2>Annexure A: learner results</h2>
-${table(input.learnerTable.headers, input.learnerTable.rows)}
-<h2>Annexure B: evidence</h2>
-${table(
-  ['File', 'Tag', 'Type', 'Size', 'Uploaded'],
-  input.evidence.map((d) => [d.fileName, d.tag ?? '—', d.fileType ?? '—', formatFileSize(d.fileSize), d.uploadedAt.slice(0, 10)]),
-)}
-${
-  input.onFile && input.onFile.length > 0
-    ? `<h3>Already on file</h3>
-${table(['Document', 'File', 'QP choice'], input.onFile.map((d) => [d.label, d.fileName, d.choice]))}`
-    : ''
-}
-<h2>Annexure C: approval chain</h2>
-${table(['Stage', 'Name', 'Role', 'Date'], chain.map((s) => [s.stage, s.actorName, s.actorRole, s.date]))}
-${
-  input.declineHistory.length > 0
-    ? `<h3>Earlier requests for more evidence</h3>
-${table(['Stage', 'Requested by', 'Reason', 'Date'], input.declineHistory.map((d) => [stageLabel(d.stageId), d.decidedBy, d.reason, d.decidedAt.slice(0, 10)]))}`
-    : ''
-}
-<h2>Annexure D: audit trail</h2>
-${table(
-  ['Date and time', 'Action', 'Name', 'Role', 'Note'],
-  audit.map((e) => [new Date(e.timestamp).toLocaleString('en-ZA'), e.action, e.actorName, roleLabel(e.actorRole), e.note ?? '']),
-)}`;
+  blocks.push(
+    { kind: 'h2', text: 'Annexure C: approval chain' },
+    { kind: 'table', headers: ['Stage', 'Name', 'Role', 'Date'], rows: chain.map((s) => [s.stage, s.actorName, s.actorRole, s.date]) },
+  );
+  if (input.declineHistory.length > 0) {
+    blocks.push(
+      { kind: 'h3', text: 'Earlier requests for more evidence' },
+      {
+        kind: 'table',
+        headers: ['Stage', 'Requested by', 'Reason', 'Date'],
+        rows: input.declineHistory.map((d) => [stageLabel(d.stageId), d.decidedBy, d.reason, d.decidedAt.slice(0, 10)]),
+      },
+    );
+  }
+  blocks.push(
+    { kind: 'h2', text: 'Annexure D: audit trail' },
+    {
+      kind: 'table',
+      headers: ['Date and time', 'Action', 'Name', 'Role', 'Note'],
+      rows: audit.map((e) => [new Date(e.timestamp).toLocaleString('en-ZA'), e.action, e.actorName, roleLabel(e.actorRole), e.note ?? '']),
+    },
+  );
+  return blocks;
 }
 
 // Batch N2: the name and date of the person who took the given role's step in the deciding cycle

@@ -11,6 +11,16 @@ export const LABELS = {
   reportsReceived: 'Reports Received',
   approvalOfResults: 'Approval of Results',
 
+  // Batch N.1: QCTO asked for FISA results under Approval of Results; the FISA instrument stays in
+  // the FISA module. These lines point the SDP from one place to the other.
+  fisaSignpostInstrument:
+    'FISA has two parts. Here you develop your FISA instrument and get it validated. When the FISA has taken place, submit the learner results under Approval of Results → FISA.',
+  fisaSignpostInstrumentButton: 'Go to FISA results',
+  fisaSignpostResults: 'Submit your FISA learner results here. Your FISA instrument is developed and validated in the FISA section.',
+  fisaSignpostResultsButton: 'Back to the FISA section',
+  sdpDashboardFisa: 'Develop your FISA instrument and get it validated. FISA learner results are submitted under Approval of Results → FISA.',
+  sdpDashboardApprovalOfResults: 'Submit your FISA learner results here. Your FISA instrument is developed and validated in the FISA section.',
+
   // PM-04 — open question, placeholders until QCTO confirms the real names.
   eisaReadinessNoticePlaceholder: 'EISA Readiness Notice',
   markingModerationVisitRequestPlaceholder: 'Marking & Moderation Visit Request',

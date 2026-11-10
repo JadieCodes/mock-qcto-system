@@ -5,24 +5,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
-import { FISA_EVIDENCE_TAG_OPTIONS, FISA_RESULTS_RECORD_TYPE } from '../config';
-import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
-import { BatchDownloads } from '../components/BatchDownloads';
-import { EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
-import { OutcomeLetterView } from '../components/OutcomeLetterView';
-import { documentsForPortal, FISA_BATCH_DOCUMENTS } from '../batchDocuments';
-import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
-import { ResultsBatchStatusBadge } from '../components/StatusBadge';
-import { downloadFisaVerificationReport } from '../fisaVerificationReport';
-import { downloadLetterModel, fisaOutcomeLetter } from '../outcomeLetters';
-import { useFisaResultsAction, useFisaResultsBatch, useLearnersForSdp, useSaveFisaResultsDraft, useSubmitFisaResultsBatch } from '../hooks';
+import { FISA_EVIDENCE_TAG_OPTIONS } from '../config';
+import { FisaSubmittedView } from './FisaSubmittedView';
+import { useFisaResultsBatch, useLearnersForSdp, useSaveFisaResultsDraft, useSubmitFisaResultsBatch } from '../hooks';
 import { fisaFiguresOf, fisaSubmissionIssues } from '../workflow';
 import type { FisaEvidenceTag, FisaResultsBatch, LearnerResult, LearnerResultOutcome, TaggedEvidenceDocument } from '../types';
 
@@ -209,91 +200,6 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
   );
 }
 
-function SubmittedView({ batch }: { batch: FisaResultsBatch }) {
-  const { role, person } = useV2Role();
-  const resultsAction = useFisaResultsAction();
-  const latestRequest = batch.declineHistory[batch.declineHistory.length - 1];
-  const figures = fisaFiguresOf(batch);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">Status</span>
-        <ResultsBatchStatusBadge batch={batch} />
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">Submitted</span>
-        <span className="text-sm">{batch.submittedAt?.slice(0, 10) ?? '—'}</span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">Competency Rate</span>
-        <span className="text-sm font-semibold">
-          {figures.competencyRatePercent}% ({figures.competent}/{figures.completed} completed)
-        </span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">Throughput Rate</span>
-        <span className="text-sm font-semibold">
-          {figures.throughputRatePercent}% ({figures.completed}/{figures.enrolled} enrolled)
-        </span>
-      </div>
-      <EvidenceDates requestedAt={batch.evidenceRequestedAt} receivedAt={batch.finalEvidenceReceivedAt} />
-
-      {batch.workflow.stageId === 'more-evidence' && latestRequest && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-          <p className="text-xs font-semibold text-amber-700 uppercase">More Evidence Requested</p>
-          <p className="text-sm text-amber-800">{latestRequest.reason}</p>
-          <Button
-            size="sm"
-            disabled={resultsAction.isPending}
-            onClick={() => resultsAction.mutate({ batchId: batch.id, actionId: 'batch-resubmit', actorRole: role, actorId: person.id, actorName: person.name })}
-          >
-            Resubmit
-          </Button>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <Label className="text-xs text-gray-400 uppercase">Learner Results</Label>
-        <FisaLearnerResultsList results={batch.learnerResults} />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs text-gray-400 uppercase">Evidence</Label>
-        <FisaEvidenceList files={batch.evidenceDocuments} />
-      </div>
-      {batch.declaration && (
-        <p className="text-xs text-gray-500">
-          Declaration ticked by {batch.declaration.acceptedBy} on {batch.declaration.acceptedAt.slice(0, 10)}.
-        </p>
-      )}
-
-      {/* Batch N1: the SDP sees its Outcome Letter and its own documents, never the recommendation letter. */}
-      <BatchDocumentsCard
-        documents={documentsForPortal(FISA_BATCH_DOCUMENTS, 'external')}
-        downloads={
-          batch.finalDecision
-            ? {
-                'fisa-outcome-letter': () => downloadLetterModel(fisaOutcomeLetter(batch, false)),
-                'fisa-verification-report': () => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
-              }
-            : {}
-        }
-      />
-
-      {batch.finalDecision && (
-        <div className="space-y-3 border-t pt-4">
-          <FinalDecisionNotice decision={batch.finalDecision} />
-          <BatchDownloads
-            onDownloadLetter={() => downloadLetterModel(fisaOutcomeLetter(batch, false))}
-            onDownloadReport={() => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id))}
-          />
-          <OutcomeLetterView model={fisaOutcomeLetter(batch, false)} />
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function FisaResultsBatchDetail({ batchId, onClose }: { batchId: string | null; onClose: () => void }) {
   const { data: batch } = useFisaResultsBatch(batchId);
   const isDraft = batch?.workflow.stageId === 'sdp-draft';
@@ -307,7 +213,7 @@ export function FisaResultsBatchDetail({ batchId, onClose }: { batchId: string |
       description={batch ? `${batch.sdpName} — FISA results` : undefined}
       footer={isDraft ? undefined : <Button variant="outline" onClick={onClose}>Close</Button>}
     >
-      {batch && (isDraft ? <DraftEditor batch={batch} onDone={onClose} /> : <SubmittedView batch={batch} />)}
+      {batch && (isDraft ? <DraftEditor batch={batch} onDone={onClose} /> : <FisaSubmittedView key={batch.id} batch={batch} />)}
     </Modal>
   );
 }

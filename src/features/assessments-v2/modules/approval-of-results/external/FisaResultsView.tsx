@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { LABELS } from '../../../config/labels';
 import { EmptyState, SectionCard } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
@@ -59,6 +61,16 @@ export function FisaResultsView() {
 
   return (
     <div className="space-y-6">
+      {/* Batch N.1: the matching card to the one in the FISA section. */}
+      <SectionCard>
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-700">{LABELS.fisaSignpostResults}</p>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link to="../fisa">{LABELS.fisaSignpostResultsButton}</Link>
+          </Button>
+        </div>
+      </SectionCard>
+
       <div className="flex justify-end">
         <Button className="gap-2" onClick={() => setNewOpen(true)}>
           <Plus className="h-4 w-4" />

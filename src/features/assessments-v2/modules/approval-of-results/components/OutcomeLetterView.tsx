@@ -1,6 +1,7 @@
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadLetterModel, type LetterBlock, type LetterModel } from '../outcomeLetters';
+import { DraftBanner } from './DocumentView';
 
 function Block({ block }: { block: LetterBlock }) {
   switch (block.kind) {
@@ -94,21 +95,21 @@ function Block({ block }: { block: LetterBlock }) {
   }
 }
 
-// Batch N1: an Outcome Letter or a Certification recommendation letter, on screen. A draft is
-// marked "Draft" and has no signature or verification code yet.
+// Batch N1: an Outcome Letter or a Certification recommendation letter, on screen. A draft carries
+// the Draft banner (Batch N.1) and has no signature or verification code yet.
 export function OutcomeLetterView({ model }: { model: LetterModel }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-gray-900">
           {model.title}
-          {model.draft && <span className="ml-2 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800">Draft</span>}
         </p>
         <Button type="button" size="sm" variant="outline" className="gap-2" onClick={() => downloadLetterModel(model)}>
           <Download className="h-4 w-4" />
           Download
         </Button>
       </div>
+      {model.draft && <DraftBanner />}
       <div className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm">
         {model.blocks.map((block, i) => (
           <Block key={`${block.kind}-${i}`} block={block} />

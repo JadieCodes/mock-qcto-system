@@ -1,7 +1,6 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
@@ -10,23 +9,29 @@ import { getChecklistIssues, isChecklistComplete } from '../../../shared/checkli
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
+import { PageHeader } from '../../../shared/ui/PageHeader';
+import { SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
 import { FISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from '../config';
+import { ApprovalHistory } from '../components/ApprovalHistory';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { AuditTrailCsvDownload } from '../components/AuditTrailCsvDownload';
-import { BatchDownloads } from '../components/BatchDownloads';
+import { BatchTabs } from '../components/BatchTabs';
+import { FisaOutcomeLetterDoc, FisaRecommendationLetterDoc, FisaVerificationReportDoc } from '../components/Documents';
 import { FisaSectionE1, FisaSectionE2 } from '../components/FisaSectionEForm';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
 import { DeclineRecommendationsNotice, DeclineResultsForm, EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
-import { OutcomeLetterView } from '../components/OutcomeLetterView';
+import { NextStepCard } from '../components/NextStepCard';
 import { ResultsActionBar } from '../components/ResultsActionBar';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { documentsForPortal, FISA_BATCH_DOCUMENTS, type FisaBatchDocumentId } from '../batchDocuments';
 import { downloadCsvFile } from '../../../shared/csv/csv';
 import { fisaSectionEIssues } from '../fisaSectionE';
 import { downloadFisaVerificationReport } from '../fisaVerificationReport';
+import { internalNextStep } from '../nextStep';
+import { fisaInternalTabIds, type ResultsTabId } from '../tabs';
 import { fisaRegisterCsv } from '../trackingRegister';
 import { downloadLetterModel, fisaOutcomeLetter, fisaRecommendationLetter } from '../outcomeLetters';
 import {
@@ -63,88 +68,119 @@ function fisaDownloads(batch: FisaResultsBatch): Partial<Record<FisaBatchDocumen
   };
 }
 
-function DetailsTab({ batch }: { batch: FisaResultsBatch }) {
+function InfoItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-gray-400 uppercase">{label}</Label>
+      <div className="text-sm font-medium">{children}</div>
+    </div>
+  );
+}
+
+// Batch N.1, Summary tab. A decided batch also shows the ASD's recommendations for improvements
+// here (read-only), the same text the Outcome Letter prints.
+function SummaryTab({ batch, onOpenTab }: { batch: FisaResultsBatch; onOpenTab: (tab: ResultsTabId) => void }) {
+  const { role } = useV2Role();
   const figures = fisaFiguresOf(batch);
+  const latestRequest = batch.declineHistory[batch.declineHistory.length - 1];
+  const step = internalNextStep(FISA_RESULTS_WORKFLOW, batch.workflow.stageId, role, 'fisa', batch.finalDecision?.outcome ?? null);
+  const tiles: { label: string; value: string }[] = [
+    { label: 'Enrolled', value: String(figures.enrolled) },
+    { label: 'Completed', value: String(figures.completed) },
+    { label: 'Absent', value: String(figures.absent) },
+    { label: 'Competent', value: String(figures.competent) },
+    { label: 'Not yet competent', value: String(figures.notYetCompetent) },
+    { label: 'Competency rate', value: `${figures.competencyRatePercent}%` },
+    { label: 'Throughput rate', value: `${figures.throughputRatePercent}%` },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">Status</span>
-        <ResultsBatchStatusBadge batch={batch} />
-      </div>
+      <PageHeader
+        title="Summary"
+        description={`Verification code: ${batch.finalDecision?.verificationCode ?? 'issued at the final decision'}`}
+        actions={<ResultsBatchStatusBadge batch={batch} />}
+      />
       {batch.finalDecision && <FinalDecisionNotice decision={batch.finalDecision} />}
       <EvidenceDates requestedAt={batch.evidenceRequestedAt} receivedAt={batch.finalEvidenceReceivedAt} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">SDP</Label>
-          <p className="text-sm font-medium">{batch.sdpName}</p>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Skills Programme</Label>
-          <p className="text-sm font-medium">{batch.skillsProgrammeTitle}</p>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Date of FISA</Label>
-          <p className="text-sm font-medium">{batch.fisaDates.join(', ')}</p>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Submitted</Label>
-          <p className="text-sm font-medium">{batch.submittedAt?.slice(0, 10) ?? '—'}</p>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-400 uppercase">Declaration</Label>
-          <p className="text-sm font-medium">
-            {batch.declaration ? `Ticked by ${batch.declaration.acceptedBy} on ${batch.declaration.acceptedAt.slice(0, 10)}` : '—'}
-          </p>
-        </div>
+        <InfoItem label="SDP">{batch.sdpName}</InfoItem>
+        <InfoItem label="Skills Programme">{batch.skillsProgrammeTitle}</InfoItem>
+        <InfoItem label={batch.fisaDates.length > 1 ? 'Dates of FISA' : 'Date of FISA'}>{batch.fisaDates.join(', ')}</InfoItem>
+        <InfoItem label="Submitted">{batch.submittedAt?.slice(0, 10) ?? '—'}</InfoItem>
       </div>
-
-      <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Competency Rate</p>
-        <p className="text-2xl font-bold text-gray-900">{figures.competencyRatePercent}%</p>
+      <div className="space-y-1.5">
+        <StatTileGrid className="grid-cols-2 sm:grid-cols-4">
+          {tiles.map((t) => (
+            <StatTile key={t.label} label={t.label} value={t.value} />
+          ))}
+        </StatTileGrid>
         <p className="text-xs text-gray-500">
-          {figures.competent} of {figures.completed} learners who completed the FISA found competent ({figures.absent} absent).
+          Competency rate = competent ÷ completed. Throughput rate = completed ÷ enrolled ({figures.completed} of {figures.enrolled}).
         </p>
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-1">Throughput Rate</p>
-        <p className="text-lg font-bold text-gray-900">{figures.throughputRatePercent}%</p>
-        <p className="text-xs text-gray-500">Throughput rate = completed ÷ enrolled ({figures.completed} of {figures.enrolled}).</p>
+      </div>
+      {batch.finalDecision && (
+        <SectionCard title="Recommendations for improvements before the next FISA">
+          <p className="whitespace-pre-wrap p-4 text-sm text-gray-700">{batch.recommendationsForImprovement.trim() || 'None recorded.'}</p>
+        </SectionCard>
+      )}
+      <DeclineRecommendationsNotice recommendations={batch.declineRecommendations} cycle={batch.cycleCount} />
+      {batch.workflow.stageId === 'more-evidence' && latestRequest && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1">
+          <p className="font-semibold">More evidence requested at: {stageLabel(latestRequest.stageId)}</p>
+          <p>{latestRequest.reason}</p>
+          <p className="text-xs text-amber-700">The SDP has been notified and can add evidence and resubmit.</p>
+        </div>
+      )}
+      <NextStepCard step={step} onOpenTab={onOpenTab} />
+    </div>
+  );
+}
+
+function LearnerResultsTab({ batch }: { batch: FisaResultsBatch }) {
+  return (
+    <SectionCard title="Learner results">
+      <div className="p-4">
         <FisaLearnerResultsList results={batch.learnerResults} />
       </div>
+    </SectionCard>
+  );
+}
 
-      <div className="space-y-1.5">
-        <Label className="text-xs text-gray-400 uppercase">Evidence</Label>
-        <FisaEvidenceList files={batch.evidenceDocuments} />
-      </div>
+function EvidenceTab({ batch }: { batch: FisaResultsBatch }) {
+  return (
+    <div className="space-y-4">
+      <SectionCard title="Evidence">
+        <div className="p-4">
+          <FisaEvidenceList files={batch.evidenceDocuments} />
+        </div>
+      </SectionCard>
+      <SectionCard title="Declaration">
+        <p className="p-4 text-sm text-gray-700">
+          {batch.declaration ? `Ticked by ${batch.declaration.acceptedBy} on ${batch.declaration.acceptedAt.slice(0, 10)}` : '—'}
+        </p>
+      </SectionCard>
       <BatchDocumentsCard documents={documentsForPortal(FISA_BATCH_DOCUMENTS, 'internal')} downloads={fisaDownloads(batch)} />
     </div>
   );
 }
 
-// The same ASD compliance and evidence review as an EISA batch, with the same advance check
-// (api.ts assertAsdReviewComplete).
-function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
-  const { role, person } = useV2Role();
+// The ASD's compliance and evidence review (api.ts assertAsdReviewComplete), the recommendations
+// for improvements and Section E1, then the Deputy Director's Section E2. Everything is on screen
+// for every internal role at every stage; it can only be edited by the role whose stage it is.
+function SectionETab({ batch }: { batch: FisaResultsBatch }) {
+  const { role } = useV2Role();
   const saveChecklist = useSaveFisaComplianceChecklist();
   const saveReviewNotes = useSaveFisaComplianceReviewNotes();
   const saveEvidenceNotes = useSaveFisaEvidenceEvaluationNotes();
   const saveRecommendations = useSaveFisaRecommendations();
   const uploadEvidence = useUploadFisaReviewEvidence();
-  const resultsAction = useFisaResultsAction();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadChecked, setUploadChecked] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const editable = role === RESULTS_AD_ROLE && batch.workflow.stageId === 'ad-review';
-  const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
-  const notesComplete = batch.complianceReviewNotes.trim().length > 0 && batch.evidenceEvaluationNotes.trim().length > 0;
-  const sectionEIssues = fisaSectionEIssues(batch);
-  const advanceIssues: ValidationIssue[] = editable
-    ? [
-        ...(batch.complianceReviewNotes.trim() ? [] : [{ field: 'complianceReviewNotes', message: 'Compliance review notes are required.' }]),
-        ...(batch.evidenceEvaluationNotes.trim() ? [] : [{ field: 'evidenceEvaluationNotes', message: 'Evidence evaluation notes are required.' }]),
-        ...getChecklistIssues(batch.complianceChecklist, true),
-        ...sectionEIssues,
-      ]
-    : [];
+  const e2Reached = !['ad-review', 'more-evidence'].includes(batch.workflow.stageId);
 
   return (
     <div className="space-y-6">
@@ -187,6 +223,7 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
                 e.target.value = '';
               }}
             />
+            <p className="text-xs text-gray-500">Added files appear on the Evidence tab.</p>
           </>
         )}
         <FileCheckError message={uploadError} />
@@ -202,7 +239,7 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
           disabled={!editable}
           onChange={(e) => saveRecommendations.mutate({ id: batch.id, text: e.target.value })}
         />
-        <p className="text-xs text-gray-500">Printed on the Outcome Letter.</p>
+        <p className="text-xs text-gray-500">Printed on the Outcome Letter.{!editable && ' Only the ASD can change this, and only while the batch is at the ASD stage.'}</p>
       </div>
 
       <FisaSectionE1 batch={batch} editable={editable} />
@@ -212,36 +249,73 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
         <Checklist sections={batch.complianceChecklist} readonly={!editable} onChange={(sections) => saveChecklist.mutate({ id: batch.id, sections })} />
       </div>
 
-      {batch.workflow.stageId === 'ad-review' && (
-        <>
-          <ValidationSummary issues={advanceIssues} title="Complete these before advancing to the Deputy Director:" />
-          <ResultsActionBar
-            definition={FISA_RESULTS_WORKFLOW}
-            stageId={batch.workflow.stageId}
-            role={role}
-            disabledActionIds={!(checklistComplete && notesComplete && sectionEIssues.length === 0) ? ['ad-advance'] : []}
-            onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId: person.id, actorName: person.name, note })}
-          />
-        </>
+      {e2Reached ? (
+        <FisaSectionE2 batch={batch} editable={role === RESULTS_DD_ROLE && batch.workflow.stageId === 'dd-review'} />
+      ) : (
+        <SectionCard title="E2 Recommendation & Approval">
+          <p className="p-4 text-sm text-gray-500">The Deputy Director completes E2 once the ASD has sent the batch on.</p>
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
+// ONE action bar, at the bottom of the Approval Chain tab, for whichever stage the batch is at.
+function StageActions({ batch }: { batch: FisaResultsBatch }) {
+  const { role, person } = useV2Role();
+  const resultsAction = useFisaResultsAction();
+  const stageId = batch.workflow.stageId;
+  const run = (actionId: string, note?: string) =>
+    resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId: person.id, actorName: person.name, note });
+
+  const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
+  const notesComplete = batch.complianceReviewNotes.trim().length > 0 && batch.evidenceEvaluationNotes.trim().length > 0;
+  const sectionEIssues = fisaSectionEIssues(batch);
+  const advanceIssues: ValidationIssue[] =
+    stageId === 'ad-review' && role === RESULTS_AD_ROLE
+      ? [
+          ...(batch.complianceReviewNotes.trim() ? [] : [{ field: 'complianceReviewNotes', message: 'Compliance review notes are required.' }]),
+          ...(batch.evidenceEvaluationNotes.trim() ? [] : [{ field: 'evidenceEvaluationNotes', message: 'Evidence evaluation notes are required.' }]),
+          ...getChecklistIssues(batch.complianceChecklist, true),
+          ...sectionEIssues,
+        ]
+      : [];
+
+  if (!['ad-review', 'dd-review', 'director-review', 'chief-director-review'].includes(stageId)) return null;
+  const disabledActionIds = stageId === 'ad-review' && !(checklistComplete && notesComplete && sectionEIssues.length === 0) ? ['ad-advance'] : [];
+
+  return (
+    <div className="space-y-2 border-t pt-4">
+      {stageId === 'ad-review' && <ValidationSummary issues={advanceIssues} title="Complete these (Section E tab) before advancing to the Deputy Director:" />}
+      <ResultsActionBar definition={FISA_RESULTS_WORKFLOW} stageId={stageId} role={role} hiddenActionIds={['chief-director-decline']} disabledActionIds={disabledActionIds} onRun={run} />
+      {canDeclineResults(role, stageId) && (
+        <DeclineResultsForm
+          disabled={resultsAction.isPending}
+          onDecline={(irregularities, correctiveActions) =>
+            resultsAction.mutate({
+              batchId: batch.id,
+              actionId: 'chief-director-decline',
+              actorRole: role,
+              actorId: person.id,
+              actorName: person.name,
+              irregularities,
+              correctiveActions,
+            })
+          }
+        />
       )}
     </div>
   );
 }
 
 function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
-  const { role, person } = useV2Role();
-  const resultsAction = useFisaResultsAction();
-
   const stageOrder = ['ad-review', 'dd-review', 'director-review', 'chief-director-review'];
   const currentIndex = batch.workflow.stageId === 'approved' ? stageOrder.length : stageOrder.indexOf(batch.workflow.stageId);
   const latestRequest = batch.declineHistory[batch.declineHistory.length - 1];
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Approval Chain</p>
-        </div>
+      <SectionCard title="Approval Chain">
         <div className="p-4 flex flex-wrap items-center gap-2 text-xs">
           {['ASD', 'Deputy Director', 'Director', 'Chief Director'].map((label, i) => (
             <span key={label} className={i <= currentIndex && batch.workflow.stageId !== 'more-evidence' ? 'font-semibold text-blue-700' : 'text-gray-400'}>
@@ -250,41 +324,11 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
             </span>
           ))}
         </div>
-      </div>
+      </SectionCard>
+
+      <ApprovalHistory audit={getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)} currentStageId={batch.workflow.stageId} declineHistory={batch.declineHistory} />
 
       <DeclineRecommendationsNotice recommendations={batch.declineRecommendations} cycle={batch.cycleCount} />
-
-      {!['ad-review', 'more-evidence'].includes(batch.workflow.stageId) && (
-        <FisaSectionE2 batch={batch} editable={role === RESULTS_DD_ROLE && batch.workflow.stageId === 'dd-review'} />
-      )}
-
-      {['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId) && (
-        <div className="space-y-2">
-          <ResultsActionBar
-            definition={FISA_RESULTS_WORKFLOW}
-            stageId={batch.workflow.stageId}
-            role={role}
-            hiddenActionIds={['chief-director-decline']}
-            onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId: person.id, actorName: person.name, note })}
-          />
-          {canDeclineResults(role, batch.workflow.stageId) && (
-            <DeclineResultsForm
-              disabled={resultsAction.isPending}
-              onDecline={(irregularities, correctiveActions) =>
-                resultsAction.mutate({
-                  batchId: batch.id,
-                  actionId: 'chief-director-decline',
-                  actorRole: role,
-                  actorId: person.id,
-                  actorName: person.name,
-                  irregularities,
-                  correctiveActions,
-                })
-              }
-            />
-          )}
-        </div>
-      )}
 
       {batch.workflow.stageId === 'more-evidence' && latestRequest && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1">
@@ -294,58 +338,52 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
         </div>
       )}
 
-      {batch.finalDecision && (
-        <div className="space-y-3">
-          <FinalDecisionNotice decision={batch.finalDecision} />
-          <BatchDownloads
-            onDownloadLetter={() => downloadLetterModel(fisaOutcomeLetter(batch, false))}
-            onDownloadReport={() => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id))}
-          />
-        </div>
-      )}
+      <StageActions batch={batch} />
     </div>
   );
 }
 
-// Batch N1: the Outcome Letter is a draft from the Deputy Director stage onwards and final once the
-// batch is decided; the SP certification recommendation letter exists on an approved batch only.
-function FisaResultsBatchWorkspaceContent({ batch }: { batch: FisaResultsBatch }) {
-  const showLetter = !!batch.finalDecision || ['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId);
-  const recommendation = fisaRecommendationLetter(batch);
+// Batch N.1: Summary, Learner Results, Evidence, Section E, Approval Chain, Outcome Letter,
+// Verification Report, SP Certification Recommendation (approved only), Audit Trail (tabs.ts).
+// `initialTab` is for the seed check.
+export function FisaResultsBatchWorkspaceContent({ batch, initialTab = 'summary' }: { batch: FisaResultsBatch; initialTab?: ResultsTabId }) {
+  const [tab, setTab] = useState<ResultsTabId>(initialTab);
   return (
-    <Tabs defaultValue="details">
-      <TabsList className="flex-wrap h-auto">
-        <TabsTrigger value="details">Details</TabsTrigger>
-        <TabsTrigger value="compliance">Compliance Review</TabsTrigger>
-        <TabsTrigger value="chain">Approval Chain</TabsTrigger>
-        {showLetter && <TabsTrigger value="letter">Outcome Letter</TabsTrigger>}
-        {recommendation && <TabsTrigger value="recommendation">Certification Recommendation</TabsTrigger>}
-        <TabsTrigger value="audit">Audit Trail</TabsTrigger>
-      </TabsList>
-      <TabsContent value="details" className="pt-4">
-        <DetailsTab batch={batch} />
-      </TabsContent>
-      <TabsContent value="compliance" className="pt-4">
-        <ComplianceReviewTab batch={batch} />
-      </TabsContent>
-      <TabsContent value="chain" className="pt-4">
-        <ApprovalChainTab batch={batch} />
-      </TabsContent>
-      {showLetter && (
-        <TabsContent value="letter" className="pt-4">
-          <OutcomeLetterView model={fisaOutcomeLetter(batch, !batch.finalDecision)} />
-        </TabsContent>
-      )}
-      {recommendation && (
-        <TabsContent value="recommendation" className="pt-4">
-          <OutcomeLetterView model={recommendation} />
-        </TabsContent>
-      )}
-      <TabsContent value="audit" className="pt-4">
-        <AuditTrailCsvDownload recordType={FISA_RESULTS_RECORD_TYPE} recordId={batch.id} fileName={`Audit_Trail_FISA_${batch.id.slice(-4)}.csv`} />
-        <AuditTrailView recordTypes={[FISA_RESULTS_RECORD_TYPE]} recordId={batch.id} />
-      </TabsContent>
-    </Tabs>
+    <BatchTabs
+      ids={fisaInternalTabIds(batch)}
+      value={tab}
+      onValueChange={setTab}
+      render={(id) => {
+        switch (id) {
+          case 'summary':
+            return <SummaryTab batch={batch} onOpenTab={setTab} />;
+          case 'results':
+            return <LearnerResultsTab batch={batch} />;
+          case 'evidence':
+            return <EvidenceTab batch={batch} />;
+          case 'section-e':
+            return <SectionETab batch={batch} />;
+          case 'chain':
+            return <ApprovalChainTab batch={batch} />;
+          case 'letter':
+            return <FisaOutcomeLetterDoc batch={batch} />;
+          case 'report':
+            return <FisaVerificationReportDoc batch={batch} audit={getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)} audience="internal" />;
+          case 'recommendation':
+            return <FisaRecommendationLetterDoc batch={batch} />;
+          case 'audit':
+            return (
+              <>
+                <AuditTrailCsvDownload recordType={FISA_RESULTS_RECORD_TYPE} recordId={batch.id} fileName={`Audit_Trail_FISA_${batch.id.slice(-4)}.csv`} />
+                <AuditTrailView recordTypes={[FISA_RESULTS_RECORD_TYPE]} recordId={batch.id} />
+              </>
+            );
+          case 'compliance':
+          case 'checklist':
+            return null;
+        }
+      }}
+    />
   );
 }
 
@@ -360,7 +398,7 @@ export function FisaResultsBatchWorkspace({ batchId, onClose }: { batchId: strin
       description={batch ? `${batch.sdpName} — FISA results` : undefined}
       footer={<Button variant="outline" onClick={onClose}>Close</Button>}
     >
-      {batch && <FisaResultsBatchWorkspaceContent batch={batch} />}
+      {batch && <FisaResultsBatchWorkspaceContent key={batch.id} batch={batch} />}
     </Modal>
   );
 }
