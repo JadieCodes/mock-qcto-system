@@ -29,7 +29,7 @@ import {
   getFisaResultsBatch,
   listFisaResultsBatches,
   listFisaStandardsForResults,
-  listLearnersForSdp,
+  listLearnersForBatch,
   performFisaResultsAction,
   saveFisaComplianceChecklist,
   saveFisaComplianceReviewNotes,
@@ -205,8 +205,11 @@ export function useFisaStandardsForResults() {
   return useQuery({ queryKey: ['approval-of-results', 'fisa-standards'], queryFn: listFisaStandardsForResults });
 }
 
-export function useLearnersForSdp(sdpName: string) {
-  return useQuery({ queryKey: ['approval-of-results', 'sdp-learners', sdpName], queryFn: () => listLearnersForSdp(sdpName) });
+export function useLearnersForBatch(sdpName: string, skillsProgrammeTitle: string) {
+  return useQuery({
+    queryKey: ['approval-of-results', 'sdp-learners', sdpName, skillsProgrammeTitle],
+    queryFn: () => listLearnersForBatch(sdpName, skillsProgrammeTitle),
+  });
 }
 
 function useFisaResultsBatchMutation<TArgs>(mutationFn: (args: TArgs) => Promise<FisaResultsBatch>, successMessage?: string) {

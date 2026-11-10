@@ -10,20 +10,21 @@ import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheck
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { sdpDirectoryEntryByName } from '../../../mock/data/sdpDirectory';
 import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
-import { FISA_EVIDENCE_TAG_OPTIONS } from '../config';
+import { FISA_EVIDENCE_TAG_OPTIONS, fisaEvidenceTagLabel, fisaOutcomeLabel, FISA_RESULT_CODES } from '../config';
+import { fisaSheetBatchOf } from '../fisaLearnerSpreadsheet';
+import { FisaSpreadsheetUpload } from './FisaSpreadsheetUpload';
 import { FisaSubmittedView } from './FisaSubmittedView';
-import { useFisaResultsBatch, useLearnersForSdp, useSaveFisaResultsDraft, useSubmitFisaResultsBatch } from '../hooks';
-import { fisaFiguresOf, fisaSubmissionIssues } from '../workflow';
+import { useFisaResultsBatch, useLearnersForBatch, useSaveFisaResultsDraft, useSubmitFisaResultsBatch } from '../hooks';
+import { availableFisaEvidenceTags, fisaFiguresOf, fisaSubmissionIssues } from '../workflow';
 import type { FisaEvidenceTag, FisaResultsBatch, LearnerResult, LearnerResultOutcome, TaggedEvidenceDocument } from '../types';
 
 const NOT_ON_BATCH = 'not-on-batch';
 
 const OUTCOME_OPTIONS: { value: LearnerResultOutcome | typeof NOT_ON_BATCH; label: string }[] = [
   { value: NOT_ON_BATCH, label: 'Not on this batch' },
-  { value: 'competent', label: 'Competent' },
-  { value: 'not-yet-competent', label: 'Not yet competent' },
-  { value: 'absent', label: 'Absent' },
+  ...(Object.keys(FISA_RESULT_CODES) as LearnerResultOutcome[]).map((value) => ({ value, label: fisaOutcomeLabel(value) })),
 ];
 
 // QCTO feedback 3.14 (b): the SDP's draft — a result per learner, tagged evidence, the
@@ -32,7 +33,7 @@ const OUTCOME_OPTIONS: { value: LearnerResultOutcome | typeof NOT_ON_BATCH; labe
 function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () => void }) {
   const { role, person } = useV2Role();
   const sdpId = person.sdpId ?? person.id;
-  const { data: learners = [] } = useLearnersForSdp(batch.sdpName);
+  const { data: learners = [] } = useLearnersForBatch(batch.sdpName, batch.skillsProgrammeTitle);
   const saveDraft = useSaveFisaResultsDraft();
   const submit = useSubmitFisaResultsBatch();
   const [declared, setDeclared] = useState(false);
@@ -44,6 +45,26 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
 
   const saveLearnerResults = (learnerResults: LearnerResult[]) => saveDraft.mutate({ id: batch.id, sdpId, patch: { learnerResults } });
   const saveEvidence = (evidenceDocuments: TaggedEvidenceDocument[]) => saveDraft.mutate({ id: batch.id, sdpId, patch: { evidenceDocuments } });
+
+  const availableTags = availableFisaEvidenceTags(batch.evidenceDocuments);
+  // A single-use tag can be taken between picking it and adding the file; then nothing is selected.
+  const selectedTag = nextTag !== '' && availableTags.includes(nextTag) ? nextTag : '';
+  const sheetBatch = fisaSheetBatchOf(batch, sdpDirectoryEntryByName(batch.sdpName)?.accreditationNumber ?? '');
+  const sheetLearners = learners.map((l) => ({ learnerId: l.id, fullName: l.fullName, idNumber: l.idNumber, enrolledDate: l.enrolledDate }));
+
+  // A clean learner spreadsheet fills the results and becomes the Learner spreadsheet evidence (in one save).
+  const attachSpreadsheet = (learnerResults: LearnerResult[], file: { name: string; size: number; type: string }) =>
+    saveDraft.mutate({
+      id: batch.id,
+      sdpId,
+      patch: {
+        learnerResults,
+        evidenceDocuments: [
+          ...batch.evidenceDocuments.filter((d) => d.tag !== 'learner-spreadsheet'),
+          { fileName: file.name, fileSize: file.size, fileType: file.type, uploadedAt: new Date().toISOString(), tag: 'learner-spreadsheet' },
+        ],
+      },
+    });
 
   const outcomeOf = (learnerId: string) => batch.learnerResults.find((r) => r.learnerId === learnerId)?.outcome ?? NOT_ON_BATCH;
 
@@ -60,9 +81,12 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
     <div className="space-y-6">
       <div className="space-y-2">
         <Label>Learner Results *</Label>
-        <p className="text-xs text-gray-500">Learners enrolled at {batch.sdpName}. Give each learner you assessed a result.</p>
+        <p className="text-xs text-gray-500">
+          Only learners {batch.sdpName} has enrolled for this skills programme can be on the batch. Record the result for each learner you assessed (QCTO&apos;s
+          code is shown in brackets); nothing is calculated.
+        </p>
         {learners.length === 0 ? (
-          <p className="text-sm text-gray-400">No enrolled learners found for {batch.sdpName}.</p>
+          <p className="text-sm text-gray-400">No learners are enrolled with {batch.sdpName} for this skills programme.</p>
         ) : (
           <div className="rounded-xl border divide-y max-h-72 overflow-y-auto">
             {learners.map((learner) => (
@@ -91,15 +115,27 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
         </p>
       </div>
 
+      <FisaSpreadsheetUpload
+        batch={sheetBatch}
+        onBatch={batch.learnerResults}
+        enrolled={sheetLearners}
+        hasSpreadsheet={batch.evidenceDocuments.some((d) => d.tag === 'learner-spreadsheet')}
+        onClean={attachSpreadsheet}
+      />
+
       <div className="space-y-2">
         <Label>Evidence *</Label>
+        <p className="text-xs text-gray-500">
+          Required before you can submit: a learner spreadsheet, a verification report and an assessment instrument. The learner spreadsheet and the verification
+          report can each be added once. The tag cannot be changed once the file is added.
+        </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Select value={nextTag} onValueChange={(v) => setNextTag(v as FisaEvidenceTag)}>
+          <Select value={selectedTag} onValueChange={(v) => setNextTag(v as FisaEvidenceTag)}>
             <SelectTrigger className="sm:w-56" aria-label="Tag for the file">
               <SelectValue placeholder="Choose a tag first" />
             </SelectTrigger>
             <SelectContent>
-              {FISA_EVIDENCE_TAG_OPTIONS.map((o) => (
+              {FISA_EVIDENCE_TAG_OPTIONS.filter((o) => availableTags.includes(o.value)).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>
@@ -109,21 +145,22 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
           <Input
             type="file"
             aria-label="Evidence file"
-            disabled={!nextTag}
+            disabled={!selectedTag}
             onChange={(e) => {
               const file = e.target.files?.[0];
               const issue = file ? fileUploadIssue(file) : null;
               setUploadError(issue);
-              if (file && nextTag && !issue) {
+              if (file && selectedTag && !issue) {
                 saveEvidence([
                   ...batch.evidenceDocuments,
-                  { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown', uploadedAt: new Date().toISOString(), tag: nextTag },
+                  { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown', uploadedAt: new Date().toISOString(), tag: selectedTag },
                 ]);
               }
               e.target.value = '';
             }}
           />
         </div>
+        {selectedTag && <p className="text-xs text-gray-500">{FISA_EVIDENCE_TAG_OPTIONS.find((o) => o.value === selectedTag)?.hint}</p>}
         <FileCheckError message={uploadError} />
         {batch.evidenceDocuments.length === 0 ? (
           <p className="text-xs text-gray-400">No files uploaded.</p>
@@ -139,21 +176,7 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Select
-                    value={doc.tag}
-                    onValueChange={(v) => saveEvidence(batch.evidenceDocuments.map((d, i) => (i === index ? { ...d, tag: v as FisaEvidenceTag } : d)))}
-                  >
-                    <SelectTrigger className="w-48" aria-label={`Tag for ${doc.fileName}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FISA_EVIDENCE_TAG_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <span className="w-48 text-sm text-gray-700">{fisaEvidenceTagLabel(doc.tag)}</span>
                   <Button
                     type="button"
                     variant="ghost"

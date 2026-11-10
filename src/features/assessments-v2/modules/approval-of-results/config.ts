@@ -1,5 +1,5 @@
 import type { Role } from '../../types';
-import type { EisaEvidenceTag, FisaEvidenceTag, OnFileDocumentRecord } from './types';
+import type { EisaEvidenceTag, FisaEvidenceTag, LearnerResultOutcome, OnFileDocumentRecord } from './types';
 
 // CR-059 names each role explicitly — no open question here, unlike several other modules'
 // "no specific role named" assumptions.
@@ -28,20 +28,64 @@ export const FISA_RESULTS_SUBMITTER_ROLE: Role = 'SDP';
 export const EISA_RESULTS_RECORD_TYPE = 'results-batch';
 export const FISA_RESULTS_RECORD_TYPE = 'fisa-results-batch';
 
-// The tag the SDP puts on each FISA evidence file.
-export const FISA_EVIDENCE_TAG_OPTIONS: { value: FisaEvidenceTag; label: string }[] = [
-  { value: 'assessment-instrument', label: 'Assessment instrument' },
-  { value: 'marksheet', label: 'Marksheet' },
-  { value: 'moderation-report', label: 'Moderation report' },
-  { value: 'attendance-register', label: 'Attendance register' },
-  // Batch N2: Sections A-D of QCTO's FISA verification report, completed by the SDP.
-  { value: 'verification-report', label: 'Verification report' },
-  { value: 'other', label: 'Other evidence' },
+// The tag the SDP puts on each FISA evidence file. Batch P (05.18): QCTO's list of 5 Nov.
+export const FISA_EVIDENCE_TAG_OPTIONS: { value: FisaEvidenceTag; label: string; hint: string }[] = [
+  { value: 'learner-spreadsheet', label: 'Learner spreadsheet', hint: 'QCTO Learner Data & Achievement sheet with the final FISA results' },
+  {
+    value: 'verification-report',
+    label: 'Verification report',
+    hint: 'QCTO FISA Assessment Assurance Verification Report, Sections A–D completed by the SDP, facilitator/assessor, moderator and head of institution',
+  },
+  { value: 'assessment-instrument', label: 'Assessment instrument', hint: 'Question paper with the memorandum, or the blank rubric' },
+  { value: 'attendance-register', label: 'Attendance register', hint: 'The register of learners who attended the FISA' },
+  { value: 'completed-practical-rubric', label: 'Completed practical rubric', hint: 'The observation sheet completed by the assessor during the practical' },
+  { value: 'other', label: 'Other evidence', hint: 'For example learner scripts (written) or photo/video evidence (practical)' },
 ];
 
 export function fisaEvidenceTagLabel(tag: FisaEvidenceTag): string {
   return FISA_EVIDENCE_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
 }
+
+// QCTO's report, Section D: Submit stays blocked until a file with each of these tags is added.
+export const FISA_REQUIRED_EVIDENCE_TAGS: FisaEvidenceTag[] = ['learner-spreadsheet', 'verification-report', 'assessment-instrument'];
+
+// These two tags can be used once only; the others can tag several files. A tag is fixed once the file is added.
+export const FISA_SINGLE_USE_EVIDENCE_TAGS: FisaEvidenceTag[] = ['learner-spreadsheet', 'verification-report'];
+
+// Stored tags from before Batch P. Idempotent: a new tag maps to itself.
+export const LEGACY_FISA_EVIDENCE_TAGS: Record<string, FisaEvidenceTag> = {
+  marksheet: 'learner-spreadsheet',
+  'moderation-report': 'verification-report',
+};
+
+export function isFisaEvidenceTag(value: string): value is FisaEvidenceTag {
+  return FISA_EVIDENCE_TAG_OPTIONS.some((o) => o.value === value);
+}
+
+// 05.21: QCTO's result codes for the FINAL FISA RESULT column. The SDP records the outcome; nothing is calculated.
+export const FISA_RESULT_CODES: Record<LearnerResultOutcome, string> = {
+  competent: '555',
+  'not-yet-competent': '999',
+  absent: '777',
+};
+
+const FISA_OUTCOME_NAMES: Record<LearnerResultOutcome, string> = {
+  competent: 'Competent',
+  'not-yet-competent': 'Not yet competent',
+  absent: 'Absent',
+};
+
+export const FISA_RESULT_CODE_LIST = '555 (Competent), 999 (Not yet competent), 777 (Absent)';
+
+export function fisaOutcomeLabel(outcome: LearnerResultOutcome): string {
+  return `${FISA_OUTCOME_NAMES[outcome]} (${FISA_RESULT_CODES[outcome]})`;
+}
+
+export function fisaOutcomeOfCode(code: string): LearnerResultOutcome | null {
+  return (Object.keys(FISA_RESULT_CODES) as LearnerResultOutcome[]).find((o) => FISA_RESULT_CODES[o] === code.trim()) ?? null;
+}
+
+export const NOT_ENROLLED_MESSAGE = 'This learner is not enrolled with your SDP for this skills programme.';
 
 // QCTO feedback 29.23: the tag the QP puts on each EISA evidence file. Our reading of the 29 Oct
 // meeting until QCTO confirms (progress.md, Batch M).

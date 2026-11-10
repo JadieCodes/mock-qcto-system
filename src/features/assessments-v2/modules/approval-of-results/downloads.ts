@@ -9,6 +9,7 @@ import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
 import type { DocBlock } from './documentModel';
 import type { Role } from '../../types';
 import {
+  fisaOutcomeLabel,
   RESULTS_AD_ROLE,
   RESULTS_CHIEF_DIRECTOR_ROLE,
   RESULTS_DD_ROLE,
@@ -107,9 +108,9 @@ export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Batch P (05.21): the FISA result shows QCTO's code next to the outcome, e.g. "Competent (555)".
 function outcomeLabel(outcome: LearnerResult['outcome']): string {
-  if (outcome === 'absent') return 'Absent';
-  return outcome === 'competent' ? 'Competent' : 'Not yet competent';
+  return fisaOutcomeLabel(outcome);
 }
 
 export function fisaLearnerTable(results: LearnerResult[]): LearnerTable {

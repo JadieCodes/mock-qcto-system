@@ -6,11 +6,12 @@
 // learners enrolled at that SDP. Days are "days ago".
 //
 //  #   SDP                      Learners (competent)  Stage
-//  R1  Khanya Skills Academy    3 (2)                 Awaiting submission — draft, one evidence file, not submitted
+//  R1  Khanya Skills Academy    3 (2)                 Awaiting submission — draft, no learner spreadsheet yet (Batch P), not submitted
 //  R2  Thabo Technical College  3 (3)                 Submitted — with the ASD, review not started
 //  R3  Khanya Skills Academy    4 (3)                 With the Deputy Director (ASD Lindiwe Khumalo reviewed it)
 //  R4  Khanya Skills Academy    6 (5)                 Approved — Outcome Letter sent to the SDP, recommendation letter sent to Certification (Batch N1)
 //
+// Batch P: R2, R3 and R4 carry the three required tags (Learner spreadsheet, Verification report, Assessment instrument).
 // Batch N2: R2, R3 and R4 carry the SDP's tagged verification report (Sections A-D); R3 and R4 have
 // Section E1 filled by the ASD, R4 also the Deputy Director's compliance statement in E2.
 //
@@ -46,9 +47,9 @@ const BUSISIWE = 'busisiwe-radebe';
 
 const COMPLIANCE_NOTES =
   'The learner list matches the SDP’s enrolled learners for this skills programme, and the SDP is accredited and in good standing.';
-const EVIDENCE_NOTES = 'The marksheets and moderation report were checked against each learner result. The outcomes are supported by the evidence.';
+const EVIDENCE_NOTES = 'The learner spreadsheet and the verification report were checked against each learner result. The outcomes are supported by the evidence.';
 const CHECKLIST_COMMENT = 'Checked against the submitted folder — in order.';
-const RECOMMENDATIONS = 'Keep a signed attendance register for every FISA session and attach it to the marksheet.';
+const RECOMMENDATIONS = 'Keep a signed attendance register for every FISA session and attach it to the learner spreadsheet.';
 
 // performFisaResultsAction(): who is told next.
 const NEXT_APPROVER: Partial<Record<string, Role>> = {
@@ -112,7 +113,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
       evidenceDocuments: evidence.map((e, i) => ({
         fileName: e.fileName,
         fileSize: 98_304 + i * 412_000,
-        fileType: e.fileName.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf',
+        fileType: e.fileName.endsWith('.csv') ? 'text/csv' : 'application/pdf',
         uploadedAt: createdAt,
         tag: e.tag,
       })),
@@ -262,12 +263,16 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
 
   const title = 'Electrical_Installation_SP';
 
-  create(1, KHANYA, ['learner-019', 'learner-020', 'learner-021'], 2, 3, [{ fileName: `${title}_Marksheet_Khanya.xlsx`, tag: 'marksheet' }]).done();
+  // Batch P: the draft has no learner spreadsheet yet, so the upload can be tried on it.
+  create(1, KHANYA, ['learner-019', 'learner-020', 'learner-021'], 2, 3, [
+    { fileName: `${title}_Assessment_Instrument_Khanya.pdf`, tag: 'assessment-instrument' },
+    { fileName: `${title}_Attendance_Register_Khanya.pdf`, tag: 'attendance-register' },
+  ]).done();
 
   create(2, THABO, ['learner-005', 'learner-006', 'learner-007'], 3, 9, [
     { fileName: `${title}_Verification_Report_Thabo.pdf`, tag: 'verification-report' },
-    { fileName: `${title}_Marksheet_Thabo.xlsx`, tag: 'marksheet' },
-    { fileName: `${title}_Moderation_Report_Thabo.pdf`, tag: 'moderation-report' },
+    { fileName: `${title}_Learner_Spreadsheet_Thabo.csv`, tag: 'learner-spreadsheet' },
+    { fileName: `${title}_Assessment_Instrument_Thabo.pdf`, tag: 'assessment-instrument' },
     { fileName: `${title}_Attendance_Register_Thabo.pdf`, tag: 'attendance-register' },
   ])
     .submit(7)
@@ -276,8 +281,8 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
   create(3, KHANYA, ['learner-001', 'learner-002', 'learner-003', 'learner-004'], 3, 22, [
     { fileName: `${title}_Verification_Report_Khanya_Group_A.pdf`, tag: 'verification-report' },
     { fileName: `${title}_Assessment_Instrument.pdf`, tag: 'assessment-instrument' },
-    { fileName: `${title}_Marksheet_Khanya_Group_A.xlsx`, tag: 'marksheet' },
-    { fileName: `${title}_Moderation_Report_Khanya_Group_A.pdf`, tag: 'moderation-report' },
+    { fileName: `${title}_Learner_Spreadsheet_Khanya_Group_A.csv`, tag: 'learner-spreadsheet' },
+    { fileName: `${title}_Completed_Practical_Rubric_Khanya_Group_A.pdf`, tag: 'completed-practical-rubric' },
   ])
     .submit(20)
     .adReview(LINDIWE, 16, { rplLearners: 0, monitored: false })
@@ -287,8 +292,8 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
   create(4, KHANYA, ['learner-013', 'learner-014', 'learner-015', 'learner-016', 'learner-017', 'learner-018'], 5, 40, [
     { fileName: `${title}_Verification_Report_Khanya_Group_B.pdf`, tag: 'verification-report' },
     { fileName: `${title}_Assessment_Instrument.pdf`, tag: 'assessment-instrument' },
-    { fileName: `${title}_Marksheet_Khanya_Group_B.xlsx`, tag: 'marksheet' },
-    { fileName: `${title}_Moderation_Report_Khanya_Group_B.pdf`, tag: 'moderation-report' },
+    { fileName: `${title}_Learner_Spreadsheet_Khanya_Group_B.csv`, tag: 'learner-spreadsheet' },
+    { fileName: `${title}_Completed_Practical_Rubric_Khanya_Group_B.pdf`, tag: 'completed-practical-rubric' },
     { fileName: `${title}_Attendance_Register_Khanya_Group_B.pdf`, tag: 'attendance-register' },
   ])
     .submit(38)

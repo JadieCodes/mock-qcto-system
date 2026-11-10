@@ -8,16 +8,26 @@ import type { ChecklistSection } from '../../shared/checklist/types';
 import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
-import { listEnrolledLearners } from '../../mock/api/qaDomain';
+import { listEnrolledLearnersForSkillsProgramme, type SkillsProgrammeLearner } from '../../mock/api/qaDomain';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { buildResultsComplianceChecklist } from '../../mock/data/resultsComplianceFolders';
 import { getSkillsProgrammeDetails } from '../../mock/data/skillsProgrammeDetails';
-import type { EnrolledLearner } from '../../mock/data/enrolledLearners';
 import type { Role } from '../../types';
 import { listApprovedFisaStandards } from '../fisa/api';
 import type { FisaStandardRecord } from '../fisa/types';
 import { assertAsdReviewComplete, NEXT_APPROVER } from './api';
-import { FISA_RESULTS_RECORD_TYPE, FISA_RESULTS_SUBMITTER_ROLE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from './config';
+import {
+  FISA_RESULT_CODES,
+  FISA_RESULTS_RECORD_TYPE,
+  FISA_RESULTS_SUBMITTER_ROLE,
+  FISA_SINGLE_USE_EVIDENCE_TAGS,
+  fisaEvidenceTagLabel,
+  isFisaEvidenceTag,
+  LEGACY_FISA_EVIDENCE_TAGS,
+  NOT_ENROLLED_MESSAGE,
+  RESULTS_AD_ROLE,
+  RESULTS_DD_ROLE,
+} from './config';
 import { reviewersFromAudit } from './downloads';
 import { assertFisaSectionEComplete, blankSectionE, SECTION_E_ASD_FIELDS, SECTION_E_DD_FIELDS } from './fisaSectionE';
 import { lastFisaDateOf } from './outcomeLetters';
@@ -39,11 +49,20 @@ export const FISA_RESULTS_KEY = 'approvalOfResults:fisaBatches';
 // "More evidence requested" batch. Idempotent: a final decline always carries a finalDecision.
 // Batch N2: a batch stored before N2 has no Section E and no first-submission date; it gets a blank
 // Section E and its submission date (each only when missing, so this can run any number of times).
-type StoredFisaBatch = Omit<FisaResultsBatch, 'sectionE' | 'firstSubmittedAt'> & Partial<Pick<FisaResultsBatch, 'sectionE' | 'firstSubmittedAt'>>;
+// Batch P (05.18): the old 'marksheet' and 'moderation-report' tags become 'learner-spreadsheet' and
+// 'verification-report'. A tag that is already new maps to itself, so this can run any number of times.
+type StoredFisaBatch = Omit<FisaResultsBatch, 'sectionE' | 'firstSubmittedAt' | 'evidenceDocuments'> &
+  Partial<Pick<FisaResultsBatch, 'sectionE' | 'firstSubmittedAt'>> & { evidenceDocuments: (Omit<TaggedEvidenceDocument, 'tag'> & { tag: string })[] };
+
+function mappedTag(tag: string): TaggedEvidenceDocument['tag'] {
+  const mapped = LEGACY_FISA_EVIDENCE_TAGS[tag] ?? tag;
+  return isFisaEvidenceTag(mapped) ? mapped : 'other';
+}
 
 function loadAll(): FisaResultsBatch[] {
   return readStore<StoredFisaBatch[]>(FISA_RESULTS_KEY, []).map((b) => ({
     ...b,
+    evidenceDocuments: b.evidenceDocuments.map((d) => ({ ...d, tag: mappedTag(d.tag) })),
     workflow: b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b.workflow, stageId: 'more-evidence' } : b.workflow,
     sectionE: b.sectionE ?? blankSectionE(),
     firstSubmittedAt: b.firstSubmittedAt ?? b.submittedAt,
@@ -104,9 +123,10 @@ export async function listFisaStandardsForResults(): Promise<FisaStandardRecord[
   return listApprovedFisaStandards();
 }
 
-// The learner list comes from the SDP's enrolled learners (Quality Assurance domain, CR-036).
-export async function listLearnersForSdp(sdpName: string): Promise<EnrolledLearner[]> {
-  return listEnrolledLearners(sdpName);
+// Batch P (05.21): the learner list is the SDP's learners enrolled for this skills programme
+// (Quality Assurance domain, CR-036). Nobody can be added who is not on this list.
+export async function listLearnersForBatch(sdpName: string, skillsProgrammeTitle: string): Promise<SkillsProgrammeLearner[]> {
+  return listEnrolledLearnersForSkillsProgramme(sdpName, skillsProgrammeTitle);
 }
 
 export async function createFisaResultsBatch(input: NewFisaResultsBatchInput): Promise<FisaResultsBatch> {
@@ -155,10 +175,32 @@ function assertOwnDraft(batch: FisaResultsBatch, sdpId: string): void {
   if (batch.sdpId !== sdpId) throw new Error('Only the SDP that created this batch can change it.');
 }
 
-async function assertLearnersBelongToSdp(batch: FisaResultsBatch, learnerResults: LearnerResult[]): Promise<void> {
-  const enrolled = new Set((await listEnrolledLearners(batch.sdpName)).map((l) => l.id));
-  if (learnerResults.some((r) => !enrolled.has(r.learnerId))) throw new Error('Every learner on the batch must be enrolled at this SDP.');
-  if (new Set(learnerResults.map((r) => r.learnerId)).size !== learnerResults.length) throw new Error('A learner can only appear once on a batch.');
+// Batch P (05.21): every learner must be enrolled with this SDP for this skills programme, and the
+// name and ID number are the enrolment record's, so a hand-made learner cannot get through.
+// Outcomes are only ever Competent, Not yet competent or Absent (no calculation on FISA).
+async function checkedLearnerResults(batch: FisaResultsBatch, learnerResults: LearnerResult[]): Promise<LearnerResult[]> {
+  const enrolled = await listLearnersForBatch(batch.sdpName, batch.skillsProgrammeTitle);
+  const checked = learnerResults.map((r): LearnerResult => {
+    const learner = enrolled.find((l) => l.id === r.learnerId);
+    if (!learner) throw new Error(NOT_ENROLLED_MESSAGE);
+    if (!Object.keys(FISA_RESULT_CODES).includes(r.outcome)) throw new Error(`"${String(r.outcome)}" is not a valid result. Use Competent, Not yet competent or Absent.`);
+    return { learnerId: learner.id, fullName: learner.fullName, idNumber: learner.idNumber, outcome: r.outcome };
+  });
+  if (new Set(checked.map((r) => r.learnerId)).size !== checked.length) throw new Error('A learner can only appear once on a batch.');
+  return checked;
+}
+
+// Batch P (05.18): a tag is fixed once the file is added, a single-use tag is used once, and only
+// the current tags are accepted.
+function assertEvidenceRules(previous: TaggedEvidenceDocument[], next: TaggedEvidenceDocument[]): void {
+  for (const doc of next) {
+    if (!isFisaEvidenceTag(doc.tag)) throw new Error(`${doc.fileName}: "${String(doc.tag)}" is not a valid tag.`);
+    const before = previous.find((p) => p.fileName === doc.fileName && p.uploadedAt === doc.uploadedAt);
+    if (before && before.tag !== doc.tag) throw new Error(`${doc.fileName}: the tag is fixed once the file is added. Remove the file and add it again with the right tag.`);
+  }
+  for (const tag of FISA_SINGLE_USE_EVIDENCE_TAGS) {
+    if (next.filter((d) => d.tag === tag).length > 1) throw new Error(`Use the ${fisaEvidenceTagLabel(tag).toLowerCase()} tag once only.`);
+  }
 }
 
 // The SDP's draft saves as it is edited.
@@ -166,9 +208,10 @@ export async function saveFisaResultsDraft(id: string, sdpId: string, patch: Fis
   const all = loadAll();
   const batch = getOrThrow(all, id);
   assertOwnDraft(batch, sdpId);
-  if (patch.learnerResults) await assertLearnersBelongToSdp(batch, patch.learnerResults);
+  const learnerResults = patch.learnerResults ? await checkedLearnerResults(batch, patch.learnerResults) : batch.learnerResults;
   patch.evidenceDocuments?.forEach(assertFileNotEmpty);
-  const updated: FisaResultsBatch = { ...batch, ...patch };
+  if (patch.evidenceDocuments) assertEvidenceRules(batch.evidenceDocuments, patch.evidenceDocuments);
+  const updated: FisaResultsBatch = { ...batch, ...patch, learnerResults };
   saveAll(replace(all, updated));
   return updated;
 }
@@ -185,7 +228,7 @@ export async function submitFisaResultsBatch(id: string, actor: FisaActor, decla
   assertOwnDraft(batch, actor.id);
   const issues = fisaSubmissionIssues(batch, declarationAccepted);
   if (issues.length > 0) throw new Error(issues[0].message);
-  await assertLearnersBelongToSdp(batch, batch.learnerResults);
+  await checkedLearnerResults(batch, batch.learnerResults);
 
   const workflow = performAction({
     definition: FISA_RESULTS_WORKFLOW,

@@ -56,7 +56,7 @@ export function writeStore<T>(key: string, value: T): void {
 // Certification recommendation letters, FISA absent learners and dates, and a declined EISA batch.
 // 'A17' = Batch N2: EISA section 2 in QCTO's form, the Deputy Director's letter checklist, FISA Section E,
 // and the data the tracking registers need (source info on EISA batches, first submission on FISA).
-export const SEED_VERSION = 'A17';
+export const SEED_VERSION = 'A18';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

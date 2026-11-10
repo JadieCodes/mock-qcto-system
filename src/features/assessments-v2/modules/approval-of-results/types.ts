@@ -270,7 +270,15 @@ export interface NewResultsBatchInput {
 export type ResultsTrack = 'eisa' | 'fisa';
 
 // Batch N2: 'verification-report' is the SDP's Sections A-D of QCTO's FISA verification report.
-export type FisaEvidenceTag = 'assessment-instrument' | 'marksheet' | 'moderation-report' | 'attendance-register' | 'verification-report' | 'other';
+// Batch P (05.18): QCTO's list of 5 Nov. 'learner-spreadsheet' is QCTO's Learner Data & Achievement
+// sheet. The old 'marksheet' and 'moderation-report' tags are mapped on load (fisaApi.ts).
+export type FisaEvidenceTag =
+  | 'assessment-instrument'
+  | 'learner-spreadsheet'
+  | 'verification-report'
+  | 'attendance-register'
+  | 'completed-practical-rubric'
+  | 'other';
 
 // UI-only upload: the file's details and the SDP's tag, never the file itself.
 export interface TaggedEvidenceDocument {

@@ -1,5 +1,5 @@
 import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
-import { fisaEvidenceTagLabel } from '../config';
+import { fisaEvidenceTagLabel, fisaOutcomeLabel } from '../config';
 import type { LearnerResult, TaggedEvidenceDocument } from '../types';
 
 // Read-only lists for a FISA results batch, shown to the SDP and to QCTO.
@@ -14,7 +14,7 @@ export function FisaLearnerResultsList({ results }: { results: LearnerResult[] }
             {r.fullName} <span className="font-mono text-xs text-gray-500">{r.idNumber}</span>
           </span>
           <span className={r.outcome === 'competent' ? 'text-emerald-700 font-medium' : r.outcome === 'absent' ? 'text-gray-600 font-medium' : 'text-amber-700 font-medium'}>
-            {r.outcome === 'competent' ? 'Competent' : r.outcome === 'absent' ? 'Absent' : 'Not yet competent'}
+            {fisaOutcomeLabel(r.outcome)}
           </span>
         </li>
       ))}

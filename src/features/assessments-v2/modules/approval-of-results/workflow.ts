@@ -11,7 +11,11 @@ import {
   EISA_REQUIRED_EVIDENCE_TAGS,
   EISA_SINGLE_USE_EVIDENCE_TAGS,
   eisaEvidenceTagLabel,
+  FISA_EVIDENCE_TAG_OPTIONS,
+  FISA_REQUIRED_EVIDENCE_TAGS,
   FISA_RESULTS_SUBMITTER_ROLE,
+  FISA_SINGLE_USE_EVIDENCE_TAGS,
+  fisaEvidenceTagLabel,
   RESULTS_AD_ROLE,
   RESULTS_CHIEF_DIRECTOR_ROLE,
   RESULTS_DD_ROLE,
@@ -19,7 +23,7 @@ import {
   RESULTS_DUE_SOON_WINDOW_WORKING_DAYS,
   RESULTS_SUBMISSION_DEADLINE_WORKING_DAYS,
 } from './config';
-import type { EisaEvidenceTag, EvidenceDocument, FisaResultsBatch, OnFileDocument, OnFileDocumentChoice, OnFileDocumentId, ResultsBatch } from './types';
+import type { EisaEvidenceTag, EvidenceDocument, FisaEvidenceTag, FisaResultsBatch, OnFileDocument, OnFileDocumentChoice, OnFileDocumentId, ResultsBatch } from './types';
 
 // CR-059: ASD (compliance review -> evidence evaluation -> folder-by-folder
 // checklist) -> Deputy Director -> Director -> Chief Director final approval.
@@ -223,10 +227,24 @@ export function fisaSubmissionIssues(
     ...(batch.learnerResults.length === 0
       ? [{ field: 'learnerResults', message: 'Add at least one learner with a result (Competent or Not yet competent).' }]
       : []),
-    ...(batch.evidenceDocuments.length === 0 ? [{ field: 'evidenceDocuments', message: 'Upload at least one evidence file.' }] : []),
     ...(batch.evidenceDocuments.some((d) => !d.tag) ? [{ field: 'evidenceTags', message: 'Every evidence file needs a tag.' }] : []),
+    // Batch P (05.18): QCTO's report, Section D. The message names what is missing.
+    ...FISA_REQUIRED_EVIDENCE_TAGS.filter((tag) => !batch.evidenceDocuments.some((d) => d.tag === tag)).map((tag) => ({
+      field: `evidence-${tag}`,
+      message: `Upload the ${fisaEvidenceTagLabel(tag).toLowerCase()}.`,
+    })),
+    ...FISA_SINGLE_USE_EVIDENCE_TAGS.filter((tag) => batch.evidenceDocuments.filter((d) => d.tag === tag).length > 1).map((tag) => ({
+      field: `evidence-${tag}-once`,
+      message: `Use the ${fisaEvidenceTagLabel(tag).toLowerCase()} tag once only. Remove the extra file.`,
+    })),
     ...(declarationAccepted ? [] : [{ field: 'declaration', message: 'Tick the declaration.' }]),
   ];
+}
+
+// Batch P (05.18): the same single-use rule for FISA evidence.
+export function availableFisaEvidenceTags(files: { tag: FisaEvidenceTag }[]): FisaEvidenceTag[] {
+  const used = new Set(files.map((f) => f.tag));
+  return FISA_EVIDENCE_TAG_OPTIONS.map((o) => o.value).filter((tag) => !(FISA_SINGLE_USE_EVIDENCE_TAGS.includes(tag) && used.has(tag)));
 }
 
 // Batch M.1: the tags still offered for the next EISA evidence file — a single-use tag drops out

@@ -14,6 +14,7 @@ import {
   DIRECTOR_ASSESSMENT_NAME,
   EISA_APPEALS_EMAIL,
   eisaCertificationFileName,
+  FISA_RESULT_CODES,
 } from './config';
 import { downloadHtmlFile, escapeHtml, page } from './downloads';
 import { fisaFiguresOf } from './workflow';
@@ -191,9 +192,9 @@ export function fisaOutcomeLetter(batch: FisaResultsBatch, draft: boolean): Lett
     ...(declined
       ? []
       : ([
-          ['No. declared Competent (C)', String(f.competent)],
-          ['No. declared Not Yet Competent (NYC)', String(f.notYetCompetent)],
-          ['No. Learners Absent', String(f.absent)],
+          [`No. declared Competent (C), code ${FISA_RESULT_CODES.competent}`, String(f.competent)],
+          [`No. declared Not Yet Competent (NYC), code ${FISA_RESULT_CODES['not-yet-competent']}`, String(f.notYetCompetent)],
+          [`No. Learners Absent, code ${FISA_RESULT_CODES.absent}`, String(f.absent)],
           ['Recommendations for improvements to be in place before the next FISA', batch.recommendationsForImprovement.trim() || 'None recorded.'],
         ] as [string, string][])),
   ];
