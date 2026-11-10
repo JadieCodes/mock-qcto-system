@@ -20,7 +20,7 @@ import { OutcomeLetterView } from '../components/OutcomeLetterView';
 import { documentsForPortal, FISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
-import { downloadFisaVerificationReport } from '../downloads';
+import { downloadFisaVerificationReport } from '../fisaVerificationReport';
 import { downloadLetterModel, fisaOutcomeLetter } from '../outcomeLetters';
 import { useFisaResultsAction, useFisaResultsBatch, useLearnersForSdp, useSaveFisaResultsDraft, useSubmitFisaResultsBatch } from '../hooks';
 import { fisaFiguresOf, fisaSubmissionIssues } from '../workflow';

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,16 +13,21 @@ import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
-import { FISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
+import { FISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from '../config';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
+import { AuditTrailCsvDownload } from '../components/AuditTrailCsvDownload';
 import { BatchDownloads } from '../components/BatchDownloads';
+import { FisaSectionE1, FisaSectionE2 } from '../components/FisaSectionEForm';
 import { FisaEvidenceList, FisaLearnerResultsList } from '../components/FisaBatchLists';
 import { DeclineRecommendationsNotice, DeclineResultsForm, EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
 import { OutcomeLetterView } from '../components/OutcomeLetterView';
 import { ResultsActionBar } from '../components/ResultsActionBar';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { documentsForPortal, FISA_BATCH_DOCUMENTS, type FisaBatchDocumentId } from '../batchDocuments';
-import { downloadFisaVerificationReport } from '../downloads';
+import { downloadCsvFile } from '../../../shared/csv/csv';
+import { fisaSectionEIssues } from '../fisaSectionE';
+import { downloadFisaVerificationReport } from '../fisaVerificationReport';
+import { fisaRegisterCsv } from '../trackingRegister';
 import { downloadLetterModel, fisaOutcomeLetter, fisaRecommendationLetter } from '../outcomeLetters';
 import {
   useFisaResultsAction,
@@ -49,7 +54,12 @@ function fisaDownloads(batch: FisaResultsBatch): Partial<Record<FisaBatchDocumen
   return {
     'fisa-outcome-letter': () => downloadLetterModel(fisaOutcomeLetter(batch, false)),
     'fisa-verification-report': () => downloadFisaVerificationReport(batch, getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
-    ...(recommendation ? { 'fisa-recommendation-letter': () => downloadLetterModel(recommendation) } : {}),
+    ...(recommendation
+      ? {
+          'fisa-recommendation-letter': () => downloadLetterModel(recommendation),
+          'fisa-tracking-register': () => downloadCsvFile(`Tracking_Register_Entry_FISA_${batch.id.slice(-4)}.csv`, fisaRegisterCsv([batch], '', '').csv),
+        }
+      : {}),
   };
 }
 
@@ -121,15 +131,18 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
   const resultsAction = useFisaResultsAction();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadChecked, setUploadChecked] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const editable = role === RESULTS_AD_ROLE && batch.workflow.stageId === 'ad-review';
   const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
   const notesComplete = batch.complianceReviewNotes.trim().length > 0 && batch.evidenceEvaluationNotes.trim().length > 0;
+  const sectionEIssues = fisaSectionEIssues(batch);
   const advanceIssues: ValidationIssue[] = editable
     ? [
         ...(batch.complianceReviewNotes.trim() ? [] : [{ field: 'complianceReviewNotes', message: 'Compliance review notes are required.' }]),
         ...(batch.evidenceEvaluationNotes.trim() ? [] : [{ field: 'evidenceEvaluationNotes', message: 'Evidence evaluation notes are required.' }]),
         ...getChecklistIssues(batch.complianceChecklist, true),
+        ...sectionEIssues,
       ]
     : [];
 
@@ -156,19 +169,25 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
           onChange={(e) => saveEvidenceNotes.mutate({ id: batch.id, notes: e.target.value })}
         />
         {editable && (
-          <input
-            type="file"
-            aria-label="Add an evidence file"
-            className="text-sm"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              const issue = file ? fileUploadIssue(file) : null;
-              setUploadError(issue);
-              setUploadChecked(!!file && !issue);
-              if (file && !issue) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
-              e.target.value = '';
-            }}
-          />
+          <>
+            <Button type="button" size="sm" variant="outline" aria-label="Add an evidence file" onClick={() => fileInput.current?.click()}>
+              Add an evidence file
+            </Button>
+            <input
+              ref={fileInput}
+              type="file"
+              hidden
+              tabIndex={-1}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                const issue = file ? fileUploadIssue(file) : null;
+                setUploadError(issue);
+                setUploadChecked(!!file && !issue);
+                if (file && !issue) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
+                e.target.value = '';
+              }}
+            />
+          </>
         )}
         <FileCheckError message={uploadError} />
         {uploadChecked && !uploadError && <DocumentChecked />}
@@ -186,6 +205,8 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
         <p className="text-xs text-gray-500">Printed on the Outcome Letter.</p>
       </div>
 
+      <FisaSectionE1 batch={batch} editable={editable} />
+
       <div className="space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Folder-by-Folder Compliance Checklist</p>
         <Checklist sections={batch.complianceChecklist} readonly={!editable} onChange={(sections) => saveChecklist.mutate({ id: batch.id, sections })} />
@@ -198,7 +219,7 @@ function ComplianceReviewTab({ batch }: { batch: FisaResultsBatch }) {
             definition={FISA_RESULTS_WORKFLOW}
             stageId={batch.workflow.stageId}
             role={role}
-            disabledActionIds={!(checklistComplete && notesComplete) ? ['ad-advance'] : []}
+            disabledActionIds={!(checklistComplete && notesComplete && sectionEIssues.length === 0) ? ['ad-advance'] : []}
             onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId: person.id, actorName: person.name, note })}
           />
         </>
@@ -232,6 +253,10 @@ function ApprovalChainTab({ batch }: { batch: FisaResultsBatch }) {
       </div>
 
       <DeclineRecommendationsNotice recommendations={batch.declineRecommendations} cycle={batch.cycleCount} />
+
+      {!['ad-review', 'more-evidence'].includes(batch.workflow.stageId) && (
+        <FisaSectionE2 batch={batch} editable={role === RESULTS_DD_ROLE && batch.workflow.stageId === 'dd-review'} />
+      )}
 
       {['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId) && (
         <div className="space-y-2">
@@ -317,6 +342,7 @@ function FisaResultsBatchWorkspaceContent({ batch }: { batch: FisaResultsBatch }
         </TabsContent>
       )}
       <TabsContent value="audit" className="pt-4">
+        <AuditTrailCsvDownload recordType={FISA_RESULTS_RECORD_TYPE} recordId={batch.id} fileName={`Audit_Trail_FISA_${batch.id.slice(-4)}.csv`} />
         <AuditTrailView recordTypes={[FISA_RESULTS_RECORD_TYPE]} recordId={batch.id} />
       </TabsContent>
     </Tabs>

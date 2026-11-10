@@ -7,6 +7,8 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { FISA_RESULTS_RECORD_TYPE } from '../config';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
+import { TrackingRegisterDownload } from '../components/TrackingRegisterDownload';
+import { fisaRegisterCsv } from '../trackingRegister';
 import { useFisaResultsBatches } from '../hooks';
 import { FISA_RESULTS_WORKFLOW, fisaThroughputRatePercent, fisaCompetencyRatePercent } from '../workflow';
 import { FisaResultsBatchWorkspace } from './FisaResultsBatchWorkspace';
@@ -43,6 +45,8 @@ export function FisaResultsTab({ scope }: { scope: ListScope }) {
         <StatTile label="More Evidence Requested" value={moreEvidence.length} />
         <StatTile label="Declined" value={declined.length} />
       </StatTileGrid>
+
+      <TrackingRegisterDownload fileNamePrefix="Tracking_Register_FISA" build={(from, to) => fisaRegisterCsv(allBatches, from, to)} />
 
       <SectionCard title="All FISA Results Batches">
         {batches.length === 0 ? (

@@ -83,6 +83,8 @@ export interface ResultsComponent {
   lowestMark: number;
   // QCTO feedback 29.32: each component has its own EISA date (componentDates.ts).
   eisaDate: string;
+  // Batch N2: the QASA's "days" for the component (the verification report's Duration column).
+  days?: number;
 }
 
 // QCTO feedback 29.31: a mark per component, or Absent. The result, the weighted score and the
@@ -141,6 +143,52 @@ export interface ResultsFinalDecision {
   directorName: string;
 }
 
+// Batch N2: where each learner on the batch came from, copied from the sitting's registrations and
+// EISA Confirmation when the batch is created (QCTO's verification report and tracking register
+// count candidates per SDP and per RPL). rpl is the registration's RPL/ARPL flag.
+export interface ResultsSourceLearner {
+  learnerId: string;
+  sdpName: string;
+  rpl: boolean;
+}
+
+export interface ResultsSourceInfo {
+  // The date the EISA Confirmation (formerly the EISA Notification) was generated.
+  notifiedAt: string;
+  learners: ResultsSourceLearner[];
+}
+
+export type EisaImpactOnApproval = 'negative' | 'sorted';
+
+// Batch N2: section 2 of QCTO's "EISA Quality Assurance Verification Report" plus the free text
+// of sections 2 and 5. checklist holds the Yes/No lines (a comment on every line, CR-011); lines
+// k and m are free text only.
+export interface EisaReview {
+  checklist: ChecklistSection[];
+  // Line f.
+  irregularitySummary: string;
+  impactOnApproval: EisaImpactOnApproval | null;
+  // Line k.
+  analysisSummary: string;
+  // Line m.
+  sampleVerificationComment: string;
+  sampleRemedialAction: string;
+  // Section 5.
+  recommendationFurtherAction: string;
+  badPractices: string;
+  goodPractices: string;
+}
+
+// Batch N2: QCTO's "Approval of Results letter checklist", ticked by the Deputy Director against the
+// draft Outcome Letter. "Correct verification number" is never stored: it shows as ticked once the
+// batch has its final decision (letterChecklist.ts).
+export interface DdLetterChecklist {
+  checkedIds: string[];
+  completedBy: string | null;
+  completedById: string | null;
+  completedAt: string | null;
+}
+
 // stageId: 'ad-review' | 'dd-review' | 'director-review' | 'chief-director-review' |
 // 'more-evidence' | 'approved' | 'declined' (final). See workflow.ts RESULTS_WORKFLOW.
 export interface ResultsBatch {
@@ -176,7 +224,12 @@ export interface ResultsBatch {
   // CR-059: the ASD's three-part review before the batch can advance.
   complianceReviewNotes: string;
   evidenceEvaluationNotes: string;
+  // Batch N2: the old four-folder checklist. New batches hold none; a batch stored before N2 keeps
+  // its answers, shown read-only as "Previous checklist".
   complianceChecklist: ChecklistSection[];
+  eisaReview: EisaReview;
+  ddChecklist: DdLetterChecklist | null;
+  sourceInfo: ResultsSourceInfo;
 
   workflow: WorkflowRecordState;
   cycleCount: number;
@@ -216,7 +269,8 @@ export interface NewResultsBatchInput {
 
 export type ResultsTrack = 'eisa' | 'fisa';
 
-export type FisaEvidenceTag = 'assessment-instrument' | 'marksheet' | 'moderation-report' | 'attendance-register' | 'other';
+// Batch N2: 'verification-report' is the SDP's Sections A-D of QCTO's FISA verification report.
+export type FisaEvidenceTag = 'assessment-instrument' | 'marksheet' | 'moderation-report' | 'attendance-register' | 'verification-report' | 'other';
 
 // UI-only upload: the file's details and the SDP's tag, never the file itself.
 export interface TaggedEvidenceDocument {
@@ -238,6 +292,22 @@ export interface FisaApprovalLetterRecord {
   generatedAt: string;
   signedBy: string;
   sentToSdpAt: string;
+}
+
+export type FisaRecommendation = 'approval' | 'non-approval';
+export type FisaCompliance = 'complied' | 'not-complied';
+
+// Batch N2: what QCTO's FISA report Section E needs besides what the system already knows. The ASD
+// fills E1, the Deputy Director the compliance statement in E2.
+export interface FisaSectionE {
+  qctoMonitoringDate: string;
+  periodOfSkillsProgramme: string;
+  learnersViaTraining: number | null;
+  learnersViaRpl: number | null;
+  recommendation: FisaRecommendation | null;
+  nonCompliance: string;
+  ddCompliance: FisaCompliance | null;
+  ddComment: string;
 }
 
 // stageId: 'sdp-draft' | 'ad-review' | 'dd-review' | 'director-review' |
@@ -265,6 +335,7 @@ export interface FisaResultsBatch {
 
   // Batch N1: entered by the ASD in the review; printed on the outcome letter.
   recommendationsForImprovement: string;
+  sectionE: FisaSectionE;
 
   workflow: WorkflowRecordState;
   cycleCount: number;
@@ -277,8 +348,10 @@ export interface FisaResultsBatch {
   createdAt: string;
   createdBy: string;
   createdById: string;
-  // Empty until the SDP submits.
+  // Empty until the SDP submits. submittedAt moves on a resubmission; firstSubmittedAt does not
+  // (Batch N2: "Date Results Received" in the tracking register).
   submittedAt: string | null;
+  firstSubmittedAt: string | null;
 
   recommendation: CertificationRecommendation | null;
   approvalLetter: FisaApprovalLetterRecord | null;

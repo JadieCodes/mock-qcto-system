@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChecklistSection } from '../../shared/checklist/types';
 import type { Role } from '../../types';
+import { reportIsApproved } from '../site-visits/workflow';
+import type { EisaReportContext } from './eisaVerificationReport';
 import {
   createPemVisitForBatch,
   getBatch,
@@ -14,8 +16,9 @@ import {
   listOnFileDocumentsForSitting,
   listSittingsAwaitingSubmission,
   performResultsAction,
-  saveComplianceChecklist,
   saveComplianceReviewNotes,
+  saveDdLetterChecklist,
+  saveEisaReview,
   saveEvidenceEvaluationNotes,
   saveResultsDraft,
   submitResultsBatch,
@@ -32,11 +35,12 @@ import {
   saveFisaComplianceReviewNotes,
   saveFisaEvidenceEvaluationNotes,
   saveFisaRecommendations,
+  saveFisaSectionE,
   saveFisaResultsDraft,
   submitFisaResultsBatch,
   uploadFisaReviewEvidence,
 } from './fisaApi';
-import type { FisaResultsBatch, FisaResultsDraftPatch, NewFisaResultsBatchInput, NewResultsBatchInput, ResultsBatch } from './types';
+import type { EisaReview, FisaResultsBatch, FisaResultsDraftPatch, FisaSectionE, NewFisaResultsBatchInput, NewResultsBatchInput, ResultsBatch } from './types';
 
 const LIST_KEY = ['approval-of-results', 'batches'] as const;
 const detailKey = (id: string) => ['approval-of-results', 'batches', id] as const;
@@ -140,8 +144,19 @@ export function useSubmitResultsBatch() {
   });
 }
 
-export function useSaveComplianceChecklist() {
-  return useResultsBatchMutation((args: { id: string; sections: ChecklistSection[] }) => saveComplianceChecklist(args.id, args.sections));
+export function useSaveEisaReview() {
+  return useResultsBatchMutation((args: { id: string; review: EisaReview }) => saveEisaReview(args.id, args.review));
+}
+
+export function useSaveDdLetterChecklist() {
+  return useResultsBatchMutation((args: { id: string; checkedIds: string[]; actorRole: Role }) => saveDdLetterChecklist(args.id, args.checkedIds, args.actorRole));
+}
+
+// Batch N2: the dates of the approved Marking & Moderation monitoring reports for the batch's
+// sitting, which the EISA verification report's B and C lines read.
+export function useEisaReportContext(sittingId: string | null): EisaReportContext {
+  const { data: visits = [] } = useMarkingModerationStatus(sittingId);
+  return { monitoringReportDates: visits.filter(reportIsApproved).map((v) => v.visitDate).filter(Boolean) };
 }
 
 export function useSaveComplianceReviewNotes() {
@@ -264,4 +279,8 @@ export function useCreatePemVisitForBatch() {
 
 export function useSaveFisaRecommendations() {
   return useFisaResultsBatchMutation((args: { id: string; text: string }) => saveFisaRecommendations(args.id, args.text));
+}
+
+export function useSaveFisaSectionE() {
+  return useFisaResultsBatchMutation((args: { id: string; patch: Partial<FisaSectionE>; actorRole: Role }) => saveFisaSectionE(args.id, args.patch, args.actorRole));
 }

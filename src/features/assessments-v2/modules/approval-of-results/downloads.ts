@@ -1,22 +1,21 @@
-// QCTO feedback 3.14 (d): "Download outcome letter" and "Download verification report" on an
-// approved EISA or FISA batch. UI-only: a small HTML file built here and downloaded in the
-// browser — nothing is stored or sent anywhere.
+// QCTO feedback 3.14 (d): HTML downloads on an EISA or FISA batch. UI-only: a small HTML file built
+// here and downloaded in the browser — nothing is stored or sent anywhere. Batch N2: the two
+// verification reports now follow QCTO's own layouts (eisaVerificationReport.ts,
+// fisaVerificationReport.ts); this file keeps the page shell, the approval chain read from the audit
+// trail and the annexure (learner results, evidence, chain, audit trail) both reports end with.
 import { roleDescriptor } from '../../config/roles';
 import type { AuditEntry } from '../../shared/audit/types';
 import { formatFileSize } from '../rpl-toolkit/toolkitFiles';
 import type { Role } from '../../types';
 import {
-  eisaEvidenceTagLabel,
-  fisaEvidenceTagLabel,
-  onFileChoiceText,
   RESULTS_AD_ROLE,
   RESULTS_CHIEF_DIRECTOR_ROLE,
   RESULTS_DD_ROLE,
   RESULTS_DIRECTOR_ROLE,
 } from './config';
-import { absenteeismText, batchFiguresOf, calculateLearnerResult, competenceRateText, EISA_OUTCOME_LABELS, reasonText, throughputRateText } from './calculation';
-import { fisaFiguresOf, RESULTS_WORKFLOW, resultsStatusLabel } from './workflow';
-import type { FisaResultsBatch, LearnerResult, ResultsBatch, ResultsDeclineEntry } from './types';
+import { calculateLearnerResult, EISA_OUTCOME_LABELS, reasonText } from './calculation';
+import { RESULTS_WORKFLOW } from './workflow';
+import type { LearnerResult, ResultsBatch, ResultsDeclineEntry } from './types';
 
 interface ReportEvidence {
   fileName: string;
@@ -26,14 +25,12 @@ interface ReportEvidence {
   uploadedAt: string;
 }
 
-interface LearnerTable {
+export interface LearnerTable {
   headers: string[];
   rows: string[][];
 }
 
-interface VerificationReportInput {
-  heading: string;
-  details: { label: string; value: string }[];
+export interface AnnexInput {
   // FISA: Learner | ID number | Outcome. EISA (29.31, L1.1): a column per component, the EISA percentage, the pass % and the result with its reason.
   learnerTable: LearnerTable;
   evidence: ReportEvidence[];
@@ -61,11 +58,11 @@ const CHAIN_STEPS: { role: Role; actionIds: string[] }[] = [
   { role: RESULTS_CHIEF_DIRECTOR_ROLE, actionIds: ['chief-director-approve', 'chief-director-decline'] },
 ];
 
-function stageLabel(stageId: string): string {
+export function stageLabel(stageId: string): string {
   return RESULTS_WORKFLOW.stages.find((s) => s.id === stageId)?.label ?? stageId;
 }
 
-function roleLabel(role: AuditEntry['actorRole']): string {
+export function roleLabel(role: AuditEntry['actorRole']): string {
   return roleDescriptor(role)?.label ?? role;
 }
 
@@ -114,14 +111,14 @@ function outcomeLabel(outcome: LearnerResult['outcome']): string {
   return outcome === 'competent' ? 'Competent' : 'Not yet competent';
 }
 
-function fisaLearnerTable(results: LearnerResult[]): LearnerTable {
+export function fisaLearnerTable(results: LearnerResult[]): LearnerTable {
   return { headers: ['Learner', 'ID number', 'Outcome'], rows: results.map((r) => [r.fullName, r.idNumber, outcomeLabel(r.outcome)]) };
 }
 
 // QCTO feedback 29.31/29.32, Batch L1.1: each component column names its EISA date, highest and
 // lowest mark and weighting; each cell has the mark (EISA Component Achievement Value), the
 // component % and C/NYC.
-function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
+export function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
   return {
     headers: [
       'Learner',
@@ -147,7 +144,7 @@ function eisaLearnerTable(batch: ResultsBatch): LearnerTable {
   };
 }
 
-function table(headers: string[], rows: string[][]): string {
+export function table(headers: string[], rows: string[][]): string {
   if (rows.length === 0) return '<p class="muted">None.</p>';
   const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('');
   const body = rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
@@ -177,46 +174,47 @@ ${content}
 </html>`;
 }
 
-function definitionList(items: { label: string; value: string }[]): string {
+export function definitionList(items: { label: string; value: string }[]): string {
   return `<dl>${items.map((i) => `<dt>${escapeHtml(i.label)}</dt><dd>${escapeHtml(i.value)}</dd>`).join('')}</dl>`;
 }
 
-export function verificationReportToHtml(input: VerificationReportInput): string {
+// The annexure both verification reports end with.
+export function annexHtml(input: AnnexInput): string {
   const chain = approvalChainFromAudit(input.audit);
   const audit = [...input.audit].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  return page(
-    input.heading,
-    `<h1>${escapeHtml(input.heading)}</h1>
-<p class="muted">Generated on ${escapeHtml(new Date().toLocaleString('en-ZA'))}.</p>
-<h2>Batch details</h2>
-${definitionList(input.details)}
-<h2>Learner results</h2>
+  return `<h2>Annexure A: learner results</h2>
 ${table(input.learnerTable.headers, input.learnerTable.rows)}
-<h2>Evidence</h2>
+<h2>Annexure B: evidence</h2>
 ${table(
   ['File', 'Tag', 'Type', 'Size', 'Uploaded'],
   input.evidence.map((d) => [d.fileName, d.tag ?? '—', d.fileType ?? '—', formatFileSize(d.fileSize), d.uploadedAt.slice(0, 10)]),
 )}
 ${
   input.onFile && input.onFile.length > 0
-    ? `<h2>Already on file</h2>
+    ? `<h3>Already on file</h3>
 ${table(['Document', 'File', 'QP choice'], input.onFile.map((d) => [d.label, d.fileName, d.choice]))}`
     : ''
 }
-<h2>Approval chain</h2>
+<h2>Annexure C: approval chain</h2>
 ${table(['Stage', 'Name', 'Role', 'Date'], chain.map((s) => [s.stage, s.actorName, s.actorRole, s.date]))}
 ${
   input.declineHistory.length > 0
-    ? `<h2>Earlier requests for more evidence</h2>
+    ? `<h3>Earlier requests for more evidence</h3>
 ${table(['Stage', 'Requested by', 'Reason', 'Date'], input.declineHistory.map((d) => [stageLabel(d.stageId), d.decidedBy, d.reason, d.decidedAt.slice(0, 10)]))}`
     : ''
 }
-<h2>Audit trail</h2>
+<h2>Annexure D: audit trail</h2>
 ${table(
   ['Date and time', 'Action', 'Name', 'Role', 'Note'],
   audit.map((e) => [new Date(e.timestamp).toLocaleString('en-ZA'), e.action, e.actorName, roleLabel(e.actorRole), e.note ?? '']),
-)}`,
-  );
+)}`;
+}
+
+// Batch N2: the name and date of the person who took the given role's step in the deciding cycle
+// (the sign-off blocks of both verification reports). Blank until that role has acted.
+export function signOffFromAudit(audit: AuditEntry[], role: Role): { name: string; date: string } {
+  const entry = chainEntriesFromAudit(audit).find((c) => c.role === role)?.entry;
+  return { name: entry?.actorName ?? '', date: entry ? entry.timestamp.slice(0, 10) : '' };
 }
 
 export function downloadHtmlFile(fileName: string, html: string): void {
@@ -228,69 +226,7 @@ export function downloadHtmlFile(fileName: string, html: string): void {
   URL.revokeObjectURL(url);
 }
 
-function fileSafe(value: string): string {
+export function fileSafe(value: string): string {
   return value.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
 }
 
-// ----- EISA -----
-
-export function downloadEisaVerificationReport(batch: ResultsBatch, audit: AuditEntry[]): void {
-  const figures = batchFiguresOf(batch);
-  const html = verificationReportToHtml({
-    heading: 'Verification Report — EISA Results',
-    details: [
-      { label: 'Qualification', value: batch.qualificationTitle },
-      { label: 'QP', value: batch.qpName },
-      { label: 'EISA date', value: batch.sittingDate },
-      { label: 'Submitted', value: batch.submittedAt.slice(0, 10) },
-      { label: 'Declaration', value: `Made by ${batch.declaration.acceptedBy} on ${batch.declaration.acceptedAt.slice(0, 10)}` },
-      { label: 'Submission deadline', value: batch.submissionDeadline },
-      { label: 'Addendum pass %', value: `${batch.addendumPassPercent}%` },
-      { label: 'Registered', value: String(figures.registered) },
-      { label: 'Wrote', value: String(figures.wrote) },
-      { label: 'Competent / Not yet competent', value: `${figures.competent} / ${figures.notYetCompetent}` },
-      { label: 'Competency rate', value: competenceRateText(figures) },
-      { label: 'Absenteeism', value: absenteeismText(figures) },
-      { label: 'Throughput rate', value: throughputRateText(figures) },
-      { label: 'Verification code', value: batch.finalDecision?.verificationCode ?? '—' },
-      { label: 'Status', value: resultsStatusLabel(batch) },
-      { label: 'Cycle', value: String(batch.cycleCount) },
-    ],
-    learnerTable: eisaLearnerTable(batch),
-    evidence: batch.evidenceDocuments.map((d) => ({ ...d, tag: eisaEvidenceTagLabel(d.tag) })),
-    onFile: batch.onFileDocuments.map((d) => ({ label: d.label, fileName: d.replacement?.fileName ?? d.fileName, choice: onFileChoiceText(d) })),
-    declineHistory: batch.declineHistory,
-    audit,
-  });
-  downloadHtmlFile(`Verification_Report_EISA_${fileSafe(batch.qualificationTitle)}_${batch.sittingDate}.html`, html);
-}
-
-// ----- FISA -----
-
-export function downloadFisaVerificationReport(batch: FisaResultsBatch, audit: AuditEntry[]): void {
-  const figures = fisaFiguresOf(batch);
-  const html = verificationReportToHtml({
-    heading: 'Verification Report — FISA Results',
-    details: [
-      { label: 'Skills programme', value: batch.skillsProgrammeTitle },
-      { label: 'SDP', value: batch.sdpName },
-      { label: 'Submitted', value: batch.submittedAt?.slice(0, 10) ?? '—' },
-      {
-        label: 'Declaration',
-        value: batch.declaration ? `Ticked by ${batch.declaration.acceptedBy} on ${batch.declaration.acceptedAt.slice(0, 10)}` : '—',
-      },
-      { label: 'Date of FISA', value: batch.fisaDates.join(', ') },
-      { label: 'Competency rate', value: `${figures.competencyRatePercent}% (${figures.competent} of ${figures.completed} completed)` },
-      { label: 'Throughput rate', value: `${figures.throughputRatePercent}% (${figures.completed} of ${figures.enrolled} enrolled)` },
-      { label: 'Verification code', value: batch.finalDecision?.verificationCode ?? '—' },
-      { label: 'Status', value: resultsStatusLabel(batch) },
-      { label: 'Cycle', value: String(batch.cycleCount) },
-      { label: 'Outcome letter', value: batch.approvalLetter ? `Sent to the SDP on ${batch.approvalLetter.sentToSdpAt.slice(0, 10)}` : '—' },
-    ],
-    learnerTable: fisaLearnerTable(batch.learnerResults),
-    evidence: batch.evidenceDocuments.map((d) => ({ ...d, tag: fisaEvidenceTagLabel(d.tag) })),
-    declineHistory: batch.declineHistory,
-    audit,
-  });
-  downloadHtmlFile(`Verification_Report_FISA_${fileSafe(batch.skillsProgrammeTitle)}_${fileSafe(batch.sdpName)}.html`, html);
-}

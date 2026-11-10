@@ -1,25 +1,28 @@
 import { appendAuditEntry, getAuditTrail } from '../../shared/audit/auditLog';
-import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
+import { isChecklistComplete } from '../../shared/checklist/types';
 import { assertFileNotEmpty } from '../../shared/files/fileCheck';
 import { addNotification } from '../../shared/notifications/store';
 import { performAction } from '../../shared/workflow/engine';
 import { listEnrolledLearnersByIds } from '../../mock/api/qaDomain';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { onFileDocumentsFor } from '../../mock/data/onFileDocuments';
-import { buildResultsComplianceChecklist } from '../../mock/data/resultsComplianceFolders';
 import type { Role } from '../../types';
 import { listRecords as listConfirmationRecords } from '../eisa-confirmation/api';
 import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
+import { listRegistrationsForSitting } from '../eisa-registration/api';
 import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
 import { visitSittingIdsOf } from '../site-visits/visitQualifications';
 import { listApplications } from '../qsa-addendum/api';
 import { qualificationDetailsOf, resultsRulesIssue, snapshotResultsRules, type ResultsRules } from './componentSnapshot';
-import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from './config';
+import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from './config';
 import { reviewersFromAudit } from './downloads';
+import { assertEisaReviewComplete, blankEisaReview, prefillEisaReview } from './eisaReview';
+import { assertDdChecklistComplete, blankDdChecklist, DD_REQUIRED_LINE_IDS } from './letterChecklist';
 import { markEntryIssues } from './markEntry';
 import { lastEisaDateOf } from './outcomeLetters';
+import { blankSourceInfo, sourceInfoOf } from './sourceInfo';
 import { buildVerificationCode } from './verificationCode';
 import {
   competencyRatePercent,
@@ -33,6 +36,7 @@ import {
 import type {
   CaptureLearner,
   EisaLearnerResult,
+  EisaReview,
   EvidenceDocument,
   NewResultsBatchInput,
   OnFileDocument,
@@ -48,10 +52,18 @@ export const DRAFTS_KEY = 'approvalOfResults:drafts';
 
 // Batch N1: a batch stored in the old 'declined' stage (before the decline became final) is a
 // "More evidence requested" batch. Idempotent: a final decline always carries a finalDecision.
+// Batch N2: a batch stored before N2 has no section 2 review, letter checklist or source info; it
+// gets blank ones (each only when missing, so this can run any number of times).
+type StoredBatch = Omit<ResultsBatch, 'eisaReview' | 'ddChecklist' | 'sourceInfo'> & Partial<Pick<ResultsBatch, 'eisaReview' | 'ddChecklist' | 'sourceInfo'>>;
+
 function loadAll(): ResultsBatch[] {
-  return readStore<ResultsBatch[]>(KEY, []).map((b) =>
-    b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b, workflow: { ...b.workflow, stageId: 'more-evidence' } } : b,
-  );
+  return readStore<StoredBatch[]>(KEY, []).map((b) => ({
+    ...b,
+    workflow: b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b.workflow, stageId: 'more-evidence' } : b.workflow,
+    eisaReview: b.eisaReview ?? blankEisaReview(),
+    ddChecklist: b.ddChecklist ?? null,
+    sourceInfo: b.sourceInfo ?? blankSourceInfo(),
+  }));
 }
 
 function saveAll(batches: ResultsBatch[]): void {
@@ -180,6 +192,11 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   // whether the marks were captured on screen or came from File 3).
   const enrolled = await listEnrolledLearnersByIds(confirmation.learners.map((l) => l.learnerId));
   const idNumberOf = (r: EisaLearnerResult) => enrolled.find((e) => e.id === r.learnerId)?.idNumber ?? r.idNumber;
+  const sourceInfo = sourceInfoOf(confirmation, await listRegistrationsForSitting(confirmation.sittingId));
+  const submittedAt = new Date().toISOString();
+  const submissionDeadline = submissionDeadlineFor(confirmation.sittingDate);
+  const declaration = { acceptedBy: input.submittedBy, acceptedById: input.submittedById, acceptedAt: decidedAt };
+  const centres = confirmation.confirmedCentres?.map((c) => c.centre) ?? confirmation.centres;
 
   const batch: ResultsBatch = {
     id: crypto.randomUUID(),
@@ -187,7 +204,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     sittingDate: confirmation.sittingDate,
     qualificationTitle: confirmation.qualificationTitle,
     ...qualificationDetailsOf(await listApplications(), confirmation),
-    centres: confirmation.confirmedCentres?.map((c) => c.centre) ?? confirmation.centres,
+    centres,
     qpId: confirmation.qpId,
     qpName: confirmation.qpName,
     learnerCount: confirmation.learners.length,
@@ -197,10 +214,14 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     learnerResults: input.learnerResults.map((r) => ({ ...r, idNumber: idNumberOf(r), marks: r.absent ? {} : r.marks })),
     evidenceDocuments: input.evidenceDocuments,
     onFileDocuments,
-    declaration: { acceptedBy: input.submittedBy, acceptedById: input.submittedById, acceptedAt: decidedAt },
+    declaration,
     complianceReviewNotes: '',
     evidenceEvaluationNotes: '',
-    complianceChecklist: buildResultsComplianceChecklist(),
+    complianceChecklist: [],
+    // Batch N2: section 2 starts with the lines the system already knows pre-filled.
+    eisaReview: prefillEisaReview({ centres, sourceInfo, declaration, submittedAt, submissionDeadline }),
+    ddChecklist: null,
+    sourceInfo,
     workflow: { stageId: 'ad-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     cycleCount: 1,
     declineHistory: [],
@@ -208,8 +229,8 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     evidenceRequestedAt: null,
     finalEvidenceReceivedAt: null,
     finalDecision: null,
-    submissionDeadline: submissionDeadlineFor(confirmation.sittingDate),
-    submittedAt: new Date().toISOString(),
+    submissionDeadline,
+    submittedAt,
     recommendation: null,
     pemVisitId: null,
     createdBy: input.submittedBy,
@@ -237,9 +258,26 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   return batch;
 }
 
-export async function saveComplianceChecklist(id: string, sections: ChecklistSection[]): Promise<ResultsBatch> {
+// Batch N2: the ASD's section 2 (and the free text of sections 2 and 5), only while the batch is
+// with the ASD.
+export async function saveEisaReview(id: string, review: EisaReview): Promise<ResultsBatch> {
   const all = loadAll();
-  const updated = { ...getOrThrow(all, id), complianceChecklist: sections };
+  const batch = getOrThrow(all, id);
+  if (batch.workflow.stageId !== 'ad-review') throw new Error('The compliance review can only be changed while the batch is with the ASD.');
+  const updated = { ...batch, eisaReview: review };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
+// Batch N2: the Deputy Director's ticks on QCTO's Approval of Results letter checklist, only while
+// the batch is with the Deputy Director. The verification number line is ticked by the system.
+export async function saveDdLetterChecklist(id: string, checkedIds: string[], actorRole: Role): Promise<ResultsBatch> {
+  const all = loadAll();
+  const batch = getOrThrow(all, id);
+  if (batch.workflow.stageId !== 'dd-review') throw new Error('The letter checklist can only be changed while the batch is with the Deputy Director.');
+  if (actorRole !== RESULTS_DD_ROLE) throw new Error('Only the Deputy Director can tick the letter checklist.');
+  const valid = new Set(DD_REQUIRED_LINE_IDS);
+  const updated = { ...batch, ddChecklist: { ...(batch.ddChecklist ?? blankDdChecklist()), checkedIds: checkedIds.filter((c) => valid.has(c)) } };
   saveAll(replace(all, updated));
   return updated;
 }
@@ -340,7 +378,10 @@ export async function performResultsAction(params: ResultsActionParams): Promise
   const all = loadAll();
   const batch = getOrThrow(all, params.batchId);
 
-  if (params.actionId === 'ad-advance') assertAsdReviewComplete(batch);
+  if (params.actionId === 'ad-advance') assertEisaReviewComplete(batch);
+  // Batch N2: the Deputy Director cannot send the batch on (or recommend a decline) without QCTO's letter checklist.
+  const isDdSendOn = params.actionId === 'dd-advance' || params.actionId === 'dd-recommend-decline';
+  if (isDdSendOn) assertDdChecklistComplete(batch);
 
   if (params.actionId === 'batch-resubmit') {
     const nextWorkflow = performAction({
@@ -361,7 +402,9 @@ export async function performResultsAction(params: ResultsActionParams): Promise
       workflow: nextWorkflow,
       cycleCount: batch.cycleCount + 1,
       finalEvidenceReceivedAt: today(),
-      complianceChecklist: buildResultsComplianceChecklist(),
+      complianceChecklist: [],
+      eisaReview: prefillEisaReview(batch),
+      ddChecklist: null,
       complianceReviewNotes: '',
       evidenceEvaluationNotes: '',
     };
@@ -397,6 +440,9 @@ export async function performResultsAction(params: ResultsActionParams): Promise
   });
 
   let updated: ResultsBatch = { ...batch, workflow: nextWorkflow };
+  if (isDdSendOn && updated.ddChecklist) {
+    updated = { ...updated, ddChecklist: { ...updated.ddChecklist, completedBy: params.actorName, completedById: params.actorId, completedAt: new Date().toISOString() } };
+  }
   const actor = { actorRole: params.actorRole, actorId: params.actorId, actorName: params.actorName };
 
   if (isRequestEvidenceAction(params.actionId)) {

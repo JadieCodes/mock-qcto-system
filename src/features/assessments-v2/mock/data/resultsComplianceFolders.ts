@@ -1,5 +1,6 @@
 import { checklistItem, checklistSection, type ChecklistSection } from '../../shared/checklist/types';
 
+// Batch N2: FISA results only. EISA batches use QCTO's own section 2 (eisaVerificationLines.ts).
 // CR-059: "folder-by-folder compliance checks" for a results batch. This is a brand-new
 // module (no old-build or QCTO template exists for it) — built fresh, in the same checklist
 // shape as every other evaluation in this domain (CR-011: comment on every line). Flagged in

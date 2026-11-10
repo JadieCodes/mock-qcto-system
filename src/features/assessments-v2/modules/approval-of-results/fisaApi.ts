@@ -17,14 +17,16 @@ import type { Role } from '../../types';
 import { listApprovedFisaStandards } from '../fisa/api';
 import type { FisaStandardRecord } from '../fisa/types';
 import { assertAsdReviewComplete, NEXT_APPROVER } from './api';
-import { FISA_RESULTS_RECORD_TYPE, FISA_RESULTS_SUBMITTER_ROLE, RESULTS_AD_ROLE } from './config';
+import { FISA_RESULTS_RECORD_TYPE, FISA_RESULTS_SUBMITTER_ROLE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from './config';
 import { reviewersFromAudit } from './downloads';
+import { assertFisaSectionEComplete, blankSectionE, SECTION_E_ASD_FIELDS, SECTION_E_DD_FIELDS } from './fisaSectionE';
 import { lastFisaDateOf } from './outcomeLetters';
 import { buildVerificationCode } from './verificationCode';
 import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues, isRecommendDeclineAction, isRequestEvidenceAction } from './workflow';
 import type {
   FisaResultsBatch,
   FisaResultsDraftPatch,
+  FisaSectionE,
   LearnerResult,
   NewFisaResultsBatchInput,
   ResultsFinalDecision,
@@ -35,10 +37,17 @@ export const FISA_RESULTS_KEY = 'approvalOfResults:fisaBatches';
 
 // Batch N1: a batch stored in the old 'declined' stage (before the decline became final) is a
 // "More evidence requested" batch. Idempotent: a final decline always carries a finalDecision.
+// Batch N2: a batch stored before N2 has no Section E and no first-submission date; it gets a blank
+// Section E and its submission date (each only when missing, so this can run any number of times).
+type StoredFisaBatch = Omit<FisaResultsBatch, 'sectionE' | 'firstSubmittedAt'> & Partial<Pick<FisaResultsBatch, 'sectionE' | 'firstSubmittedAt'>>;
+
 function loadAll(): FisaResultsBatch[] {
-  return readStore<FisaResultsBatch[]>(FISA_RESULTS_KEY, []).map((b) =>
-    b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b, workflow: { ...b.workflow, stageId: 'more-evidence' } } : b,
-  );
+  return readStore<StoredFisaBatch[]>(FISA_RESULTS_KEY, []).map((b) => ({
+    ...b,
+    workflow: b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b.workflow, stageId: 'more-evidence' } : b.workflow,
+    sectionE: b.sectionE ?? blankSectionE(),
+    firstSubmittedAt: b.firstSubmittedAt ?? b.submittedAt,
+  }));
 }
 
 function today(): string {
@@ -112,6 +121,7 @@ export async function createFisaResultsBatch(input: NewFisaResultsBatchInput): P
     ...getSkillsProgrammeDetails(standard.skillsProgrammeTitle),
     fisaDates: [input.fisaDate],
     recommendationsForImprovement: '',
+    sectionE: blankSectionE(),
     sdpId: input.sdpId,
     sdpName: input.sdpName,
     learnerResults: [],
@@ -131,6 +141,7 @@ export async function createFisaResultsBatch(input: NewFisaResultsBatchInput): P
     createdBy: input.createdBy,
     createdById: input.createdById,
     submittedAt: null,
+    firstSubmittedAt: null,
     recommendation: null,
     approvalLetter: null,
   };
@@ -192,6 +203,7 @@ export async function submitFisaResultsBatch(id: string, actor: FisaActor, decla
     workflow,
     declaration: { acceptedBy: actor.name, acceptedById: actor.id, acceptedAt: now },
     submittedAt: now,
+    firstSubmittedAt: now,
   };
   saveAll(replace(all, updated));
   addNotification({
@@ -244,6 +256,27 @@ export async function saveFisaRecommendations(id: string, text: string): Promise
   return updated;
 }
 
+// Batch N2: Section E of QCTO's FISA report. The ASD fills E1 while the batch is with the ASD; the
+// Deputy Director fills the compliance statement in E2 while it is with the Deputy Director.
+export async function saveFisaSectionE(id: string, patch: Partial<FisaSectionE>, actorRole: Role): Promise<FisaResultsBatch> {
+  const all = loadAll();
+  const batch = getOrThrow(all, id);
+  const keys = Object.keys(patch);
+  const asdKeys: string[] = [...SECTION_E_ASD_FIELDS];
+  const ddKeys: string[] = [...SECTION_E_DD_FIELDS];
+  if (keys.some((k) => asdKeys.includes(k))) {
+    assertAsdReviewStage(batch);
+    if (actorRole !== RESULTS_AD_ROLE) throw new Error('Only the ASD can change Section E1.');
+  }
+  if (keys.some((k) => ddKeys.includes(k))) {
+    if (batch.workflow.stageId !== 'dd-review') throw new Error('Section E2 can only be changed while the batch is with the Deputy Director.');
+    if (actorRole !== RESULTS_DD_ROLE) throw new Error('Only the Deputy Director can change Section E2.');
+  }
+  const updated = { ...batch, sectionE: { ...batch.sectionE, ...patch } };
+  saveAll(replace(all, updated));
+  return updated;
+}
+
 // The ASD can add a file during the review, the same as on an EISA batch. It is tagged "Other".
 export async function uploadFisaReviewEvidence(id: string, file: Omit<TaggedEvidenceDocument, 'uploadedAt' | 'tag'>): Promise<FisaResultsBatch> {
   assertFileNotEmpty(file);
@@ -273,7 +306,10 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
   const batch = getOrThrow(all, params.batchId);
 
   if (params.actionId === 'fisa-submit') throw new Error('Submit the batch from the SDP draft.');
-  if (params.actionId === 'ad-advance') assertAsdReviewComplete(batch);
+  if (params.actionId === 'ad-advance') {
+    assertAsdReviewComplete(batch);
+    assertFisaSectionEComplete(batch);
+  }
 
   if (params.actionId === 'batch-resubmit') {
     if (batch.sdpId !== params.actorId) throw new Error('Only the SDP that submitted this batch can resubmit it.');
@@ -294,6 +330,7 @@ export async function performFisaResultsAction(params: FisaResultsActionParams):
       workflow,
       cycleCount: batch.cycleCount + 1,
       finalEvidenceReceivedAt: today(),
+      sectionE: blankSectionE(),
       complianceChecklist: buildResultsComplianceChecklist(),
       complianceReviewNotes: '',
       evidenceEvaluationNotes: '',

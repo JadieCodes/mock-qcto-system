@@ -13,10 +13,10 @@ import { documentsForPortal, EISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
 import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
-import { downloadEisaVerificationReport } from '../downloads';
+import { downloadEisaVerificationReport } from '../eisaVerificationReport';
 import { downloadLetterModel, eisaOutcomeLetter } from '../outcomeLetters';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
-import { useResultsAction, useResultsBatch } from '../hooks';
+import { useEisaReportContext, useResultsAction, useResultsBatch } from '../hooks';
 
 // CR-059: QP-facing read-only summary — status, the batch figures and per-component results
 // (29.31), the latest request for more evidence (if any) with a resubmit action, and once the
@@ -27,6 +27,7 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
   const actorName = person.name;
   const { data: batch } = useResultsBatch(batchId);
   const resultsAction = useResultsAction();
+  const reportContext = useEisaReportContext(batch?.sittingId ?? null);
 
   return (
     <Modal
@@ -74,7 +75,7 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
           {batch.finalDecision && (
             <BatchDownloads
               onDownloadLetter={() => downloadLetterModel(eisaOutcomeLetter(batch, false))}
-              onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
+              onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id), reportContext)}
             />
           )}
           <BatchDocumentsCard
@@ -83,7 +84,7 @@ export function ResultsBatchDetail({ batchId, onClose }: { batchId: string | nul
               batch.finalDecision
                 ? {
                     'eisa-outcome-letter': () => downloadLetterModel(eisaOutcomeLetter(batch, false)),
-                    'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
+                    'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id), reportContext),
                   }
                 : {}
             }

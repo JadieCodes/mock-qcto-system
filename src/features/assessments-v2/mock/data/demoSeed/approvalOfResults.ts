@@ -33,15 +33,21 @@
 //                                                                          recommended a decline: two irregularities, two corrective actions;
 //                                                                          no Post-EISA visit (Batch N1)
 //
+// Batch N2: every batch has a section 2 review in QCTO's form (pre-filled lines j, l, d and e, then the
+// ASD's answers; the batches with the ASD hold only part of it), and every batch that went past the
+// Deputy Director has the Deputy Director's letter checklist. The declined batch (A12) answers g and h
+// "No" and records a negative impact; the "More evidence requested" batch (A11) answers c "No".
+//
 // Officials: ASD Lindiwe Khumalo (Electrical Trades, Welding) / Riaan Pretorius
 // (Plumbing); Deputy Director Grace Mokoena (Nomvula's and Johan's) / Peter Botha (Precious's);
 // Director Zanele Mthembu (Nomvula's) / Sarah Naidoo (Precious's and Johan's); Chief Director
 // Busisiwe Radebe / Francois Le Roux.
 import { onFileDocumentsFor } from '../onFileDocuments';
-import { buildResultsComplianceChecklist } from '../resultsComplianceFolders';
-import { isChecklistComplete } from '../../../shared/checklist/types';
 import type { Role } from '../../../types';
 import { onFileAuditText } from '../../../modules/approval-of-results/api';
+import { assertEisaReviewComplete, blankEisaReview, isPrefilledComment, prefillEisaReview } from '../../../modules/approval-of-results/eisaReview';
+import { DD_REQUIRED_LINE_IDS } from '../../../modules/approval-of-results/letterChecklist';
+import { sourceInfoOf } from '../../../modules/approval-of-results/sourceInfo';
 import { reviewersFromAudit } from '../../../modules/approval-of-results/downloads';
 import { lastEisaDateOf } from '../../../modules/approval-of-results/outcomeLetters';
 import { buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
@@ -50,11 +56,12 @@ import { qualificationDetailsOf, snapshotResultsRules } from '../../../modules/a
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
 import { isRecommendDeclineAction, isRequestEvidenceAction, RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
-import type { EisaLearnerResult, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft, ResultsFinalDecision } from '../../../modules/approval-of-results/types';
+import type { EisaLearnerResult, EisaReview, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft, ResultsFinalDecision } from '../../../modules/approval-of-results/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
+import type { EisaRegistrationRecord } from '../../../modules/eisa-registration/types';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
-import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
+import { createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedLog } from './helpers';
 
 const RESULTS_ID_GROUP = 7;
 
@@ -80,7 +87,50 @@ const FRANCOIS = 'francois-le-roux';
 const COMPLIANCE_NOTES =
   'The learner list matches the EISA Confirmation, every SOR was accepted at registration and the SDP was in good standing for this sitting.';
 const EVIDENCE_NOTES = 'The marking report and the moderation report were checked against each learner result. The outcomes are supported by the evidence.';
-const CHECKLIST_COMMENT = 'Checked against the submitted folder — in order.';
+const REVIEW_COMMENT = 'Checked against the submitted evidence — in order.';
+
+interface ReviewProgress {
+  evidenceNotes: boolean;
+  // How many Yes/No lines are answered (the pre-filled ones count); everything when omitted. The free
+  // text of sections 2 and 5 is filled only when every line is answered.
+  answered?: number;
+  evidenceFile?: string;
+  overrides?: Record<string, { answer: 'yes' | 'no'; comment: string }>;
+  free?: Partial<EisaReview>;
+}
+
+// Batch N2: the ASD's section 2 — the pre-filled lines first (as submitResultsBatch() leaves them),
+// then the ASD's own answers, the same shape the screen saves (saveEisaReview).
+function seedEisaReview(batch: ResultsBatch, progress: ReviewProgress): EisaReview {
+  const base = prefillEisaReview(batch);
+  const all = progress.answered === undefined;
+  let count = 0;
+  const checklist = base.checklist.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      if (isPrefilledComment(item.comment)) {
+        count++;
+        return item;
+      }
+      if (!all && count >= (progress.answered ?? 0)) return item;
+      count++;
+      const override = progress.overrides?.[item.id];
+      return { ...item, answer: override?.answer ?? ('yes' as const), comment: override?.comment ?? REVIEW_COMMENT };
+    }),
+  }));
+  if (!all) return { ...base, checklist };
+  return {
+    ...base,
+    checklist,
+    irregularitySummary: 'None.',
+    analysisSummary: "The QP's analysis shows the results are in line with the previous sitting; no unusual spread of marks.",
+    sampleVerificationComment: 'A sample of the scripts was re-marked against the marking guideline; the standard is acceptable.',
+    recommendationFurtherAction: 'None.',
+    goodPractices: 'Marking and moderation reports were complete and signed on the day.',
+    badPractices: 'None noted.',
+    ...progress.free,
+  };
+}
 
 // performResultsAction(): who is told next.
 const NEXT_APPROVER: Partial<Record<string, Role>> = {
@@ -92,7 +142,7 @@ const NEXT_APPROVER: Partial<Record<string, Role>> = {
 };
 
 interface ResultsSeedBuilder {
-  adReview: (adId: string, atDaysAgo: number, progress: { evidenceNotes: boolean; sectionIds?: string[]; evidenceFile?: string }) => ResultsSeedBuilder;
+  adReview: (adId: string, atDaysAgo: number, progress: ReviewProgress) => ResultsSeedBuilder;
   act: (actionId: string, actorId: string, atDaysAgo: number, note?: string, lists?: { irregularities: string[]; correctiveActions: string[] }) => ResultsSeedBuilder;
   done: () => void;
 }
@@ -134,7 +184,7 @@ function idNumberOf(learnerId: string): string {
   return learner.idNumber;
 }
 
-export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[]): ResultsBatch[] {
+export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[], registrations: EisaRegistrationRecord[]): ResultsBatch[] {
   const batches: ResultsBatch[] = [];
 
   function confirmationFor(title: string, offsetDays: number): EisaConfirmationRecord {
@@ -224,7 +274,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       declaration: { acceptedBy: qp.name, acceptedById: qp.id, acceptedAt: submittedAt },
       complianceReviewNotes: '',
       evidenceEvaluationNotes: '',
-      complianceChecklist: buildResultsComplianceChecklist(),
+      complianceChecklist: [],
+      eisaReview: blankEisaReview(),
+      ddChecklist: null,
+      sourceInfo: sourceInfoOf(confirmation, registrations.filter((r) => r.sittingId === confirmation.sittingId)),
       workflow: { stageId: 'ad-review', submittedBy: qp.name, submittedById: qp.id },
       cycleCount: 1,
       declineHistory: [],
@@ -239,6 +292,8 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       createdBy: qp.name,
     };
     if (dateOf(submittedAt) > batch.submissionDeadline) throw new Error(`Demo seed: ${title} ${sittingDate} submitted after its deadline.`);
+    // submitResultsBatch() pre-fills the lines the system knows.
+    batch = { ...batch, eisaReview: prefillEisaReview(batch) };
     // submitResultsBatch() writes an audit entry per "Already on file" choice and one for the declaration.
     [...onFileDocuments.map(onFileAuditText), 'Declaration made: results and evidence are accurate and complete'].forEach((action) =>
       log.audit.push({ id: crypto.randomUUID(), recordType: 'results-batch', recordId: batch.id, actorRole: qp.role, actorId: qp.id, actorName: qp.name, action, timestamp: submittedAt }),
@@ -279,7 +334,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
           ...batch,
           complianceReviewNotes: COMPLIANCE_NOTES,
           evidenceEvaluationNotes: progress.evidenceNotes ? EVIDENCE_NOTES : '',
-          complianceChecklist: answerChecklist(buildResultsComplianceChecklist(), CHECKLIST_COMMENT, { onlySectionIds: progress.sectionIds }),
+          eisaReview: seedEisaReview(batch, progress),
           evidenceDocuments: progress.evidenceFile
             ? [
                 ...batch.evidenceDocuments,
@@ -290,9 +345,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
         return api;
       },
       act(actionId, actorId, atDaysAgo, note, lists) {
-        if (actionId === 'ad-advance' && (!batch.complianceReviewNotes.trim() || !batch.evidenceEvaluationNotes.trim() || !isChecklistComplete(batch.complianceChecklist, true))) {
-          throw new Error('Demo seed: complete the compliance review, evidence evaluation and folder checklist before advancing.');
-        }
+        if (actionId === 'ad-advance') assertEisaReviewComplete(batch);
         const actor = seedPerson(actorId);
         const at = clock.at(atDaysAgo, 14);
         const fromStage = batch.workflow.stageId;
@@ -303,6 +356,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
         const auditNote = isFinalDecline && lists ? `Irregularities: ${lists.irregularities.join('; ')}. Corrective actions: ${lists.correctiveActions.join('; ')}.` : note;
         const workflow = step(log, { definition: RESULTS_WORKFLOW, state: batch.workflow, actionId, actor, at, recordType: 'results-batch', recordId: batch.id, note: auditNote });
         batch = { ...batch, workflow };
+        // performResultsAction(): the Deputy Director's letter checklist is complete and stamped when the batch is sent on.
+        if (actionId === 'dd-advance' || actionId === 'dd-recommend-decline') {
+          batch = { ...batch, ddChecklist: { checkedIds: [...DD_REQUIRED_LINE_IDS], completedBy: actor.name, completedById: actor.id, completedAt: at } };
+        }
         if (isRequestEvidenceAction(actionId)) {
           batch = {
             ...batch,
@@ -359,9 +416,9 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
   const full = { evidenceNotes: true };
 
   submit(2, 'Plumbing', -30, 'CCCN', 10).done();
-  submit(3, 'Welding', -45, 'CCCN', 25).adReview(LINDIWE, 22, { evidenceNotes: false, sectionIds: ['f1'] }).done();
+  submit(3, 'Welding', -45, 'CCCN', 25).adReview(LINDIWE, 22, { evidenceNotes: false, answered: 6 }).done();
   submit(4, 'Electrical Trades', -60, 'CCA', 40)
-    .adReview(LINDIWE, 36, { evidenceNotes: true, sectionIds: ['f1', 'f2', 'f3'], evidenceFile: 'Marking_Venue_Attendance_Register.pdf' })
+    .adReview(LINDIWE, 36, { evidenceNotes: true, answered: 14, evidenceFile: 'Marking_Venue_Attendance_Register.pdf' })
     .done();
   submit(5, 'Plumbing', -75, 'CCN', 55).adReview(RIAAN, 50, full).act('ad-advance', RIAAN, 48).done();
   submit(6, 'Welding', -90, 'CAC', 70).adReview(LINDIWE, 65, full).act('ad-advance', LINDIWE, 63).act('dd-advance', PETER, 57).done();
@@ -393,7 +450,10 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     .act('chief-director-approve', BUSISIWE, 126)
     .done();
   submit(11, 'Plumbing', -50, 'CNC', 30)
-    .adReview(RIAAN, 26, full)
+    .adReview(RIAAN, 26, {
+      ...full,
+      overrides: { c: { answer: 'no', comment: 'The moderation report has no moderator sign-off for one learner.' } },
+    })
     .act('ad-advance', RIAAN, 24)
     .act(
       'dd-request-evidence',
@@ -406,7 +466,21 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
   // Batch N1: a final decline. The DD and the Director recommended it while sending the batch on;
   // only the Chief Director declined it. No Post-EISA visit, no resubmit.
   submit(12, 'Electrical Trades', -190, 'NA', 170)
-    .adReview(LINDIWE, 166, full)
+    .adReview(LINDIWE, 166, {
+      ...full,
+      overrides: {
+        f: { answer: 'no', comment: 'The marking irregularities mean the session cannot be treated as fully credible.' },
+        g: { answer: 'no', comment: 'The marking report totals do not match the learner marksheets for two learners.' },
+        h: { answer: 'no', comment: 'The moderation report is dated before the marking was completed.' },
+      },
+      free: {
+        irregularitySummary: 'The marking report totals do not match the marksheets, and the moderation was signed before marking finished.',
+        impactOnApproval: 'negative',
+        recommendationFurtherAction: 'Decline the results; the QP must re-mark and repeat the moderation.',
+        badPractices: 'Moderation signed off before the marking was complete.',
+        goodPractices: 'None noted.',
+      },
+    })
     .act('ad-advance', LINDIWE, 164)
     .act('dd-recommend-decline', GRACE, 158, 'The marking report does not match the learner marksheets for two of the three learners who wrote.')
     .act('director-recommend-decline', ZANELE, 153, 'Agreed. The moderation report was signed before the marking was finished.')

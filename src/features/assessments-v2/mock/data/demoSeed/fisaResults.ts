@@ -11,6 +11,9 @@
 //  R3  Khanya Skills Academy    4 (3)                 With the Deputy Director (ASD Lindiwe Khumalo reviewed it)
 //  R4  Khanya Skills Academy    6 (5)                 Approved — Outcome Letter sent to the SDP, recommendation letter sent to Certification (Batch N1)
 //
+// Batch N2: R2, R3 and R4 carry the SDP's tagged verification report (Sections A-D); R3 and R4 have
+// Section E1 filled by the ASD, R4 also the Deputy Director's compliance statement in E2.
+//
 // Officials on R4: ASD Sipho Ndlovu, Deputy Director Grace Mokoena, Director Zanele Mthembu,
 // Chief Director Busisiwe Radebe — a different person at every stage.
 import { ENROLLED_LEARNERS } from '../enrolledLearners';
@@ -20,6 +23,7 @@ import { getSkillsProgrammeDetails } from '../skillsProgrammeDetails';
 import { SDP_DIRECTORY } from '../sdpDirectory';
 import type { Role } from '../../../types';
 import { assertAsdReviewComplete } from '../../../modules/approval-of-results/api';
+import { assertFisaSectionEComplete, blankSectionE } from '../../../modules/approval-of-results/fisaSectionE';
 import { reviewersFromAudit } from '../../../modules/approval-of-results/downloads';
 import { lastFisaDateOf } from '../../../modules/approval-of-results/outcomeLetters';
 import { buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
@@ -57,7 +61,7 @@ const NEXT_APPROVER: Partial<Record<string, Role>> = {
 
 interface FisaResultsSeedBuilder {
   submit: (atDaysAgo: number) => FisaResultsSeedBuilder;
-  adReview: (asdId: string, atDaysAgo: number) => FisaResultsSeedBuilder;
+  adReview: (asdId: string, atDaysAgo: number, entered: { rplLearners: number; monitored: boolean }) => FisaResultsSeedBuilder;
   act: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => FisaResultsSeedBuilder;
   done: () => void;
 }
@@ -101,6 +105,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
       // Batch N1: the FISA was held two working days before the batch was created.
       fisaDates: [workingDateFromToday(-(daysAgo + 2))],
       recommendationsForImprovement: '',
+      sectionE: blankSectionE(),
       sdpId: sdp.sdpId,
       sdpName: sdp.name,
       learnerResults,
@@ -126,6 +131,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
       createdBy: sdpPerson.name,
       createdById: sdpPerson.id,
       submittedAt: null,
+      firstSubmittedAt: null,
       recommendation: null,
       approvalLetter: null,
     };
@@ -145,7 +151,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
           recordType: FISA_RESULTS_RECORD_TYPE,
           recordId: batch.id,
         });
-        batch = { ...batch, workflow, submittedAt: at, declaration: { acceptedBy: sdpPerson.name, acceptedById: sdpPerson.id, acceptedAt: at } };
+        batch = { ...batch, workflow, submittedAt: at, firstSubmittedAt: at, declaration: { acceptedBy: sdpPerson.name, acceptedById: sdpPerson.id, acceptedAt: at } };
         notify(log, at, {
           recipientRole: RESULTS_AD_ROLE,
           title: 'FISA results batch submitted',
@@ -154,7 +160,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
         return api;
       },
       // The ASD's three-part review, complete (the save functions write no audit entry).
-      adReview(asdId, atDaysAgo) {
+      adReview(asdId, atDaysAgo, entered) {
         if (batch.workflow.stageId !== 'ad-review') throw new Error('Demo seed: the compliance review is only edited in ad-review.');
         const asd = seedPerson(asdId);
         if (asd.role !== RESULTS_AD_ROLE) throw new Error(`Demo seed: ${asd.name} cannot do the first results review.`);
@@ -165,16 +171,30 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
           evidenceEvaluationNotes: EVIDENCE_NOTES,
           complianceChecklist: answerChecklist(buildResultsComplianceChecklist(), CHECKLIST_COMMENT),
           recommendationsForImprovement: RECOMMENDATIONS,
+          // Batch N2: Section E1, the part the system cannot fill (saveFisaSectionE).
+          sectionE: {
+            ...batch.sectionE,
+            qctoMonitoringDate: entered.monitored ? batch.fisaDates[0] : '',
+            periodOfSkillsProgramme: '3 months',
+            learnersViaTraining: batch.learnerResults.length - entered.rplLearners,
+            learnersViaRpl: entered.rplLearners,
+            recommendation: 'approval',
+          },
         };
         return api;
       },
       act(actionId, actorId, atDaysAgo, note) {
-        if (actionId === 'ad-advance') assertAsdReviewComplete(batch);
+        if (actionId === 'ad-advance') {
+          assertAsdReviewComplete(batch);
+          assertFisaSectionEComplete(batch);
+        }
         const actor = seedPerson(actorId);
         const at = clock.at(atDaysAgo, 14);
         const fromStage = batch.workflow.stageId;
         const workflow = step(log, { definition: FISA_RESULTS_WORKFLOW, state: batch.workflow, actionId, actor, at, recordType: FISA_RESULTS_RECORD_TYPE, recordId: batch.id, note });
         batch = { ...batch, workflow };
+        // Section E2: the Deputy Director's compliance statement, saved before the batch is sent on.
+        if (actionId === 'dd-advance') batch = { ...batch, sectionE: { ...batch.sectionE, ddCompliance: 'complied', ddComment: 'All requirements were met.' } };
         if (isRequestEvidenceAction(actionId)) {
           batch = {
             ...batch,
@@ -245,6 +265,7 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
   create(1, KHANYA, ['learner-019', 'learner-020', 'learner-021'], 2, 3, [{ fileName: `${title}_Marksheet_Khanya.xlsx`, tag: 'marksheet' }]).done();
 
   create(2, THABO, ['learner-005', 'learner-006', 'learner-007'], 3, 9, [
+    { fileName: `${title}_Verification_Report_Thabo.pdf`, tag: 'verification-report' },
     { fileName: `${title}_Marksheet_Thabo.xlsx`, tag: 'marksheet' },
     { fileName: `${title}_Moderation_Report_Thabo.pdf`, tag: 'moderation-report' },
     { fileName: `${title}_Attendance_Register_Thabo.pdf`, tag: 'attendance-register' },
@@ -253,23 +274,25 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
     .done();
 
   create(3, KHANYA, ['learner-001', 'learner-002', 'learner-003', 'learner-004'], 3, 22, [
+    { fileName: `${title}_Verification_Report_Khanya_Group_A.pdf`, tag: 'verification-report' },
     { fileName: `${title}_Assessment_Instrument.pdf`, tag: 'assessment-instrument' },
     { fileName: `${title}_Marksheet_Khanya_Group_A.xlsx`, tag: 'marksheet' },
     { fileName: `${title}_Moderation_Report_Khanya_Group_A.pdf`, tag: 'moderation-report' },
   ])
     .submit(20)
-    .adReview(LINDIWE, 16)
+    .adReview(LINDIWE, 16, { rplLearners: 0, monitored: false })
     .act('ad-advance', LINDIWE, 15)
     .done();
 
   create(4, KHANYA, ['learner-013', 'learner-014', 'learner-015', 'learner-016', 'learner-017', 'learner-018'], 5, 40, [
+    { fileName: `${title}_Verification_Report_Khanya_Group_B.pdf`, tag: 'verification-report' },
     { fileName: `${title}_Assessment_Instrument.pdf`, tag: 'assessment-instrument' },
     { fileName: `${title}_Marksheet_Khanya_Group_B.xlsx`, tag: 'marksheet' },
     { fileName: `${title}_Moderation_Report_Khanya_Group_B.pdf`, tag: 'moderation-report' },
     { fileName: `${title}_Attendance_Register_Khanya_Group_B.pdf`, tag: 'attendance-register' },
   ])
     .submit(38)
-    .adReview(SIPHO, 34)
+    .adReview(SIPHO, 34, { rplLearners: 1, monitored: true })
     .act('ad-advance', SIPHO, 33)
     .act('dd-advance', GRACE, 28)
     .act('director-advance', ZANELE, 24)

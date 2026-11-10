@@ -10,6 +10,7 @@ export type EisaBatchDocumentId =
   | 'eisa-tracking-register'
   | 'eisa-file-3'
   | 'eisa-recommendation-letter'
+  | 'eisa-letter-checklist'
   | 'eisa-learner-submission-format';
 
 export type FisaBatchDocumentId =
@@ -17,6 +18,7 @@ export type FisaBatchDocumentId =
   | 'fisa-verification-report'
   | 'fisa-learner-enrolment-spreadsheet'
   | 'fisa-recommendation-letter'
+  | 'fisa-tracking-register'
   | 'fisa-data-load-specification';
 
 export interface BatchDocumentDefinition<Id extends string> {
@@ -33,7 +35,9 @@ export function documentsForPortal<Id extends string>(documents: BatchDocumentDe
 export const EISA_BATCH_DOCUMENTS: BatchDocumentDefinition<EisaBatchDocumentId>[] = [
   { id: 'eisa-outcome-letter', name: 'Outcome Letter' },
   { id: 'eisa-verification-report', name: 'Assessment Assurance Verification Report (EISA)' },
-  { id: 'eisa-tracking-register', name: 'Tracking register (audit trail)' },
+  // Batch N2: this batch's line of the tracking register, as a CSV (the audit trail CSV is on the Audit Trail tab).
+  { id: 'eisa-tracking-register', name: 'Tracking register entry (CSV)', internalOnly: true },
+  { id: 'eisa-letter-checklist', name: 'Approval of Results letter checklist', internalOnly: true },
   { id: 'eisa-file-3', name: 'File 3 (learner results)' },
   { id: 'eisa-recommendation-letter', name: 'Certification recommendation letter', internalOnly: true },
   { id: 'eisa-learner-submission-format', name: 'Learner EISA submission format' },
@@ -44,5 +48,6 @@ export const FISA_BATCH_DOCUMENTS: BatchDocumentDefinition<FisaBatchDocumentId>[
   { id: 'fisa-verification-report', name: 'FISA Assessment Assurance Verification Report' },
   { id: 'fisa-learner-enrolment-spreadsheet', name: 'Learner enrolment spreadsheet (skills programme)' },
   { id: 'fisa-recommendation-letter', name: 'SP certification recommendation letter', internalOnly: true },
+  { id: 'fisa-tracking-register', name: 'Tracking register entry (CSV)', internalOnly: true },
   { id: 'fisa-data-load-specification', name: 'Data load specification (skills programme)' },
 ];

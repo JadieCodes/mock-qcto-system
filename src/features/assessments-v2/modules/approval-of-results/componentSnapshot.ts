@@ -46,6 +46,7 @@ export function snapshotResultsRules(
       highestMark: c.highestMark,
       lowestMark: c.lowestMark,
       eisaDate: dates[i],
+      days: c.days,
     })),
   };
 }

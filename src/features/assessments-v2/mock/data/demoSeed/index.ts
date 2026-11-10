@@ -57,7 +57,7 @@ export function seedDemoData(): void {
   const validations = seedInstrumentValidations(log, qasa, calendar.sittings);
   const { registrations, monitoringItems } = seedEisaRegistrations(log, calendar.sittings);
   const confirmations = seedEisaConfirmations(log, calendar.sittings, registrations);
-  const siteVisits = seedSiteVisits(log, calendar.sittings, registrations, monitoringItems, seedResultsBatches(log, confirmations, qasa));
+  const siteVisits = seedSiteVisits(log, calendar.sittings, registrations, monitoringItems, seedResultsBatches(log, confirmations, qasa, registrations));
   const resultsDrafts = seedResultsDrafts(confirmations, qasa);
   const fisaValidations = seedFisaValidations(log);
   const fisaResults = seedFisaResultsBatches(log);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -6,8 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
-import { Checklist } from '../../../shared/checklist/Checklist';
-import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
@@ -20,7 +18,10 @@ import { useSiteVisit } from '../../site-visits/hooks';
 import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
 import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE } from '../config';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
+import { AuditTrailCsvDownload } from '../components/AuditTrailCsvDownload';
 import { BatchDownloads } from '../components/BatchDownloads';
+import { DdLetterChecklistPanel } from '../components/DdLetterChecklistPanel';
+import { EisaReviewForm } from '../components/EisaReviewForm';
 import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../components/EisaSubmissionPack';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
@@ -29,15 +30,19 @@ import { DeclineRecommendationsNotice, DeclineResultsForm, EvidenceDates, FinalD
 import { OutcomeLetterView } from '../components/OutcomeLetterView';
 import { ResultsActionBar } from '../components/ResultsActionBar';
 import { documentsForPortal, EISA_BATCH_DOCUMENTS, type EisaBatchDocumentId } from '../batchDocuments';
-import { downloadEisaVerificationReport } from '../downloads';
+import { eisaReviewIssues } from '../eisaReview';
+import { downloadDdLetterChecklist, downloadEisaVerificationReport, type EisaReportContext } from '../eisaVerificationReport';
+import { ddChecklistIssues } from '../letterChecklist';
 import { downloadLetterModel, eisaOutcomeLetter, eisaRecommendationLetter } from '../outcomeLetters';
+import { eisaRegisterCsv } from '../trackingRegister';
+import { downloadCsvFile } from '../../../shared/csv/csv';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import {
   useCreatePemVisitForBatch,
   useMarkingModerationStatus,
   useResultsAction,
+  useEisaReportContext,
   useResultsBatch,
-  useSaveComplianceChecklist,
   useSaveComplianceReviewNotes,
   useSaveEvidenceEvaluationNotes,
   useUploadEvidenceDocument,
@@ -104,19 +109,28 @@ function PemVisitBanner({ batch }: { batch: ResultsBatch }) {
 // show "Generated at final approval" until the batch that builds them adds them here.
 // Batch N1 (05.16): on any batch with a final decision — the Outcome Letter (approval or decline),
 // the verification report and, on an approved batch only, the Certification recommendation letter.
-function eisaDownloads(batch: ResultsBatch): Partial<Record<EisaBatchDocumentId, () => void>> {
+// Batch N2: the verification report follows QCTO's layout; the approved batch also has its tracking
+// register line and the letter checklist.
+function eisaDownloads(batch: ResultsBatch, ctx: EisaReportContext): Partial<Record<EisaBatchDocumentId, () => void>> {
   if (!batch.finalDecision) return {};
   const recommendation = eisaRecommendationLetter(batch);
   return {
     'eisa-outcome-letter': () => downloadLetterModel(eisaOutcomeLetter(batch, false)),
-    'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
-    ...(recommendation ? { 'eisa-recommendation-letter': () => downloadLetterModel(recommendation) } : {}),
+    'eisa-verification-report': () => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id), ctx),
+    'eisa-letter-checklist': () => downloadDdLetterChecklist(batch),
+    ...(recommendation
+      ? {
+          'eisa-recommendation-letter': () => downloadLetterModel(recommendation),
+          'eisa-tracking-register': () => downloadCsvFile(`Tracking_Register_Entry_EISA_${batch.sittingDate}_${batch.id.slice(-4)}.csv`, eisaRegisterCsv([batch], '', '').csv),
+        }
+      : {}),
   };
 }
 
 function DetailsTab({ batch }: { batch: ResultsBatch }) {
   const { data: mmVisits = [] } = useMarkingModerationStatus(batch.sittingId);
   const { role } = useV2Role();
+  const reportContext = useEisaReportContext(batch.sittingId);
   // Rows 36/38: who can see the report itself (not just the status) is driven by the same
   // CR-054 REPORT_VISIBILITY_RULES table the Site Visits hub reads from, not a separate rule
   // invented for this screen.
@@ -219,7 +233,7 @@ function DetailsTab({ batch }: { batch: ResultsBatch }) {
         <Label className="text-xs text-gray-400 uppercase">Declaration</Label>
         <DeclarationLine declaration={batch.declaration} />
       </div>
-      <BatchDocumentsCard documents={documentsForPortal(EISA_BATCH_DOCUMENTS, 'internal')} downloads={eisaDownloads(batch)} />
+      <BatchDocumentsCard documents={documentsForPortal(EISA_BATCH_DOCUMENTS, 'internal')} downloads={eisaDownloads(batch, reportContext)} />
     </div>
   );
 }
@@ -228,22 +242,22 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
   const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
-  const saveChecklist = useSaveComplianceChecklist();
   const saveReviewNotes = useSaveComplianceReviewNotes();
   const saveEvidenceNotes = useSaveEvidenceEvaluationNotes();
   const uploadEvidence = useUploadEvidenceDocument();
   const resultsAction = useResultsAction();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadChecked, setUploadChecked] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const editable = role === RESULTS_AD_ROLE && batch.workflow.stageId === 'ad-review';
-  const checklistComplete = isChecklistComplete(batch.complianceChecklist, true);
+  const reviewIssues = eisaReviewIssues(batch.eisaReview);
   const notesComplete = batch.complianceReviewNotes.trim().length > 0 && batch.evidenceEvaluationNotes.trim().length > 0;
   const advanceIssues: ValidationIssue[] = editable
     ? [
         ...(batch.complianceReviewNotes.trim() ? [] : [{ field: 'complianceReviewNotes', message: 'Compliance review notes are required.' }]),
         ...(batch.evidenceEvaluationNotes.trim() ? [] : [{ field: 'evidenceEvaluationNotes', message: 'Evidence evaluation notes are required.' }]),
-        ...getChecklistIssues(batch.complianceChecklist, true),
+        ...reviewIssues,
       ]
     : [];
 
@@ -268,19 +282,25 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
           onChange={(e) => saveEvidenceNotes.mutate({ id: batch.id, notes: e.target.value })}
         />
         {editable && (
-          <input
-            type="file"
-            aria-label="Add an evidence file"
-            className="text-sm"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              const issue = file ? fileUploadIssue(file) : null;
-              setUploadError(issue);
-              setUploadChecked(!!file && !issue);
-              if (file && !issue) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
-              e.target.value = '';
-            }}
-          />
+          <>
+            <Button type="button" size="sm" variant="outline" aria-label="Add an evidence file" onClick={() => fileInput.current?.click()}>
+              Add an evidence file
+            </Button>
+            <input
+              ref={fileInput}
+              type="file"
+              hidden
+              tabIndex={-1}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                const issue = file ? fileUploadIssue(file) : null;
+                setUploadError(issue);
+                setUploadChecked(!!file && !issue);
+                if (file && !issue) uploadEvidence.mutate({ id: batch.id, file: { fileName: file.name, fileSize: file.size, fileType: file.type || 'unknown' } });
+                e.target.value = '';
+              }}
+            />
+          </>
         )}
         <FileCheckError message={uploadError} />
         {uploadChecked && !uploadError && <DocumentChecked />}
@@ -294,10 +314,7 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Folder-by-Folder Compliance Checklist</p>
-        <Checklist sections={batch.complianceChecklist} readonly={!editable} onChange={(sections) => saveChecklist.mutate({ id: batch.id, sections })} />
-      </div>
+      <EisaReviewForm batch={batch} editable={editable} />
 
       {batch.workflow.stageId === 'ad-review' && (
         <>
@@ -306,7 +323,7 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
             definition={RESULTS_WORKFLOW}
             stageId={batch.workflow.stageId}
             role={role}
-            disabledActionIds={!(checklistComplete && notesComplete) ? ['ad-advance'] : []}
+            disabledActionIds={!(reviewIssues.length === 0 && notesComplete) ? ['ad-advance'] : []}
             onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
           />
         </>
@@ -320,6 +337,8 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
   const actorId = person.id;
   const actorName = person.name;
   const resultsAction = useResultsAction();
+  const reportContext = useEisaReportContext(batch.sittingId);
+  const ddIssues = batch.workflow.stageId === 'dd-review' ? ddChecklistIssues(batch.ddChecklist) : [];
 
   const stageOrder = ['ad-review', 'dd-review', 'director-review', 'chief-director-review'];
   const currentIndex = stageOrder.indexOf(batch.workflow.stageId);
@@ -344,11 +363,17 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
 
       {['dd-review', 'director-review', 'chief-director-review'].includes(batch.workflow.stageId) && (
         <div className="space-y-2">
+          {ddIssues.length > 0 && (
+            <p className="text-xs text-amber-700">
+              Tick every line of the Approval of Results letter checklist (Outcome Letter tab) before sending the batch on. {ddIssues.length} line(s) left.
+            </p>
+          )}
           <ResultsActionBar
             definition={RESULTS_WORKFLOW}
             stageId={batch.workflow.stageId}
             role={role}
             hiddenActionIds={['chief-director-decline']}
+            disabledActionIds={ddIssues.length > 0 ? ['dd-advance', 'dd-recommend-decline'] : []}
             onRun={(actionId, note) => resultsAction.mutate({ batchId: batch.id, actionId, actorRole: role, actorId, actorName, note })}
           />
           {canDeclineResults(role, batch.workflow.stageId) && (
@@ -375,7 +400,7 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
           <FinalDecisionNotice decision={batch.finalDecision} />
           <BatchDownloads
             onDownloadLetter={() => downloadLetterModel(eisaOutcomeLetter(batch, false))}
-            onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id))}
+            onDownloadReport={() => downloadEisaVerificationReport(batch, getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id), reportContext)}
           />
         </>
       )}
@@ -387,8 +412,15 @@ function ApprovalChainTab({ batch }: { batch: ResultsBatch }) {
 // batch is decided. The Certification recommendation letter exists on an approved batch only.
 const DRAFT_LETTER_STAGES = ['dd-review', 'director-review', 'chief-director-review'];
 
+// Batch N2: the Deputy Director checks QCTO's letter checklist against this letter.
 function OutcomeLetterTab({ batch }: { batch: ResultsBatch }) {
-  return <OutcomeLetterView model={eisaOutcomeLetter(batch, !batch.finalDecision)} />;
+  const reportContext = useEisaReportContext(batch.sittingId);
+  return (
+    <div className="space-y-4">
+      <DdLetterChecklistPanel batch={batch} ctx={reportContext} />
+      <OutcomeLetterView model={eisaOutcomeLetter(batch, !batch.finalDecision)} />
+    </div>
+  );
 }
 
 function RecommendationLetterTab({ batch }: { batch: ResultsBatch }) {
@@ -429,6 +461,7 @@ function ResultsBatchWorkspaceContent({ batch }: { batch: ResultsBatch }) {
         </TabsContent>
       )}
       <TabsContent value="audit" className="pt-4">
+        <AuditTrailCsvDownload recordType={EISA_RESULTS_RECORD_TYPE} recordId={batch.id} fileName={`Audit_Trail_EISA_${batch.sittingDate}_${batch.id.slice(-4)}.csv`} />
         <AuditTrailView recordTypes={['results-batch']} recordId={batch.id} />
       </TabsContent>
     </Tabs>

@@ -12,6 +12,9 @@ export interface QpDirectoryEntry {
   contactSurname: string;
   organisation: string;
   postalAddress: string[];
+  // Batch N2: mock contact details for the EISA verification report.
+  telephone: string;
+  email: string;
 }
 
 export const QP_DIRECTORY: QpDirectoryEntry[] = [
@@ -24,6 +27,8 @@ export const QP_DIRECTORY: QpDirectoryEntry[] = [
     contactSurname: 'Dlamini',
     organisation: 'Highveld Trades Assessment Partners',
     postalAddress: ['PO Box 4410', 'Midrand', '1685'],
+    telephone: '011 555 0101',
+    email: 'nomvula.dlamini@highveld-trades.example',
   },
   {
     qpId: 'qp-johan-van-der-merwe',
@@ -34,6 +39,8 @@ export const QP_DIRECTORY: QpDirectoryEntry[] = [
     contactSurname: 'van der Merwe',
     organisation: 'Cape Plumbing Quality Partners',
     postalAddress: ['12 Voortrekker Road', 'Bellville', '7530'],
+    telephone: '021 555 0102',
+    email: 'johan.vandermerwe@cape-plumbing.example',
   },
   {
     qpId: 'qp-precious-mahlangu',
@@ -44,6 +51,8 @@ export const QP_DIRECTORY: QpDirectoryEntry[] = [
     contactSurname: 'Mahlangu',
     organisation: 'Mpumalanga Welding Assessors',
     postalAddress: ['PO Box 218', 'Witbank', '1035'],
+    telephone: '013 555 0103',
+    email: 'precious.mahlangu@mpumalanga-welding.example',
   },
 ];
 

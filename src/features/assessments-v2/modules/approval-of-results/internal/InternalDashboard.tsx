@@ -11,6 +11,8 @@ import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
+import { TrackingRegisterDownload } from '../components/TrackingRegisterDownload';
+import { eisaRegisterCsv } from '../trackingRegister';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
 import { absenteeismText, batchFiguresOf, competenceRateText, throughputRateText } from '../calculation';
@@ -92,6 +94,9 @@ function EisaResultsTab({ scope }: { scope: ListScope }) {
         <StatTile label="More Evidence Requested" value={moreEvidence.length} />
         <StatTile label="Declined" value={declined.length} />
       </StatTileGrid>
+
+      {/* Batch N2: the register covers every approved batch, whatever the My items / All filter shows. */}
+      <TrackingRegisterDownload fileNamePrefix="Tracking_Register_EISA" build={(from, to) => eisaRegisterCsv(allBatches, from, to)} />
 
       <SectionCard title="All Results Batches">
         <BatchesTable batches={batches} onSelect={setSelectedId} />

@@ -34,6 +34,8 @@ export const FISA_EVIDENCE_TAG_OPTIONS: { value: FisaEvidenceTag; label: string 
   { value: 'marksheet', label: 'Marksheet' },
   { value: 'moderation-report', label: 'Moderation report' },
   { value: 'attendance-register', label: 'Attendance register' },
+  // Batch N2: Sections A-D of QCTO's FISA verification report, completed by the SDP.
+  { value: 'verification-report', label: 'Verification report' },
   { value: 'other', label: 'Other evidence' },
 ];
 
