@@ -6,7 +6,7 @@
 // date. <n> is a running number per financial year, separately for EISA and FISA.
 // Assumption (progress.md, Batch N1): the FISA number is padded to two digits as in QCTO's
 // example "C24-01"; the EISA number is not, as in "V18-8".
-import type { ResultsTrack } from './types';
+import type { FisaResultsBatch, ResultsBatch, ResultsTrack } from './types';
 
 const CODE_PATTERN: Record<ResultsTrack, RegExp> = {
   eisa: /^QCTO\/\d{8}\/V(\d{2})-(\d+)$/,
@@ -41,4 +41,39 @@ export function buildVerificationCode(track: ResultsTrack, lastAssessmentDate: s
   const n = nextVerificationNumber(track, decisionDate, existingCodes);
   const compact = lastAssessmentDate.replace(/-/g, '');
   return track === 'eisa' ? `QCTO/${compact}/V${yy}-${n}` : `QCTOSP/${compact}/C${yy}-${String(n).padStart(2, '0')}`;
+}
+
+type CodedBatch = Pick<ResultsBatch | FisaResultsBatch, 'verificationCode' | 'finalDecision'>;
+
+// Batch W (QCTO process map 12): the code is allocated when the batch first reaches the ASD. A batch
+// stored before Batch W has it only on its final decision.
+export function verificationCodeOf(batch: CodedBatch): string {
+  return batch.verificationCode || batch.finalDecision?.verificationCode || '';
+}
+
+export function verificationCodesOf(batches: CodedBatch[]): string[] {
+  return batches.flatMap((b) => {
+    const code = verificationCodeOf(b);
+    return code ? [code] : [];
+  });
+}
+
+// Batch W: gives a batch stored without a code the one it would have got when it reached the ASD,
+// numbered in the order the batches reached the ASD. Deterministic and only touches batches without
+// a code, so running it on every load is safe.
+export function allocateMissingCodes<T extends CodedBatch>(
+  batches: T[],
+  track: ResultsTrack,
+  rules: { reachedAsd: (b: T) => boolean; allocatedOn: (b: T) => string; lastDate: (b: T) => string },
+): T[] {
+  const existing = verificationCodesOf(batches);
+  const missing = batches.filter((b) => !verificationCodeOf(b) && rules.reachedAsd(b)).sort((a, b) => rules.allocatedOn(a).localeCompare(rules.allocatedOn(b)));
+  if (missing.length === 0) return batches;
+  const assigned = new Map<T, string>();
+  for (const batch of missing) {
+    const code = buildVerificationCode(track, rules.lastDate(batch), rules.allocatedOn(batch), existing);
+    existing.push(code);
+    assigned.set(batch, code);
+  }
+  return batches.map((b) => (assigned.has(b) ? { ...b, verificationCode: assigned.get(b) } : b));
 }

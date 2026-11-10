@@ -27,7 +27,7 @@ import { assertAsdReviewComplete } from '../../../modules/approval-of-results/ap
 import { assertFisaSectionEComplete, blankSectionE } from '../../../modules/approval-of-results/fisaSectionE';
 import { reviewersFromAudit } from '../../../modules/approval-of-results/downloads';
 import { lastFisaDateOf } from '../../../modules/approval-of-results/outcomeLetters';
-import { buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
+import { allocateMissingCodes, buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
 import { FISA_RESULTS_RECORD_TYPE, FISA_RESULTS_SUBMITTER_ROLE, RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues, isRecommendDeclineAction, isRequestEvidenceAction } from '../../../modules/approval-of-results/workflow';
 import type { FisaEvidenceTag, FisaResultsBatch, LearnerResultOutcome } from '../../../modules/approval-of-results/types';
@@ -311,8 +311,15 @@ export function seedFisaResultsBatches(log: SeedLog): FisaResultsBatch[] {
     const code = buildVerificationCode('fisa', lastFisaDateOf(batch), dateOf(batch.finalDecision.decidedAt), existingCodes);
     existingCodes.push(code);
     batch.finalDecision = { ...batch.finalDecision, verificationCode: code };
+    batch.verificationCode = code;
   }
+  // Batch W: every other submitted batch gets its code as it reached the ASD.
+  const withCodes = allocateMissingCodes(batches, 'fisa', {
+    reachedAsd: (b) => b.workflow.stageId !== 'sdp-draft',
+    allocatedOn: (b) => dateOf(b.firstSubmittedAt ?? b.createdAt),
+    lastDate: lastFisaDateOf,
+  });
 
   // Newest first, the order createFisaResultsBatch() leaves the list in.
-  return batches.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return withCodes.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

@@ -65,7 +65,10 @@ export function writeStore<T>(key: string, value: T): void {
 // builds the confirmation (accredited centres, allocation, dates) and the ASD accepts it or returns it.
 // 'A22' = Batch S: one active and one past acting appointment, and one published sitting whose registration
 // closing date the super admin changed (with a reason). No role name is seeded as renamed.
-export const SEED_VERSION = 'A22';
+// 'A23' = Batch W: QCTO's own FISA Standards and RPL Toolkit checklists, QP self-audit answers and QCTO
+// feedback on the RPL records, verification codes on every batch that has reached the ASD, a quieter
+// overdue list (4 to 6 items), and no Reject/Decline where QCTO's process maps return for rework.
+export const SEED_VERSION = 'A23';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

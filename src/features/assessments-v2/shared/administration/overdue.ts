@@ -29,6 +29,7 @@ import { KEY as SITE_VISITS_KEY, listVisits } from '../../modules/site-visits/ap
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../../modules/site-visits/workflow';
 import type { Role } from '../../types';
 import { appendAuditEntry, getAuditTrail } from '../audit/auditLog';
+import type { AuditEntry } from '../audit/types';
 import { toIsoDate, workingDaysBetween } from '../dates/workingDays';
 import { addNotification } from '../notifications/store';
 import { getPerson, personsForRole } from '../people/directory';
@@ -82,7 +83,7 @@ export interface OverdueItem {
   reassignKind: ReassignKind | null;
 }
 
-interface Candidate {
+export interface Candidate {
   source: OverdueSourceId;
   module: string;
   moduleLabel: string;
@@ -92,6 +93,10 @@ interface Candidate {
   state: WorkflowRecordState;
   recordTypes: string[];
   fallbackDate: string;
+  // Batch W: where a record is created straight into the stage, the wait starts at the latest entry of
+  // these trails (an outcome letter starts waiting for the CEO when the committee decides), not at the
+  // application's own submission date.
+  startsAfterTrailTypes?: string[];
   // Stages to leave out because the wait is not on the role (e.g. waiting for the visit itself).
   ignoreStages?: string[];
   assigneeId?: string | null;
@@ -103,27 +108,38 @@ function todayIso(): string {
   return toIsoDate(new Date());
 }
 
-function enteredStageAt(c: Candidate): string {
+export type TrailReader = (recordType: string, recordId: string) => AuditEntry[];
+
+// When the candidate entered its current stage, and the audit entry that says so (null where the
+// date comes from the record itself).
+export function stageEntryOf(c: Candidate, trailOf: TrailReader = getAuditTrail): { at: string; entry: AuditEntry | null } {
   const into = new Set(c.definition.actions.filter((a) => a.toStage === c.state.stageId).map((a) => a.label));
-  let latest = '';
+  let latest: AuditEntry | null = null;
   for (const type of c.recordTypes) {
-    for (const entry of getAuditTrail(type, c.itemId)) {
-      if (into.has(entry.action) && entry.timestamp > latest) latest = entry.timestamp;
+    for (const entry of trailOf(type, c.itemId)) {
+      if (into.has(entry.action) && (!latest || entry.timestamp > latest.timestamp)) latest = entry;
     }
   }
-  return latest || c.fallbackDate;
+  if (!latest) {
+    for (const type of c.startsAfterTrailTypes ?? []) {
+      for (const entry of trailOf(type, c.itemId)) {
+        if (!latest || entry.timestamp > latest.timestamp) latest = entry;
+      }
+    }
+  }
+  return latest ? { at: latest.timestamp, entry: latest } : { at: c.fallbackDate, entry: null };
 }
 
 // Stages where a record rests once a step is finished: nobody is holding it up. (An approved QASA
 // lists the DD as the one who may start a review, but it is not waiting for them.)
 const RESTING_STAGES = ['approved', 'signed', 'closed', 'declined', 'validated', 'registered', 'accepted', 'published', 'booked', 'agreed', 'planning-rejected', 'rejected'];
 
-function toItem(c: Candidate, today: string): OverdueItem | null {
+export function toItem(c: Candidate, today: string, trailOf: TrailReader = getAuditTrail): OverdueItem | null {
   const stage = c.definition.stages.find((s) => s.id === c.state.stageId);
   if (!stage || RESTING_STAGES.includes(stage.id) || c.ignoreStages?.includes(stage.id)) return null;
   const role = stage.allowedRoles.find((r) => roleDescriptor(r)?.portal === 'internal');
   if (!role) return null;
-  const enteredAt = enteredStageAt(c);
+  const enteredAt = stageEntryOf(c, trailOf).at;
   if (!enteredAt) return null;
   const workingDays = workingDaysBetween(enteredAt.slice(0, 10), today);
   return {
@@ -145,7 +161,23 @@ function toItem(c: Candidate, today: string): OverdueItem | null {
   };
 }
 
-async function loadCandidates(): Promise<Candidate[]> {
+// What the candidates are built from: the stored records of every module.
+export interface CandidateSources {
+  qasa: Awaited<ReturnType<typeof listQasa>>;
+  iv: Awaited<ReturnType<typeof listInstrumentValidations>>;
+  batches: Awaited<ReturnType<typeof listCalendarBatches>>;
+  requests: Awaited<ReturnType<typeof listChangeRequests>>;
+  registrations: Awaited<ReturnType<typeof listRegistrations>>;
+  confirmations: Awaited<ReturnType<typeof listConfirmations>>;
+  results: Awaited<ReturnType<typeof listResultsBatches>>;
+  fisaResults: Awaited<ReturnType<typeof listFisaResultsBatches>>;
+  standards: Awaited<ReturnType<typeof listFisaStandards>>;
+  fisaValidations: Awaited<ReturnType<typeof listFisaValidations>>;
+  rpl: Awaited<ReturnType<typeof listRplToolkitApplications>>;
+  visits: Awaited<ReturnType<typeof listVisits>>;
+}
+
+async function loadSources(): Promise<CandidateSources> {
   const [qasa, iv, batches, requests, registrations, confirmations, results, fisaResults, standards, fisaValidations, rpl, visits] = await Promise.all([
     listQasa(),
     listInstrumentValidations(),
@@ -160,12 +192,34 @@ async function loadCandidates(): Promise<Candidate[]> {
     listRplToolkitApplications(),
     listVisits(),
   ]);
+  return { qasa, iv, batches, requests, registrations, confirmations, results, fisaResults, standards, fisaValidations, rpl, visits };
+}
+
+async function loadCandidates(): Promise<Candidate[]> {
+  return buildCandidates(await loadSources());
+}
+
+// Batch W: an outcome letter only waits for the CEO once the committee has decided, and the wait
+// starts at that decision.
+const DECIDED_STAGES = ['approved', 'declined'];
+
+export function buildCandidates(sources: CandidateSources): Candidate[] {
+  const { qasa, iv, batches, requests, registrations, confirmations, results, fisaResults, standards, fisaValidations, rpl, visits } = sources;
   const out: Candidate[] = [];
 
   for (const a of qasa) {
     const base = { module: 'qsa-addendum', moduleLabel: 'QAS Addendum (QASA)', itemId: a.id, itemLabel: `${a.qualificationTitle} (${a.qpName})`, fallbackDate: a.submissionDate };
     out.push({ ...base, source: 'qasa', definition: EVAL_WORKFLOW, state: a.evalState, recordTypes: ['qsa-addendum-evaluation'] });
-    out.push({ ...base, source: 'qasa-letter', definition: OUTCOME_WORKFLOW, state: a.outcomeState, recordTypes: ['qsa-addendum-outcome-letter'] });
+    if (DECIDED_STAGES.includes(a.evalState.stageId)) {
+      out.push({
+        ...base,
+        source: 'qasa-letter',
+        definition: OUTCOME_WORKFLOW,
+        state: a.outcomeState,
+        recordTypes: ['qsa-addendum-outcome-letter'],
+        startsAfterTrailTypes: ['qsa-addendum-evaluation'],
+      });
+    }
   }
   for (const r of iv) {
     const base = { module: 'instrument-validation', moduleLabel: 'EISA Instrument Validation', itemId: r.id, itemLabel: `${r.qualificationTitle} (${r.qpName})`, fallbackDate: r.createdAt };
@@ -291,7 +345,16 @@ async function loadCandidates(): Promise<Candidate[]> {
       assigneeName: a.allocatedAsdName,
       reassignKind: a.evalState.stageId === 'asd-evaluation' ? 'rpl' : undefined,
     });
-    out.push({ ...base, source: 'rpl-letter', definition: RPL_OUTCOME_WORKFLOW, state: a.outcomeState, recordTypes: ['rpl-toolkit-outcome'] });
+    if (DECIDED_STAGES.includes(a.evalState.stageId)) {
+      out.push({
+        ...base,
+        source: 'rpl-letter',
+        definition: RPL_OUTCOME_WORKFLOW,
+        state: a.outcomeState,
+        recordTypes: ['rpl-toolkit-outcome'],
+        startsAfterTrailTypes: ['rpl-toolkit-evaluation'],
+      });
+    }
   }
   for (const v of visits) {
     const base = { module: 'site-visits', moduleLabel: 'Site Visits & Monitoring', itemId: v.id, itemLabel: `${v.qualificationTitle || v.assessmentCentreName || 'Site visit'} (${v.visitDate})`, fallbackDate: v.createdAt };

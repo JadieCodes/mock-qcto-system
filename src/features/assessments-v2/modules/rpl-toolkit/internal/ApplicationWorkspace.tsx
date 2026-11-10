@@ -3,34 +3,44 @@ import { Award, BookOpen, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
+import { getRplQualificationDetails } from '../../../mock/data/rplQualificationDetails';
 import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { personsForRole } from '../../../shared/people/directory';
 import { useV2Role } from '../../../shared/ui/useV2Role';
-import { ValidationSummary, FieldError } from '../../../shared/validation/ValidationSummary';
-import type { ValidationIssue } from '../../../shared/validation/types';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { ActionBar } from '../components/ActionBar';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
 import { RPL_ALLOCATOR_ROLE } from '../config';
+import { SelfAuditForm } from '../components/SelfAuditForm';
 import { ToolkitFilesList } from '../components/ToolkitFilesList';
+import {
+  hasLegacyChecklistAnswers,
+  qctoEvaluationOf,
+  qctoFeedbackIssues,
+  RPL_APPROVED_OPTIONS,
+  RPL_EVALUATOR_DEFAULT_DESIGNATION,
+  selfAuditOf,
+} from '../selfAudit';
 import { toolkitFilesOf } from '../toolkitFiles';
 import {
   useRplEvaluationAction,
   useRplOutcomeAction,
   useRplToolkitApplication,
-  useSaveRplEvaluationReport,
+  useSaveRplAsdEvaluation,
   useSaveRplIacEndorsementNote,
   useSaveRplModerationChecklist,
-  useSaveRplToolkitChecklist,
 } from '../hooks';
 import { RPL_EVAL_WORKFLOW, RPL_OUTCOME_WORKFLOW } from '../workflow';
-import type { RplToolkitApplication } from '../types';
+import type { RplApproved, RplQctoEvaluation, RplSelfAudit, RplToolkitApplication } from '../types';
 
 function ApplicationWorkspaceContent({ application }: { application: RplToolkitApplication }) {
   const { role, person } = useV2Role();
@@ -38,18 +48,29 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
   const actorName = person.name;
   const evaluationAction = useRplEvaluationAction();
   const outcomeAction = useRplOutcomeAction();
-  const saveChecklist = useSaveRplToolkitChecklist();
-  const saveReport = useSaveRplEvaluationReport();
+  const saveAsdEvaluation = useSaveRplAsdEvaluation();
   const saveModerationChecklist = useSaveRplModerationChecklist();
   const saveIacEndorsementNote = useSaveRplIacEndorsementNote();
   const [allocatedAsdId, setAllocatedAsdId] = useState('');
   const asdOptions = personsForRole('ASD');
 
-  const checklistComplete = isChecklistComplete(application.checklist, true);
-  const reportIssues: ValidationIssue[] = [];
-  if (!application.evaluationReport.findings.trim()) reportIssues.push({ field: 'findings', message: 'Findings are required.' });
-  if (application.evaluationReport.recommendation === '') reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
-  const reportComplete = reportIssues.length === 0;
+  const selfAudit = selfAuditOf(application);
+  const evaluation = qctoEvaluationOf(application);
+  const asdIssues = qctoFeedbackIssues(selfAudit, evaluation);
+  const evaluationComplete = asdIssues.length === 0;
+  const details = getRplQualificationDetails(application.toolkitTitle);
+  const evaluationHeader: [string, string][] = [
+    ['Name of QP', application.qpName],
+    ['Title of qualification', details.qualificationTitle],
+    ['SAQA ID', details.saqaId],
+    ['NQF level', details.nqfLevel],
+    ['Credits', details.credits],
+    ['Registration start date', details.registrationStartDate],
+    ['Registration end date', details.registrationEndDate],
+  ];
+  const feedbackOf = (audit: RplSelfAudit): Record<string, string> => Object.fromEntries(Object.entries(audit.lines).map(([id, line]) => [id, line.qctoFeedback]));
+  const saveEvaluation = (patch: Partial<RplQctoEvaluation>) =>
+    saveAsdEvaluation.mutate({ applicationId: application.id, feedback: feedbackOf(selfAudit), evaluation: { ...evaluation, ...patch } });
   const editableChecklist = role === 'ASD' && application.evalState.stageId === 'asd-evaluation';
   const canAllocate = role === RPL_ALLOCATOR_ROLE && application.evalState.stageId === 'ad-allocation';
   const decided = application.evalState.stageId === 'approved' || application.evalState.stageId === 'declined';
@@ -166,50 +187,81 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
       </TabsContent>
 
       <TabsContent value="evaluation" className="space-y-6">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RPL Toolkit Evaluation Checklist</p>
-          <Checklist
-            sections={application.checklist}
-            readonly={!editableChecklist}
-            onChange={(sections) => saveChecklist.mutate({ applicationId: application.id, sections })}
-          />
+        {/* Batch W: QCTO's "QP RPL Evaluation". The header comes from the record. */}
+        <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QP RPL Evaluation</p>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 p-4 text-sm">
+            {evaluationHeader.map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-xs text-gray-400 uppercase">{label}</dt>
+                <dd className="font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
+        {hasLegacyChecklistAnswers(application) && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Answered on the previous checklist</p>
+            <Checklist sections={application.checklist} readonly onChange={() => undefined} />
+          </div>
+        )}
+
+        {editableChecklist && <ValidationSummary issues={asdIssues} title="Complete the evaluation before you decide:" />}
+        <SelfAuditForm
+          audit={selfAudit}
+          mode={editableChecklist ? 'asd' : 'read'}
+          onChange={(audit) => saveAsdEvaluation.mutate({ applicationId: application.id, feedback: feedbackOf(audit), evaluation })}
+          idPrefix="eval-rpl"
+          showFeedback
+        />
+
         <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Evaluation Report</p>
-          {editableChecklist && <ValidationSummary issues={reportIssues} title="Complete the report before sending to the Deputy Director:" />}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RPL Toolkit Approved</p>
+          <RadioGroup
+            value={evaluation.approved}
+            disabled={!editableChecklist}
+            className="flex gap-6"
+            onValueChange={(value) => saveEvaluation({ approved: value as RplApproved })}
+          >
+            {RPL_APPROVED_OPTIONS.map((option) => (
+              <div key={option.value} className="flex items-center gap-1.5">
+                <RadioGroupItem id={`rpl-approved-${option.value}`} value={option.value} />
+                <Label htmlFor={`rpl-approved-${option.value}`} className="text-sm font-normal">
+                  {option.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+          <p className="text-xs text-gray-400">Yes sends the toolkit to the Deputy Director. No returns it to the QP for corrections.</p>
           <div className="space-y-2">
-            <Label>Findings</Label>
-            <Textarea
-              rows={3}
-              value={application.evaluationReport.findings}
-              disabled={!editableChecklist}
-              onChange={(e) => saveReport.mutate({ applicationId: application.id, report: { ...application.evaluationReport, findings: e.target.value } })}
-            />
-            {editableChecklist && <FieldError message={reportIssues.find((i) => i.field === 'findings')?.message} />}
+            <Label htmlFor="rpl-eval-comments">Comments</Label>
+            <Textarea id="rpl-eval-comments" rows={3} value={evaluation.comments} disabled={!editableChecklist} onChange={(e) => saveEvaluation({ comments: e.target.value })} />
           </div>
-          <div className="space-y-2">
-            <Label>Recommendation</Label>
-            <Select
-              value={application.evaluationReport.recommendation}
-              disabled={!editableChecklist}
-              onValueChange={(value) =>
-                saveReport.mutate({
-                  applicationId: application.id,
-                  report: { ...application.evaluationReport, recommendation: value as 'recommended' | 'not-recommended' },
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a recommendation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recommended">Recommended for approval</SelectItem>
-                <SelectItem value="not-recommended">Not recommended</SelectItem>
-              </SelectContent>
-            </Select>
-            {editableChecklist && <FieldError message={reportIssues.find((i) => i.field === 'recommendation')?.message} />}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-1">Evaluated by (QCTO official)</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1">
+              <Label htmlFor="rpl-eval-name">Name</Label>
+              <Input id="rpl-eval-name" value={evaluation.evaluatedByName} placeholder={actorName} disabled={!editableChecklist} onChange={(e) => saveEvaluation({ evaluatedByName: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="rpl-eval-designation">Designation</Label>
+              <Input
+                id="rpl-eval-designation"
+                value={evaluation.evaluatedByDesignation}
+                placeholder={RPL_EVALUATOR_DEFAULT_DESIGNATION}
+                disabled={!editableChecklist}
+                onChange={(e) => saveEvaluation({ evaluatedByDesignation: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="rpl-eval-date">Date</Label>
+              <Input id="rpl-eval-date" type="date" value={evaluation.evaluatedOn} disabled={!editableChecklist} onChange={(e) => saveEvaluation({ evaluatedOn: e.target.value })} />
+            </div>
           </div>
+          {editableChecklist && <p className="text-xs text-gray-400">Left blank, these are filled with your name, the designation ASD and today's date when you send it on or return it.</p>}
         </div>
 
         {showModerationBox && (
@@ -243,10 +295,12 @@ function ApplicationWorkspaceContent({ application }: { application: RplToolkitA
           stageId={application.evalState.stageId}
           role={role}
           disabledActionIds={[
-            ...(application.evalState.stageId === 'asd-evaluation' && !(checklistComplete && reportComplete) ? ['rpl-asd-send-to-dd'] : []),
+            // Batch W: Approved = Yes leads to Send to DD, Approved = No to Return to QP for corrections.
+            ...(application.evalState.stageId === 'asd-evaluation' && !(evaluationComplete && evaluation.approved === 'yes') ? ['rpl-asd-send-to-dd'] : []),
+            ...(application.evalState.stageId === 'asd-evaluation' && !(evaluationComplete && evaluation.approved === 'no') ? ['rpl-return-to-qp'] : []),
             ...(application.evalState.stageId === 'director-team-review' && !moderationComplete ? ['rpl-director-team-send-to-iac'] : []),
             ...(application.evalState.stageId === 'iac-review' && !application.iacEndorsementNote.trim()
-              ? ['rpl-iac-approve', 'rpl-iac-decline', 'rpl-iac-remediation']
+              ? ['rpl-iac-approve', 'rpl-iac-remediation']
               : []),
           ]}
           onRun={(actionId, note) => evaluationAction.mutate({ applicationId: application.id, actionId, actorRole: role, actorId, actorName, note })}

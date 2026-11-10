@@ -8,12 +8,12 @@ import {
   listRplToolkitApplications,
   performRplEvaluationAction,
   performRplOutcomeAction,
-  saveRplEvaluationReport,
+  saveRplAsdEvaluation,
   saveRplIacEndorsementNote,
   saveRplModerationChecklist,
-  saveRplToolkitChecklist,
+  saveRplSelfAudit,
 } from './api';
-import type { NewRplToolkitInput, RplEvaluationReport, RplToolkitApplication } from './types';
+import type { NewRplToolkitInput, RplQctoEvaluation, RplSelfAudit, RplToolkitApplication } from './types';
 
 const LIST_KEY = ['rpl-toolkit', 'applications'] as const;
 const detailKey = (id: string) => ['rpl-toolkit', 'applications', id] as const;
@@ -50,15 +50,13 @@ export function useCreateRplToolkitApplication() {
   });
 }
 
-export function useSaveRplToolkitChecklist() {
-  return useRplToolkitMutation((args: { applicationId: string; sections: ChecklistSection[] }) =>
-    saveRplToolkitChecklist(args.applicationId, args.sections),
-  );
+export function useSaveRplSelfAudit() {
+  return useRplToolkitMutation((args: { applicationId: string; selfAudit: RplSelfAudit }) => saveRplSelfAudit(args.applicationId, args.selfAudit));
 }
 
-export function useSaveRplEvaluationReport() {
-  return useRplToolkitMutation((args: { applicationId: string; report: RplEvaluationReport }) =>
-    saveRplEvaluationReport(args.applicationId, args.report),
+export function useSaveRplAsdEvaluation() {
+  return useRplToolkitMutation((args: { applicationId: string; feedback: Record<string, string>; evaluation: RplQctoEvaluation }) =>
+    saveRplAsdEvaluation(args.applicationId, args.feedback, args.evaluation),
   );
 }
 

@@ -6,7 +6,7 @@
 //
 //  #    QP                   Toolkit                               Stage
 //  R1   Johan van der Merwe  Plumbing RPL Toolkit (new)            Just submitted — awaiting Deputy Director allocation
-//  R2   Nomvula Dlamini      Electrical Trades RPL Toolkit (v2)    Updated toolkit (supersedes R8) — awaiting allocation for 5 days
+//  R2   Nomvula Dlamini      Electrical Trades RPL Toolkit (v2)    Updated toolkit (supersedes R8) — awaiting allocation
 //  R3   Precious Mahlangu    Welding RPL Toolkit                   ASD evaluation (Thandeka Zulu; first checklist section done; one uploaded toolkit file)
 //  R4   Johan van der Merwe  Drainlayer RPL Toolkit                Returned to the QP for corrections (by Sipho Ndlovu)
 //  R5   Precious Mahlangu    Boilermaker RPL Toolkit               With the Deputy Director (Peter Botha's team)
@@ -22,10 +22,13 @@
 // the DD allocates) and reviews; Director Office Elsabe Steyn / Johannes Pretorius; IAC Thabiso Molefe / Palesa Nkosi;
 // CEO Angela Fourie / David Molewa. The R numbers are labels; seed ids follow the order the
 // records are created below (oldest first).
-import { buildRplToolkitChecklist } from '../rplToolkitChecklistItems';
+import { allRplSelfAuditQuestions, RPL_SELF_AUDIT_PARTS } from '../rplToolkitChecklistItems';
 import { buildRplToolkitModerationChecklist } from '../rplToolkitModerationChecklistItems';
 import { isChecklistComplete } from '../../../shared/checklist/types';
-import type { RplRecommendation, RplToolkitApplication, RplToolkitType } from '../../../modules/rpl-toolkit/types';
+import { blankQctoEvaluation, qctoEvaluationOf, qctoFeedbackIssues, RPL_EVALUATOR_DEFAULT_DESIGNATION, selfAuditIssues, selfAuditOf } from '../../../modules/rpl-toolkit/selfAudit';
+import type { RplRecommendation, RplSelfAudit, RplSelfAuditLine, RplToolkitApplication, RplToolkitType } from '../../../modules/rpl-toolkit/types';
+import { qpDirectoryEntryFor } from '../qpDirectory';
+import type { WorkflowDefinition } from '../../../shared/workflow/types';
 import { RPL_EVAL_WORKFLOW, RPL_OUTCOME_WORKFLOW } from '../../../modules/rpl-toolkit/workflow';
 import { answerChecklist, createClock, dateOf, notify, seedId, seedPerson, step, type SeedLog } from './helpers';
 
@@ -45,14 +48,45 @@ const NOMVULA = 'qp-nomvula-dlamini';
 const JOHAN = 'qp-johan-van-der-merwe';
 const PRECIOUS = 'qp-precious-mahlangu';
 
-const ASD_CHECKLIST_COMMENT = 'Checked against the submitted toolkit — in order.';
+const ASD_FEEDBACK = 'Checked against the submitted toolkit: consistent with the QP\'s answer.';
+const ASD_FEEDBACK_OPEN_LINE = 'Noted. Confirm this is in place when the toolkit is next reviewed.';
 const MODERATION_COMMENT = 'The Director Office agrees with the ASD evaluation.';
 
 const IAC_DECISION_ACTION_IDS = ['rpl-iac-approve', 'rpl-iac-decline', 'rpl-iac-remediation'];
 
+// Batch W: the IAC "Decline" action was removed from the workflow (process map 5: every "No" returns
+// for rework). Two seeded toolkits were declined through it before; their history stays as it was,
+// so the seed still records the step through the old definition.
+const LEGACY_IAC_DECLINE_ACTION = { id: 'rpl-iac-decline', label: 'Decline', fromStage: 'iac-review', toStage: 'declined', kind: 'reject', requiresNote: true } as const;
+const SEED_EVAL_WORKFLOW: WorkflowDefinition = { ...RPL_EVAL_WORKFLOW, actions: [...RPL_EVAL_WORKFLOW.actions, LEGACY_IAC_DECLINE_ACTION] };
+
+// A believable self audit: mostly Yes, a few In process, and a few No with "n/a" and the reason.
+const SELF_AUDIT_NOTES = [
+  'Described in the candidate guide of the toolkit.',
+  'Covered in the assessor guide and the evidence matrix.',
+  'See the process description in the toolkit introduction.',
+  'Set out in the RPL policy that accompanies the toolkit.',
+];
+
+function seedSelfAudit(qpId: string, completedOn: string, seed: number): RplSelfAudit {
+  const lines: Record<string, RplSelfAuditLine> = {};
+  allRplSelfAuditQuestions().forEach((question, i) => {
+    const slot = (i + seed) % 13;
+    if (slot === 4) lines[question.id] = { answer: 'in-process', notes: 'Being finalised with the SDPs; due before the first RPL intake.', qctoFeedback: '' };
+    else if (slot === 9) lines[question.id] = { answer: 'no', notes: 'n/a: this does not apply to the way this qualification is assessed.', qctoFeedback: '' };
+    else lines[question.id] = { answer: 'yes', notes: SELF_AUDIT_NOTES[(i + seed) % SELF_AUDIT_NOTES.length], qctoFeedback: '' };
+  });
+  const qp = seedPerson(qpId);
+  return {
+    lines,
+    completedBy: { fullName: qp.name, designation: 'Quality Partner', organisation: qpDirectoryEntryFor(qpId)?.organisation ?? '', date: completedOn },
+  };
+}
+
 interface RplSeedBuilder {
   allocate: (ddId: string, asdId: string, atDaysAgo: number) => RplSeedBuilder;
-  evaluate: (asdId: string, options: { sectionCount?: number; findings?: string; recommendation?: RplRecommendation; noOnFirstItem?: string }) => RplSeedBuilder;
+  // groupCount: only the first n groups of QCTO's form have feedback (an evaluation still under way). approved: Yes for a toolkit going on, No for one returned.
+  evaluate: (asdId: string, options: { groupCount?: number; findings?: string; recommendation?: RplRecommendation; noOnFirstItem?: string }) => RplSeedBuilder;
   moderate: (directorOfficeId: string, sectionCount?: number) => RplSeedBuilder;
   endorse: (iacId: string, note: string) => RplSeedBuilder;
   act: (actionId: string, actorId: string, atDaysAgo: number, note?: string, allocatedAsdId?: string) => RplSeedBuilder;
@@ -107,8 +141,10 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
       outcomeState: { stageId: 'ceo-signature' },
       allocatedAsdId: null,
       allocatedAsdName: null,
-      checklist: buildRplToolkitChecklist(),
+      checklist: [],
       evaluationReport: { findings: '', recommendation: '' },
+      selfAudit: seedSelfAudit(input.qpId, dateOf(createdAt), n),
+      qctoEvaluation: blankQctoEvaluation(),
       moderationChecklist: buildRplToolkitModerationChecklist(),
       iacEndorsementNote: '',
       version,
@@ -124,16 +160,32 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
       allocate(ddId, asdId, atDaysAgo) {
         return api.act('rpl-allocate', ddId, atDaysAgo, undefined, asdId);
       },
-      // saveRplToolkitChecklist() + saveRplEvaluationReport(): the ASD's evaluation; no audit entry.
+      // saveRplAsdEvaluation(): the ASD's QCTO feedback per question and the decision; no audit entry.
       evaluate(asdId, options) {
         if (app.evalState.stageId !== 'asd-evaluation' || app.allocatedAsdId !== asdId) throw new Error('Demo seed: only the allocated ASD evaluates.');
-        const sections = buildRplToolkitChecklist();
-        const onlySectionIds = options.sectionCount === undefined ? undefined : sections.slice(0, options.sectionCount).map((s) => s.id);
-        const firstItemId = sections[0].items[0].id;
-        const overrides = options.noOnFirstItem ? { [firstItemId]: { answer: 'no' as const, comment: options.noOnFirstItem } } : undefined;
+        const audit = selfAuditOf(app);
+        const groupIds = RPL_SELF_AUDIT_PARTS.flatMap((part) => part.groups.map((g) => g.id));
+        const doneGroups = new Set(options.groupCount === undefined ? groupIds : groupIds.slice(0, options.groupCount));
+        const firstQuestionId = allRplSelfAuditQuestions()[0].id;
+        const lines = Object.fromEntries(
+          allRplSelfAuditQuestions().map((q) => {
+            const line = audit.lines[q.id];
+            const done = doneGroups.has(q.id.split('.').slice(0, 2).join('.'));
+            const feedback = options.noOnFirstItem && q.id === firstQuestionId ? options.noOnFirstItem : line.answer === 'yes' ? ASD_FEEDBACK : ASD_FEEDBACK_OPEN_LINE;
+            return [q.id, { ...line, qctoFeedback: done ? feedback : '' }];
+          }),
+        );
+        const finished = options.groupCount === undefined;
         app = {
           ...app,
-          checklist: answerChecklist(sections, ASD_CHECKLIST_COMMENT, { onlySectionIds, overrides }),
+          selfAudit: { ...audit, lines },
+          qctoEvaluation: finished
+            ? {
+                ...blankQctoEvaluation(),
+                approved: options.noOnFirstItem ? 'no' : 'yes',
+                comments: options.noOnFirstItem ? options.noOnFirstItem : 'The self audit is complete and the toolkit meets the guiding principles.',
+              }
+            : blankQctoEvaluation(),
           evaluationReport: { findings: options.findings ?? '', recommendation: options.recommendation ?? '' },
         };
         return api;
@@ -157,9 +209,11 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
       // performRplEvaluationAction().
       act(actionId, actorId, atDaysAgo, note, allocatedAsdId) {
         if (actionId === 'rpl-allocate' && !allocatedAsdId) throw new Error('Demo seed: pick the ASD this RPL Toolkit is allocated to.');
-        if (actionId === 'rpl-asd-send-to-dd') {
-          if (!isChecklistComplete(app.checklist, true)) throw new Error('Demo seed: every checklist line needs an answer and a comment before sending to the Deputy Director.');
-          if (!app.evaluationReport.findings.trim() || !app.evaluationReport.recommendation) throw new Error('Demo seed: complete the evaluation report before sending to the Deputy Director.');
+        if (actionId === 'rpl-asd-send-to-dd' || actionId === 'rpl-return-to-qp') {
+          if (selfAuditIssues(selfAuditOf(app)).length > 0) throw new Error('Demo seed: the QP self audit is incomplete.');
+          if (qctoFeedbackIssues(selfAuditOf(app), qctoEvaluationOf(app)).length > 0) throw new Error('Demo seed: QCTO feedback on every line and the Approved decision come before the ASD acts.');
+          if (actionId === 'rpl-asd-send-to-dd' && qctoEvaluationOf(app).approved !== 'yes') throw new Error('Demo seed: only Approved = Yes goes to the Deputy Director.');
+          if (actionId === 'rpl-return-to-qp' && qctoEvaluationOf(app).approved !== 'no') throw new Error('Demo seed: Return to QP needs Approved = No.');
         }
         if (actionId === 'rpl-director-team-send-to-iac' && !isChecklistComplete(app.moderationChecklist, true)) {
           throw new Error('Demo seed: every moderation checklist line needs an answer and a comment before sending to the IAC.');
@@ -168,8 +222,12 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
 
         const actor = seedPerson(actorId);
         const at = clock.at(atDaysAgo, 14);
-        const evalState = step(log, { definition: RPL_EVAL_WORKFLOW, state: app.evalState, actionId, actor, at, recordType: 'rpl-toolkit-evaluation', recordId: app.id, note });
+        const evalState = step(log, { definition: SEED_EVAL_WORKFLOW, state: app.evalState, actionId, actor, at, recordType: 'rpl-toolkit-evaluation', recordId: app.id, note });
         app = { ...app, evalState };
+        if (actionId === 'rpl-asd-send-to-dd' || actionId === 'rpl-return-to-qp') {
+          // "Evaluated by (QCTO official)": the ASD, "ASD" and the action date, as the api fills them.
+          app = { ...app, qctoEvaluation: { ...qctoEvaluationOf(app), evaluatedByName: actor.name, evaluatedByDesignation: RPL_EVALUATOR_DEFAULT_DESIGNATION, evaluatedOn: dateOf(at) } };
+        }
 
         if (actionId === 'rpl-allocate' && allocatedAsdId) {
           const asd = seedPerson(allocatedAsdId);
@@ -323,7 +381,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
     fileNames: ['Welding_RPL_Toolkit_v1.pdf'],
   })
     .allocate(PETER, THANDEKA, 17)
-    .evaluate(THANDEKA, { sectionCount: 1 })
+    .evaluate(THANDEKA, { groupCount: 1 })
     .done();
 
   // R2 — Nomvula: updated toolkit (v2 of R8), awaiting allocation.
@@ -333,7 +391,7 @@ export function seedRplToolkits(log: SeedLog): RplToolkitApplication[] {
     toolkitType: 'updated',
     updatesToolkitId: electricalV1Id,
     description: 'Updated RPL toolkit for Electrical Trades: adds the solar PV installation module.',
-    createdDaysAgo: 5,
+    createdDaysAgo: 2,
   }).done();
 
   // R1 — Johan: just submitted.

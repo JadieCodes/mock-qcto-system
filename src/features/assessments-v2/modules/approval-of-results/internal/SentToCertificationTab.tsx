@@ -6,6 +6,7 @@ import { batchFiguresOf } from '../calculation';
 import { useFisaResultsBatches, useResultsBatches } from '../hooks';
 import { downloadLetterModel, eisaRecommendationLetter, fisaRecommendationLetter, lastEisaDateOf, lastFisaDateOf, type LetterModel } from '../outcomeLetters';
 import { fisaFiguresOf } from '../workflow';
+import { verificationCodeOf } from '../verificationCode';
 import { EmptyState, SectionCard } from '../../../shared/ui/PageSections';
 import { OutcomeLetterView } from '../components/OutcomeLetterView';
 
@@ -39,7 +40,7 @@ export function SentToCertificationTab() {
         sentOn: b.recommendation.recommendedAt.slice(0, 10),
         lastAssessmentDate: lastEisaDateOf(b),
         counts: `${f.competent} competent of ${f.registered} registered`,
-        verificationCode: b.finalDecision.verificationCode,
+        verificationCode: verificationCodeOf(b),
         letter,
       },
     ];
@@ -56,7 +57,7 @@ export function SentToCertificationTab() {
         sentOn: b.recommendation.recommendedAt.slice(0, 10),
         lastAssessmentDate: lastFisaDateOf(b),
         counts: `${f.competent} competent of ${f.enrolled} enrolled`,
-        verificationCode: b.finalDecision.verificationCode,
+        verificationCode: verificationCodeOf(b),
         letter,
       },
     ];

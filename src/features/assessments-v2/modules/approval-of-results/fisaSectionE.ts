@@ -9,6 +9,7 @@ import { DIRECTOR_ASSESSMENT_NAME, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from './co
 import { signOffFromAudit } from './downloads';
 import { dateOf, fisaFinalEvidence, fisaResultsReceived, letterDateOf, turnaroundDays } from './trackingRegister';
 import { fisaFiguresOf } from './workflow';
+import { verificationCodeOf } from './verificationCode';
 import type { FisaResultsBatch, FisaSectionE } from './types';
 
 export function blankSectionE(): FisaSectionE {
@@ -123,7 +124,7 @@ export function fisaSectionEModel(batch: FisaResultsBatch, audit: AuditEntry[]):
     ['Complied / not complied', [complianceText(e), e.ddComment].filter(Boolean).join(' ')],
     ['Date of approval/non-approval letter', letter],
     ['Turnaround time (working days from the last evidence to the letter)', turnaroundDays(finalEvidence, letter)],
-    ['Approval Code', batch.finalDecision?.verificationCode ?? ''],
+    ['Approval Code', verificationCodeOf(batch)],
   ];
 
   return {

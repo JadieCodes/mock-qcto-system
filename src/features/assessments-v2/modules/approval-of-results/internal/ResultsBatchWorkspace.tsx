@@ -55,6 +55,7 @@ import {
   useUploadEvidenceDocument,
 } from '../hooks';
 import { canDeclineResults, competencyRatePercent, isBelowPostEisaThreshold, RESULTS_WORKFLOW } from '../workflow';
+import { verificationCodeOf } from '../verificationCode';
 import type { ResultsBatch } from '../types';
 
 // QCTO feedback 2.8: final approval below the threshold creates the Post-EISA Monitoring visit
@@ -155,7 +156,7 @@ function SummaryTab({ batch, onOpenTab }: { batch: ResultsBatch; onOpenTab: (tab
     <div className="space-y-4">
       <PageHeader
         title="Summary"
-        description={`Verification code: ${batch.finalDecision?.verificationCode ?? 'issued at the final decision'}`}
+        description={`Verification code: ${verificationCodeOf(batch) || 'issued when the batch reaches the ASD'}`}
         actions={<ResultsBatchStatusBadge batch={batch} />}
       />
       {batch.finalDecision && <FinalDecisionNotice decision={batch.finalDecision} />}

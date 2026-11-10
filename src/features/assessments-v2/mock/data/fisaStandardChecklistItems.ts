@@ -1,25 +1,27 @@
 import { checklistItem, checklistSection, type ChecklistSection } from '../../shared/checklist/types';
 
-// CR-026: no old-build precedent exists for FISA Standards as its own process — the old build
-// only ever reached "FISA" by routing a failed QASA application, which used the QASA checklist.
-// Built fresh, in the same evaluate/moderate/validate/approve shape as the QSA Addendum's own
-// checklist (CR-011's mandatory per-line comment applies the same way). Flagged in progress.md
-// for QCTO's real FISA Standards checklist.
+// Batch W: QCTO's own "Assessment Standards Evaluation Report" (QCTO 29.41: QCTO's own
+// checklist). One section of six Yes / No items; CR-011's comment on every line still applies.
+// The header, "Evaluation Findings", "Recommendation" and the evaluator line live on the
+// Evaluation tab (modules/fisa/internal/StandardWorkspace.tsx).
+export const FISA_STANDARD_CHECKLIST_SECTION_ID = 'fsa';
+
+// Records stored before Batch W carry the previous items (ids "fs1.1" ... "fs3.2").
+export const LEGACY_FISA_STANDARD_FIRST_ITEM_ID = 'fs1.1';
+
 export function buildFisaStandardChecklist(): ChecklistSection[] {
   return [
-    checklistSection('fs1', 'Skills Programme Documents', [
-      checklistItem('fs1.1', 'Has Qualifications Development supplied all required Skills Programme Documents for this Skills Programme?'),
-      checklistItem('fs1.2', 'Do the Skills Programme Documents match the Skills Programme title being assessed?'),
-      checklistItem('fs1.3', 'Are the Skills Programme Documents on the current template?'),
-    ]),
-    checklistSection('fs2', 'Final-Assessment Standard Content', [
-      checklistItem('fs2.1', 'Does the standard clearly define the final-assessment requirements for this Skills Programme?'),
-      checklistItem('fs2.2', 'Are the pass/competency requirements clearly specified?'),
-      checklistItem('fs2.3', 'Is the standard internally consistent with the Skills Programme curriculum?'),
-    ]),
-    checklistSection('fs3', 'Readiness for Instrument Development', [
-      checklistItem('fs3.1', 'Is the standard clear enough for an SDP to develop an instrument against it?'),
-      checklistItem('fs3.2', 'Have any ambiguities or gaps been resolved?'),
+    checklistSection(FISA_STANDARD_CHECKLIST_SECTION_ID, 'Skills Programme Assessment Standards Evaluation', [
+      checklistItem('fsa.1', 'Is the correct Format used?'),
+      checklistItem('fsa.2', "Does the FISA contain a standard to be proved as per ELO's and Purpose?"),
+      checklistItem('fsa.3', 'Conditions and requirements for candidate to perform assessment is clearly indicated?'),
+      checklistItem('fsa.4', 'Required evidence and/or performance required is clearly indicated?'),
+      checklistItem('fsa.5', 'Competency level/ Pass Mark is indicated'),
+      checklistItem('fsa.6', 'Time allocation is highlighted.'),
     ]),
   ];
+}
+
+export function isLegacyFisaStandardChecklist(sections: ChecklistSection[]): boolean {
+  return sections[0]?.items[0]?.id === LEGACY_FISA_STANDARD_FIRST_ITEM_ID;
 }

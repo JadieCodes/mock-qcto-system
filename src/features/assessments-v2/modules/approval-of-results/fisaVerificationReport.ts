@@ -8,6 +8,7 @@ import { annexBlocks, fileSafe, fisaLearnerTable } from './downloads';
 import { downloadDoc, type DocBlock, type DocModel } from './documentModel';
 import { fisaEvidenceTagLabel } from './config';
 import { fisaSectionEModel } from './fisaSectionE';
+import { verificationCodeOf } from './verificationCode';
 import type { FisaResultsBatch } from './types';
 
 export function sdpVerificationReportFiles(batch: FisaResultsBatch): FisaResultsBatch['evidenceDocuments'] {
@@ -19,7 +20,7 @@ export function fisaVerificationReportModel(batch: FisaResultsBatch, audit: Audi
   const sdpFiles = sdpVerificationReportFiles(batch);
   const decision = batch.finalDecision;
   const blocks: DocBlock[] = [
-    { kind: 'p', muted: true, text: `Verification code: ${decision?.verificationCode ?? 'issued at the final decision'}.` },
+    { kind: 'p', muted: true, text: `Verification code: ${verificationCodeOf(batch) || 'issued when the batch reaches the ASD'}.` },
     { kind: 'h2', text: 'Sections A to D (completed by the SDP)' },
     {
       kind: 'p',
@@ -48,7 +49,7 @@ export function fisaVerificationReportModel(batch: FisaResultsBatch, audit: Audi
         items: [
           ['QCTO has APPROVED / NOT APPROVED THE RESULTS', !decision ? 'Not yet decided' : decision.outcome === 'approved' ? 'APPROVED' : 'NOT APPROVED'],
           ['Date of the Outcome Letter', decision ? decision.decidedAt.slice(0, 10) : ''],
-          ['Verification Number', decision?.verificationCode ?? ''],
+          ['Verification Number', verificationCodeOf(batch)],
         ],
       },
     );

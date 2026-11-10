@@ -2,6 +2,9 @@ import type { WorkflowDefinition } from '../../shared/workflow/types';
 import { RPL_ALLOCATOR_ROLE } from './config';
 import type { RplToolkitApplication } from './types';
 
+// Batch W: only the ASD can Reject (shown 5 Nov 1:05:23 without objection); process map 5 returns every "No"
+// for rework, so the DD, the Director Office and the IAC have no Reject/Decline. Records already
+// declined through a removed action stay declined.
 // PM-09: QP -> Deputy Director (allocates to an ASD, QCTO feedback 3.11) -> ASD evaluation ->
 // Deputy Director review -> Director & Team review -> IAC -> approved/declined. Corrections only
 // ever travel back through the ASD (CR-012's rule applied domain-wide) — no stage returns
@@ -50,7 +53,6 @@ export const RPL_EVAL_WORKFLOW: WorkflowDefinition = {
       kind: 'send-back',
       requiresNote: true,
     },
-    { id: 'rpl-dd-reject', label: 'Reject', fromStage: 'dd-review', toStage: 'declined', kind: 'reject', requiresNote: true },
 
     {
       id: 'rpl-director-team-send-to-iac',
@@ -68,7 +70,6 @@ export const RPL_EVAL_WORKFLOW: WorkflowDefinition = {
       kind: 'send-back',
       requiresNote: true,
     },
-    { id: 'rpl-director-team-reject', label: 'Reject', fromStage: 'director-team-review', toStage: 'declined', kind: 'reject', requiresNote: true },
 
     {
       id: 'rpl-iac-approve',
@@ -78,7 +79,6 @@ export const RPL_EVAL_WORKFLOW: WorkflowDefinition = {
       kind: 'advance',
       requiresDifferentActor: true,
     },
-    { id: 'rpl-iac-decline', label: 'Decline', fromStage: 'iac-review', toStage: 'declined', kind: 'reject', requiresNote: true },
     {
       id: 'rpl-iac-remediation',
       label: 'Send for remediation',

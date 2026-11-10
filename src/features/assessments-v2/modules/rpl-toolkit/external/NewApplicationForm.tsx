@@ -9,10 +9,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { SelfAuditForm } from '../components/SelfAuditForm';
 import { ToolkitFilesList } from '../components/ToolkitFilesList';
 import { useApprovedRplToolkitsForQp, useCreateRplToolkitApplication } from '../hooks';
+import { blankSelfAudit, selfAuditIssues } from '../selfAudit';
 import { toToolkitFile } from '../toolkitFiles';
-import type { NewRplToolkitInput, RplToolkitFile, RplToolkitType } from '../types';
+import type { NewRplToolkitInput, RplSelfAudit, RplToolkitFile, RplToolkitType } from '../types';
 
 interface FormValues {
   toolkitTitle: string;
@@ -39,15 +42,22 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
   const [toolkitType, setToolkitType] = useState<RplToolkitType>('new');
   const [updatesToolkitId, setUpdatesToolkitId] = useState('');
   const [toolkitFiles, setToolkitFiles] = useState<RplToolkitFile[]>([]);
+  // Batch W: null until the QP changes something; until then the form shows the pre-filled blank audit.
+  const [editedAudit, setEditedAudit] = useState<RplSelfAudit | null>(null);
+  const [showIssues, setShowIssues] = useState(false);
   const createApplication = useCreateRplToolkitApplication();
   const qpId = person.qpId ?? person.id;
   const { data: approvedToolkits = [] } = useApprovedRplToolkitsForQp(qpId);
+  const selfAudit = editedAudit ?? blankSelfAudit(qpId, person.name);
+  const auditIssues = selfAuditIssues(selfAudit);
 
   const resetAll = () => {
     reset();
     setToolkitType('new');
     setUpdatesToolkitId('');
     setToolkitFiles([]);
+    setEditedAudit(null);
+    setShowIssues(false);
   };
 
   const onPickFiles = (input: HTMLInputElement) => {
@@ -60,6 +70,10 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
 
   const onSubmit = (values: FormValues) => {
     if (!canSubmitType) return;
+    if (auditIssues.length > 0) {
+      setShowIssues(true);
+      return;
+    }
     const input: NewRplToolkitInput = {
       ...values,
       qpId,
@@ -67,6 +81,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
       toolkitType,
       ...(toolkitType === 'updated' ? { updatesToolkitId } : {}),
       toolkitFiles,
+      selfAudit,
     };
     createApplication.mutate(input, {
       onSuccess: () => {
@@ -84,7 +99,7 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
         if (!next) resetAll();
       }}
     >
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New RPL Toolkit Submission</DialogTitle>
           <DialogDescription>Submit a new or updated RPL Toolkit for evaluation.</DialogDescription>
@@ -163,6 +178,16 @@ export function NewApplicationForm({ open, onOpenChange }: { open: boolean; onOp
             <Label htmlFor="rpl-toolkit-files">RPL Toolkit Files (optional)</Label>
             <ToolkitFilesList files={toolkitFiles} />
             <input id="rpl-toolkit-files" type="file" multiple className="text-sm" onChange={(e) => onPickFiles(e.currentTarget)} />
+          </div>
+
+          {/* Batch W: QCTO's "QP RPL Evaluation" — the QP's self audit, completed with the submission. */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-gray-800">QP RPL Evaluation — self audit</p>
+            <p className="text-xs text-gray-500">
+              Answer every question with Yes, No or In process and add Notes / Evidence. Under No you may write "n/a" with the reason in the notes.
+            </p>
+            <SelfAuditForm audit={selfAudit} mode="qp" onChange={setEditedAudit} idPrefix="new-rpl" showFeedback={false} />
+            {showIssues && <ValidationSummary issues={auditIssues} title="Complete the self audit before you submit:" />}
           </div>
 
           <DialogFooter>

@@ -11,7 +11,8 @@ export const STANDARD_IAC_REMEDIATION_LABEL = 'Record IAC outcome: Remediation r
 // QCTO feedback 2.9 (29 Oct 2026): the same route as the QASA (2.1). Qualifications
 // Development creates -> ASD evaluates -> DD moderates -> Director Office quality-assures and
 // approves for tabling -> the DD presents at the IAC and records its outcome -> the CEO signs
-// the outcome letter. Both IAC outcomes that end the process (approved or declined) reach the
+// the outcome letter. Batch W: no Reject at the ASD or the DD (QCTO email 2.9; Ms Maake 29 Oct 3:22:02: "the
+// evaluation process must be the same as the QASA"). Both IAC outcomes that end the process (approved or declined) reach the
 // CEO; the Standard is only Approved once the CEO signs an "approved" letter.
 export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
   id: 'fisa-standard',
@@ -38,7 +39,6 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
       kind: 'send-back',
       requiresNote: true,
     },
-    { id: 'standard-asd-reject', label: 'Reject', fromStage: 'asd-evaluation', toStage: 'declined', kind: 'reject', requiresNote: true },
 
     {
       id: 'standard-dd-send-to-director-office',
@@ -56,7 +56,6 @@ export const FISA_STANDARD_WORKFLOW: WorkflowDefinition = {
       kind: 'send-back',
       requiresNote: true,
     },
-    { id: 'standard-dd-reject', label: 'Reject', fromStage: 'dd-review', toStage: 'declined', kind: 'reject', requiresNote: true },
 
     // The engine only compares against the DD who sent it; api.ts also checks the Director
     // Office person was not the ASD on the same Standard.

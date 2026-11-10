@@ -13,6 +13,7 @@ import { eisaEvidenceTagLabel, onFileChoiceText, RESULTS_AD_ROLE, RESULTS_DD_ROL
 import { eisaReviewRows } from './eisaReview';
 import { ddCheckedIdsOf, ddCompletedText, ddLetterTable, DD_LETTER_CHECK_LINES } from './letterChecklist';
 import { dateOf, eisaFinalEvidence, eisaResultsReceived, letterDateOf } from './trackingRegister';
+import { verificationCodeOf } from './verificationCode';
 import type { ResultsBatch } from './types';
 
 // What the report needs that the batch itself does not hold: the dates of the approved Marking &
@@ -176,7 +177,7 @@ export function eisaSectionFive(batch: ResultsBatch): [string, string][] {
     ['Date final evidence received', eisaFinalEvidence(batch)],
     ['QCTO has APPROVED / NOT APPROVED THE RESULTS', outcomeText],
     ['Date of approval letter', decision ? dateOf(decision.decidedAt) : ''],
-    ['Verification Number', decision?.verificationCode ?? ''],
+    ['Verification Number', verificationCodeOf(batch)],
     ['If no, date and reason', decision?.outcome === 'declined' ? `${dateOf(decision.decidedAt)}: ${decision.irregularities.join('; ')}` : ''],
     ['Recommendation for further action', review.recommendationFurtherAction],
     ['Bad Practices', review.badPractices],
@@ -231,7 +232,7 @@ export function eisaVerificationReportModel(
   const admin = eisaAdministrationRows(batch, ctx).filter((r) => internal || !r.group.startsWith('E.'));
   const placeHeaders = ['No.', 'Name', 'Address', 'Accreditation Number'];
   const blocks: DocBlock[] = [
-    { kind: 'p', muted: true, text: `Verification code: ${batch.finalDecision?.verificationCode ?? 'issued at the final decision'}.` },
+    { kind: 'p', muted: true, text: `Verification code: ${verificationCodeOf(batch) || 'issued when the batch reaches the ASD'}.` },
     { kind: 'h2', text: '1. DETAILS OF EXTERNAL INTEGRATED SUMMATIVE ASSESSMENT' },
     { kind: 'dl', items: d.details },
     {

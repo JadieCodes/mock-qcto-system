@@ -31,7 +31,7 @@ import {
 import { reviewersFromAudit } from './downloads';
 import { assertFisaSectionEComplete, blankSectionE, SECTION_E_ASD_FIELDS, SECTION_E_DD_FIELDS } from './fisaSectionE';
 import { lastFisaDateOf } from './outcomeLetters';
-import { buildVerificationCode } from './verificationCode';
+import { allocateMissingCodes, buildVerificationCode, verificationCodeOf, verificationCodesOf } from './verificationCode';
 import { FISA_RESULTS_WORKFLOW, fisaSubmissionIssues, isRecommendDeclineAction, isRequestEvidenceAction } from './workflow';
 import type {
   FisaResultsBatch,
@@ -59,14 +59,21 @@ function mappedTag(tag: string): TaggedEvidenceDocument['tag'] {
   return isFisaEvidenceTag(mapped) ? mapped : 'other';
 }
 
+// Batch W: a submitted batch stored without a verification code gets the one it would have got on
+// reaching the ASD (allocateMissingCodes is idempotent).
 function loadAll(): FisaResultsBatch[] {
-  return readStore<StoredFisaBatch[]>(FISA_RESULTS_KEY, []).map((b) => ({
+  const batches = readStore<StoredFisaBatch[]>(FISA_RESULTS_KEY, []).map((b) => ({
     ...b,
     evidenceDocuments: b.evidenceDocuments.map((d) => ({ ...d, tag: mappedTag(d.tag) })),
     workflow: b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b.workflow, stageId: 'more-evidence' } : b.workflow,
     sectionE: b.sectionE ?? blankSectionE(),
     firstSubmittedAt: b.firstSubmittedAt ?? b.submittedAt,
   }));
+  return allocateMissingCodes(batches, 'fisa', {
+    reachedAsd: (b) => b.workflow.stageId !== 'sdp-draft',
+    allocatedOn: (b) => (b.firstSubmittedAt ?? b.createdAt).slice(0, 10),
+    lastDate: lastFisaDateOf,
+  });
 }
 
 function today(): string {
@@ -84,13 +91,12 @@ function fisaFinalDecisionFor(
   actor: { id: string; name: string },
   lists: { irregularities: string[]; correctiveActions: string[] },
 ): ResultsFinalDecision {
-  const existing = all.flatMap((b) => (b.finalDecision ? [b.finalDecision.verificationCode] : []));
   return {
     outcome,
     decidedAt: new Date().toISOString(),
     decidedBy: actor.name,
     decidedById: actor.id,
-    verificationCode: buildVerificationCode('fisa', lastFisaDateOf(batch), today(), existing),
+    verificationCode: verificationCodeOf(batch) || buildVerificationCode('fisa', lastFisaDateOf(batch), today(), verificationCodesOf(all)),
     ...lists,
     ...reviewersFromAudit(getAuditTrail(FISA_RESULTS_RECORD_TYPE, batch.id)),
   };
@@ -247,6 +253,8 @@ export async function submitFisaResultsBatch(id: string, actor: FisaActor, decla
     declaration: { acceptedBy: actor.name, acceptedById: actor.id, acceptedAt: now },
     submittedAt: now,
     firstSubmittedAt: now,
+    // Batch W (QCTO process map 12): allocated now, when the batch first reaches the ASD.
+    verificationCode: batch.verificationCode || buildVerificationCode('fisa', lastFisaDateOf(batch), today(), verificationCodesOf(all)),
   };
   saveAll(replace(all, updated));
   addNotification({

@@ -299,7 +299,10 @@ export function eisaSubmissionIssues(
   ];
 }
 
-export function submissionDeadlineFor(sittingDate: string): string {
+// Batch W: where the sitting has an accepted EISA Confirmation with a results submission date, the
+// batch is due on that date (QCTO 29.20); otherwise the 21-working-day rule applies.
+export function submissionDeadlineFor(sittingDate: string, confirmedResultsDate?: string | null): string {
+  if (confirmedResultsDate) return confirmedResultsDate;
   return addWorkingDays(sittingDate, RESULTS_SUBMISSION_DEADLINE_WORKING_DAYS);
 }
 

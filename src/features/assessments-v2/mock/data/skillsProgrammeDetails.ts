@@ -17,3 +17,16 @@ const UNKNOWN: SkillsProgrammeDetails = { skillsProgrammeId: 'Pending', nqfLevel
 export function getSkillsProgrammeDetails(title: string): SkillsProgrammeDetails {
   return DETAILS[title] ?? UNKNOWN;
 }
+
+// Batch W: the registration dates in the header of QCTO's Assessment Standards Evaluation
+// Report. Kept apart from SkillsProgrammeDetails, which is copied into stored results batches.
+const REGISTRATION_DATES: Record<string, { start: string; end: string }> = {
+  'Electrical Installation Skills Programme': { start: '2024-07-01', end: '2029-06-30' },
+  'Plumbing Fundamentals Skills Programme': { start: '2024-01-01', end: '2028-12-31' },
+};
+
+const UNKNOWN_REGISTRATION_DATES = { start: '2024-07-01', end: '2029-06-30' };
+
+export function getSkillsProgrammeRegistrationDates(title: string): { start: string; end: string } {
+  return REGISTRATION_DATES[title] ?? UNKNOWN_REGISTRATION_DATES;
+}

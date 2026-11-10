@@ -71,7 +71,7 @@ export interface LearnerBlock {
 // registered), or registered for a sitting whose EISA results batch containing them is not yet
 // approved (competent or not). Once that batch is approved the block lifts. Not blocking: a
 // registration the learner was declined from (they are not in `learners`) and a cancelled sitting.
-// A batch that was declined (final) is not approved, so it keeps blocking (open question).
+// Batch W (QCTO 5 Nov 42:23): a declined batch is final, so the block lifts for a declined batch too.
 export async function findConcurrentRegistration(learnerId: string, excludeRegistrationId?: string): Promise<LearnerBlock | null> {
   const sittings = await listSittings();
   const cancelledSittingIds = new Set(sittings.filter((s) => s.status === 'cancelled').map((s) => s.id));
@@ -85,7 +85,7 @@ export async function findConcurrentRegistration(learnerId: string, excludeRegis
   const pending = others.find(
     (r) =>
       !batches.some(
-        (b) => b.sittingId === r.sittingId && b.finalDecision?.outcome === 'approved' && b.learnerResults.some((res) => res.learnerId === learnerId),
+        (b) => b.sittingId === r.sittingId && b.finalDecision !== null && b.learnerResults.some((res) => res.learnerId === learnerId),
       ),
   );
   return pending ? { registration: pending, reason: 'results-pending' } : null;
@@ -194,8 +194,8 @@ export async function addLearner(registrationId: string, learnerId: string): Pro
   if (concurrent) {
     const until =
       concurrent.reason === 'open'
-        ? 'until that registration is complete and the results for that sitting are approved'
-        : 'until the results for that sitting are approved';
+        ? 'until that registration is complete and the results for that sitting are approved or declined'
+        : 'until the results for that sitting are approved or declined';
     throw new Error(
       `${learner.fullName} already has an active EISA registration (${concurrent.registration.qualificationTitle}, sitting ${concurrent.registration.sittingDate}) — cannot register for another at the same time ${until}.`,
     );

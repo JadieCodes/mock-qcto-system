@@ -50,7 +50,7 @@ import { DD_REQUIRED_LINE_IDS } from '../../../modules/approval-of-results/lette
 import { sourceInfoOf } from '../../../modules/approval-of-results/sourceInfo';
 import { reviewersFromAudit } from '../../../modules/approval-of-results/downloads';
 import { lastEisaDateOf } from '../../../modules/approval-of-results/outcomeLetters';
-import { buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
+import { allocateMissingCodes, buildVerificationCode } from '../../../modules/approval-of-results/verificationCode';
 import { calculateLearnerResult, type EisaLearnerOutcome } from '../../../modules/approval-of-results/calculation';
 import { qualificationDetailsOf, snapshotResultsRules } from '../../../modules/approval-of-results/componentSnapshot';
 import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
@@ -286,7 +286,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       evidenceRequestedAt: null,
       finalEvidenceReceivedAt: null,
       finalDecision: null,
-      submissionDeadline: submissionDeadlineFor(sittingDate),
+      submissionDeadline: submissionDeadlineFor(sittingDate, confirmation.resultsSubmissionDate),
       submittedAt,
       recommendation: null,
       pemVisitId: null,
@@ -497,15 +497,21 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     })
     .done();
 
-  assignVerificationCodes(batches);
+  // Batch W: decided batches keep the code numbered at their decision; every other batch gets one as
+  // it reached the ASD (the same allocateMissingCodes the api runs on load).
+  const withCodes = allocateMissingCodes(assignVerificationCodes(batches), 'eisa', {
+    reachedAsd: () => true,
+    allocatedOn: (b) => dateOf(b.submittedAt),
+    lastDate: lastEisaDateOf,
+  });
 
   // Newest first, the order submitResultsBatch() leaves the list in.
-  return batches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  return withCodes.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 }
 
 // Batch N1: codes are numbered per financial year in the order of the decisions, the way
 // api.ts numbers them as the decisions are made.
-function assignVerificationCodes(batches: ResultsBatch[]): void {
+function assignVerificationCodes(batches: ResultsBatch[]): ResultsBatch[] {
   const existing: string[] = [];
   const decided = batches.filter((b) => b.finalDecision).sort((a, b) => (a.finalDecision?.decidedAt ?? '').localeCompare(b.finalDecision?.decidedAt ?? ''));
   for (const batch of decided) {
@@ -513,7 +519,9 @@ function assignVerificationCodes(batches: ResultsBatch[]): void {
     const code = buildVerificationCode('eisa', lastEisaDateOf(batch), dateOf(batch.finalDecision.decidedAt), existing);
     existing.push(code);
     batch.finalDecision = { ...batch.finalDecision, verificationCode: code };
+    batch.verificationCode = code;
   }
+  return batches;
 }
 
 // QCTO feedback 05.24: the saved draft behind the Welding sitting at today - 20 — the first two

@@ -216,6 +216,9 @@ export interface ResultsBatch {
   // these, not stored separately.
   learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
+  // Batch W: allocated when the batch first reaches the ASD (verificationCode.ts); finalDecision carries the same code.
+  // Optional so a batch stored before Batch W still loads — read it through verificationCodeOf().
+  verificationCode?: string;
   // QCTO feedback 29.25: each "Already on file" document and what the QP chose for it.
   onFileDocuments: OnFileDocumentRecord[];
   // QCTO feedback 29.26.
@@ -330,6 +333,8 @@ export interface FisaResultsBatch {
   credits: string;
   // Batch N1: the date(s) the FISA was held, chosen by the SDP.
   fisaDates: string[];
+  // Batch W: allocated when the batch first reaches the ASD; finalDecision carries the same code.
+  verificationCode?: string;
   sdpId: string;
   sdpName: string;
 

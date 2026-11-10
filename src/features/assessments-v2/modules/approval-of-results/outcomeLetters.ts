@@ -18,7 +18,7 @@ import {
 } from './config';
 import { downloadHtmlFile, escapeHtml, page } from './downloads';
 import { fisaFiguresOf } from './workflow';
-import { firstDateOf, lastDateOf } from './verificationCode';
+import { firstDateOf, lastDateOf, verificationCodeOf } from './verificationCode';
 import type { FisaResultsBatch, ResultsBatch } from './types';
 
 export type LetterBlock =
@@ -39,7 +39,7 @@ export interface LetterModel {
 }
 
 export const DRAFT_SIGNATURE_NAME = 'Chief Director (to sign at the final decision)';
-export const DRAFT_CODE_TEXT = 'issued at the final decision';
+export const DRAFT_CODE_TEXT = 'issued when the batch reaches the ASD';
 
 const APPEALS_EISA = `Should there be any appeals; the Assessment Quality Partner's formal appeals process should be followed. Kindly quote the Verification Code when requesting the certification of any successful appeals in this cohort of learners by sending the request to ${EISA_APPEALS_EMAIL}`;
 
@@ -82,8 +82,8 @@ function sdpContactLine(sdp: SdpDirectoryEntry | undefined): string {
   return sdp ? `${sdp.contactTitle} ${sdp.contactPerson}` : 'The Skills Development Provider';
 }
 
-function codeText(code: string | undefined, draft: boolean): string {
-  return draft || !code ? DRAFT_CODE_TEXT : code;
+function codeText(code: string): string {
+  return code || DRAFT_CODE_TEXT;
 }
 
 const DECLINE_INTRO = 'The submission of results did not meet the minimum requirements for learners to be certificated due to the following irregularities.';
@@ -103,7 +103,7 @@ export function eisaOutcomeLetter(batch: ResultsBatch, draft: boolean): LetterMo
   const date = decision && !draft ? decision.decidedAt.slice(0, 10) : today();
   const qualification = batch.qualificationTitle.toUpperCase();
   const subject = `${declined ? 'DECLINE' : 'APPROVAL'} OF LEARNER ACHIEVEMENTS FOR THE EXTERNAL INTEGRATED SUMMATIVE ASSESSMENT (EISA) CONDUCTED FOR THE OC: ${qualification} (SAQA ID: ${batch.saqaId}) FOR THE PERIOD ${first} TO ${last}`;
-  const code = codeText(decision?.verificationCode, draft);
+  const code = codeText(verificationCodeOf(batch));
 
   const tableRows: [string, string][] = [
     ['Name of Qualification', batch.qualificationTitle],
@@ -177,7 +177,7 @@ export function fisaOutcomeLetter(batch: FisaResultsBatch, draft: boolean): Lett
   const f = fisaFiguresOf(batch);
   const date = decision && !draft ? decision.decidedAt.slice(0, 10) : today();
   const dates = datesText(batch.fisaDates);
-  const code = codeText(decision?.verificationCode, draft);
+  const code = codeText(verificationCodeOf(batch));
   const subject = `${declined ? 'DECLINE' : 'APPROVAL'} OF LEARNER RESULTS FOR THE FISA (FINAL INTEGRATED SUPERVISED ASSESSMENT) CONDUCTED FOR THE SKILLS PROGRAMME: ${batch.skillsProgrammeTitle.toUpperCase()}, (SKILLS ID ${batch.skillsProgrammeId}) ON ${dates}`;
 
   const tableRows: [string, string][] = [

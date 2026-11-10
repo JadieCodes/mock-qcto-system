@@ -1,5 +1,6 @@
 import { buildFisaStandardChecklist } from './fisaStandardChecklistItems';
 import type { ChecklistSection } from '../../shared/checklist/types';
+import { workingDateAgo } from './demoSeed/helpers';
 import type { FisaStandardRecord } from '../../modules/fisa/types';
 
 // Demo seed so the FISA Standards chain isn't empty on first load: one Standard already
@@ -19,7 +20,7 @@ function completedChecklist(): ChecklistSection[] {
 
 export function seedFisaStandards(): FisaStandardRecord[] {
   const blankChecklist = buildFisaStandardChecklist();
-  const blankReport = { findings: '', recommendation: '' as const };
+  const blankReport = { findings: '', recommendation: '' as const, recommendationText: '' };
   const minutes = (fileName: string, uploadedAt: string, uploadedBy: string) => ({
     fileName,
     fileSize: 184_320,
@@ -30,6 +31,9 @@ export function seedFisaStandards(): FisaStandardRecord[] {
   const doneReport = {
     findings: 'Standard is clear, internally consistent and ready for instrument development.',
     recommendation: 'recommended' as const,
+    recommendationText: 'Recommended: the standard can go forward for instrument development.',
+    evaluatorName: 'Sipho Ndlovu',
+    evaluatedOn: '2026-10-02',
   };
 
   return [
@@ -122,7 +126,8 @@ export function seedFisaStandards(): FisaStandardRecord[] {
       checklist: blankChecklist,
       evaluationReport: blankReport,
       createdBy: 'Fundiswa Ngcobo',
-      createdAt: '2026-10-13T08:00:00.000Z',
+      // Batch W: created within the last two days, so it is not on the overdue list (it is measured from this date).
+      createdAt: `${workingDateAgo(2)}T08:00:00.000Z`,
     },
   ];
 }

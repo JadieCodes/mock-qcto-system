@@ -117,7 +117,7 @@ function notifyOnDemandScheduleChange(batch: EisaSittingBatch): void {
     addNotification({
       recipientRole,
       title: 'On-demand schedule updated',
-      body: `${batch.qpName} updated the on-demand schedule for ${batch.qualificationTitle} (${batch.dates.length} dates)`,
+      body: `${batch.qpName} updated the on-demand schedule for ${batch.qualificationTitle} (${batch.dates.length} ${batch.dates.length === 1 ? 'date' : 'dates'})`,
     });
   }
 }

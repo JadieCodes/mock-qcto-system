@@ -21,7 +21,13 @@ export type StandardRecommendation = 'recommended' | 'not-recommended' | '';
 
 export interface StandardEvaluationReport {
   findings: string;
+  // Before Batch W this was a recommended / not-recommended choice; kept so stored records load.
   recommendation: StandardRecommendation;
+  // Batch W: "Recommendation" on QCTO's Assessment Standards Evaluation Report is free text.
+  recommendationText?: string;
+  // Batch W: "Evaluator name and date" — the ASD and the date they sent it to the Deputy Director.
+  evaluatorName?: string;
+  evaluatedOn?: string;
 }
 
 export interface FisaStandardRecord {
@@ -36,6 +42,8 @@ export interface FisaStandardRecord {
   workflow: WorkflowRecordState;
 
   checklist: ChecklistSection[];
+  // Batch W: the answers given on the checklist used before QCTO's own one, shown read-only.
+  previousChecklist?: ChecklistSection[];
   evaluationReport: StandardEvaluationReport;
   // QCTO feedback 2.9: optional IAC committee minutes, uploaded by the DD with the outcome.
   // Optional so Standards stored before this change still load.

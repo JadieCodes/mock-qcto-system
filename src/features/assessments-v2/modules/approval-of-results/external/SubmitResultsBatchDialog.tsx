@@ -119,7 +119,7 @@ function ResultsCaptureForm({
   return (
     <form noValidate onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4">
-        <DeadlineBadge deadline={submissionDeadlineFor(sitting.sittingDate)} />
+        <DeadlineBadge deadline={submissionDeadlineFor(sitting.sittingDate, sitting.resultsSubmissionDate)} />
         {draft && (
           <p className="text-xs text-gray-500">
             Draft last saved {new Date(draft.savedAt).toLocaleString('en-ZA')} by {draft.savedBy}.

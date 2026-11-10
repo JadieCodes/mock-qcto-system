@@ -13,7 +13,7 @@ import { addWorkingDays, workingDaysBetween } from '../../shared/dates/workingDa
 import { batchFiguresOf, calculateLearnerResult } from './calculation';
 import { RESULTS_SUBMISSION_DEADLINE_WORKING_DAYS } from './config';
 import { eisaDatesOf, lastFisaDateOf } from './outcomeLetters';
-import { financialYearStartOf, firstDateOf, lastDateOf } from './verificationCode';
+import { financialYearStartOf, firstDateOf, lastDateOf, verificationCodeOf } from './verificationCode';
 import { fisaFiguresOf } from './workflow';
 import type { FisaResultsBatch, ResultsBatch } from './types';
 
@@ -204,7 +204,7 @@ export function eisaRegisterRow(batch: ResultsBatch, no: number): string[] {
 
   return [
     String(no),
-    batch.finalDecision?.verificationCode ?? '',
+    verificationCodeOf(batch),
     slashDate(batch.sourceInfo.notifiedAt),
     qp?.organisation ?? batch.qpName,
     batch.saqaId,
@@ -264,7 +264,7 @@ export function fisaRegisterRow(batch: FisaResultsBatch): string[] {
   const f = fisaFiguresOf(batch);
   const has = (tag: string) => (batch.evidenceDocuments.some((d) => d.tag === tag) ? 'Yes' : 'No');
   return [
-    batch.finalDecision?.verificationCode ?? '',
+    verificationCodeOf(batch),
     batch.sdpName,
     batch.skillsProgrammeId,
     batch.skillsProgrammeTitle,

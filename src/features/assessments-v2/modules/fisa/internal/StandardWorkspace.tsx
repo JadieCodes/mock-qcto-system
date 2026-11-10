@@ -1,12 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { isChecklistComplete } from '../../../shared/checklist/types';
+import { isLegacyFisaStandardChecklist } from '../../../mock/data/fisaStandardChecklistItems';
+import { getSkillsProgrammeDetails, getSkillsProgrammeRegistrationDates } from '../../../mock/data/skillsProgrammeDetails';
 import { IacMinutesFileLine, IacOutcomeForm } from '../../../shared/iac/IacOutcomeForm';
 import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
@@ -51,8 +52,21 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
   const stageId = record.workflow.stageId;
   const checklistComplete = isChecklistComplete(record.checklist, true);
   const reportIssues: ValidationIssue[] = [];
-  if (!record.evaluationReport.findings.trim()) reportIssues.push({ field: 'findings', message: 'Findings are required.' });
-  if (record.evaluationReport.recommendation === '') reportIssues.push({ field: 'recommendation', message: 'Select a recommendation.' });
+  if (!record.evaluationReport.findings.trim()) reportIssues.push({ field: 'findings', message: 'Evaluation Findings are required.' });
+  if (!record.evaluationReport.recommendationText?.trim()) reportIssues.push({ field: 'recommendation', message: 'The Recommendation is required.' });
+  const details = getSkillsProgrammeDetails(record.skillsProgrammeTitle);
+  const registrationDates = getSkillsProgrammeRegistrationDates(record.skillsProgrammeTitle);
+  const reportHeader: [string, string][] = [
+    ['Skills Programme Title', record.skillsProgrammeTitle],
+    ['Skills Programme Title ID', details.skillsProgrammeId],
+    ['NQF Level', details.nqfLevel],
+    ['Credits', details.credits],
+    ['Registration Start Date', registrationDates.start],
+    ['Registration End Date', registrationDates.end],
+  ];
+  // A record past the ASD keeps its answers from the previous checklist, read-only.
+  const legacyChecklist = isLegacyFisaStandardChecklist(record.checklist);
+  const todayIso = new Date().toISOString().slice(0, 10);
   const reportComplete = reportIssues.length === 0;
   const editable = role === 'ASD' && stageId === 'asd-evaluation';
 
@@ -147,16 +161,38 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
       </TabsContent>
 
       <TabsContent value="evaluation" className="space-y-6">
+        {/* Batch W: QCTO's "Assessment Standards Evaluation Report". The header comes from the record. */}
+        <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessment Standards Evaluation Report</p>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 p-4 text-sm">
+            {reportHeader.map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-xs text-gray-400 uppercase">{label}</dt>
+                <dd className="font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        {record.previousChecklist && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Answered on the previous checklist</p>
+            <Checklist sections={record.previousChecklist} readonly onChange={() => undefined} />
+          </div>
+        )}
+
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">FISA Standards Evaluation Checklist</p>
-          <Checklist sections={record.checklist} readonly={!editable} onChange={(sections) => saveChecklist.mutate({ standardId: record.id, sections })} />
+          {legacyChecklist && <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Answered on the previous checklist</p>}
+          <Checklist sections={record.checklist} readonly={!editable || legacyChecklist} onChange={(sections) => saveChecklist.mutate({ standardId: record.id, sections })} />
         </div>
 
         <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Evaluation Report</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Evaluation</p>
           {editable && <ValidationSummary issues={reportIssues} title="Complete the report before sending to the Deputy Director:" />}
           <div className="space-y-2">
-            <Label>Findings</Label>
+            <Label>Evaluation Findings</Label>
             <Textarea
               rows={3}
               value={record.evaluationReport.findings}
@@ -167,23 +203,22 @@ function StandardWorkspaceContent({ record }: { record: FisaStandardRecord }) {
           </div>
           <div className="space-y-2">
             <Label>Recommendation</Label>
-            <Select
-              value={record.evaluationReport.recommendation}
+            <Textarea
+              rows={3}
+              value={record.evaluationReport.recommendationText ?? ''}
               disabled={!editable}
-              onValueChange={(value) =>
-                saveReport.mutate({ standardId: record.id, report: { ...record.evaluationReport, recommendation: value as 'recommended' | 'not-recommended' } })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a recommendation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recommended">Recommended for approval</SelectItem>
-                <SelectItem value="not-recommended">Not recommended</SelectItem>
-              </SelectContent>
-            </Select>
+              onChange={(e) => saveReport.mutate({ standardId: record.id, report: { ...record.evaluationReport, recommendationText: e.target.value } })}
+            />
             {editable && <FieldError message={reportIssues.find((i) => i.field === 'recommendation')?.message} />}
           </div>
+          <p className="text-sm text-gray-600">
+            <span className="text-xs text-gray-400 uppercase mr-2">Evaluator</span>
+            {record.evaluationReport.evaluatorName
+              ? `${record.evaluationReport.evaluatorName}, ${record.evaluationReport.evaluatedOn ?? ''}`
+              : editable
+                ? `${actorName}, ${todayIso} (recorded when you send it to the Deputy Director)`
+                : '—'}
+          </p>
         </div>
 
         {latestDoReturnNote && (

@@ -44,6 +44,7 @@ import {
   useUploadFisaReviewEvidence,
 } from '../hooks';
 import { canDeclineResults, FISA_RESULTS_WORKFLOW, fisaFiguresOf } from '../workflow';
+import { verificationCodeOf } from '../verificationCode';
 import type { FisaResultsBatch } from '../types';
 
 function stageLabel(stageId: string): string {
@@ -98,7 +99,7 @@ function SummaryTab({ batch, onOpenTab }: { batch: FisaResultsBatch; onOpenTab: 
     <div className="space-y-4">
       <PageHeader
         title="Summary"
-        description={`Verification code: ${batch.finalDecision?.verificationCode ?? 'issued at the final decision'}`}
+        description={`Verification code: ${verificationCodeOf(batch) || 'issued when the batch reaches the ASD'}`}
         actions={<ResultsBatchStatusBadge batch={batch} />}
       />
       {batch.finalDecision && <FinalDecisionNotice decision={batch.finalDecision} />}

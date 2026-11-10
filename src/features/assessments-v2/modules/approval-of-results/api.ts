@@ -24,7 +24,7 @@ import { assertDdChecklistComplete, blankDdChecklist, DD_REQUIRED_LINE_IDS } fro
 import { markEntryIssues } from './markEntry';
 import { lastEisaDateOf } from './outcomeLetters';
 import { blankSourceInfo, sourceInfoOf } from './sourceInfo';
-import { buildVerificationCode } from './verificationCode';
+import { allocateMissingCodes, buildVerificationCode, verificationCodeOf, verificationCodesOf } from './verificationCode';
 import {
   competencyRatePercent,
   eisaSubmissionIssues,
@@ -57,14 +57,21 @@ export const DRAFTS_KEY = 'approvalOfResults:drafts';
 // gets blank ones (each only when missing, so this can run any number of times).
 type StoredBatch = Omit<ResultsBatch, 'eisaReview' | 'ddChecklist' | 'sourceInfo'> & Partial<Pick<ResultsBatch, 'eisaReview' | 'ddChecklist' | 'sourceInfo'>>;
 
+// Batch W: a batch stored without a verification code gets the one it would have got on reaching
+// the ASD (allocateMissingCodes is idempotent).
 function loadAll(): ResultsBatch[] {
-  return readStore<StoredBatch[]>(KEY, []).map((b) => ({
+  const batches = readStore<StoredBatch[]>(KEY, []).map((b) => ({
     ...b,
     workflow: b.workflow.stageId === 'declined' && !b.finalDecision ? { ...b.workflow, stageId: 'more-evidence' } : b.workflow,
     eisaReview: b.eisaReview ?? blankEisaReview(),
     ddChecklist: b.ddChecklist ?? null,
     sourceInfo: b.sourceInfo ?? blankSourceInfo(),
   }));
+  return allocateMissingCodes(batches, 'eisa', {
+    reachedAsd: () => true,
+    allocatedOn: (b) => b.submittedAt.slice(0, 10),
+    lastDate: lastEisaDateOf,
+  });
 }
 
 function saveAll(batches: ResultsBatch[]): void {
@@ -195,7 +202,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   const idNumberOf = (r: EisaLearnerResult) => enrolled.find((e) => e.id === r.learnerId)?.idNumber ?? r.idNumber;
   const sourceInfo = sourceInfoOf(confirmation, await listRegistrationsForSitting(confirmation.sittingId));
   const submittedAt = new Date().toISOString();
-  const submissionDeadline = submissionDeadlineFor(confirmation.sittingDate);
+  const submissionDeadline = submissionDeadlineFor(confirmation.sittingDate, confirmation.resultsSubmissionDate);
   const declaration = { acceptedBy: input.submittedBy, acceptedById: input.submittedById, acceptedAt: decidedAt };
   const centres = confirmation.confirmedCentres?.map((c) => c.centre) ?? confirmation.centres;
 
@@ -236,6 +243,8 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     pemVisitId: null,
     createdBy: input.submittedBy,
   };
+  // Batch W (QCTO process map 12): the code is allocated now, when the batch first reaches the ASD.
+  batch.verificationCode = buildVerificationCode('eisa', lastEisaDateOf(batch), today(), verificationCodesOf(all));
   saveAll([batch, ...all]);
   writeStore(DRAFTS_KEY, loadDrafts().filter((d) => d.sittingId !== input.sittingId));
 
@@ -343,8 +352,7 @@ function nonEmptyLines(lines: string[] | undefined): string[] {
   return (lines ?? []).map((l) => l.trim()).filter(Boolean);
 }
 
-// Batch N1: the final decision on a batch. The code is numbered per financial year among the
-// EISA batches already decided.
+// Batch N1: the final decision on a batch. It carries the code the batch got on reaching the ASD.
 function finalDecisionFor(
   batch: ResultsBatch,
   all: ResultsBatch[],
@@ -353,13 +361,12 @@ function finalDecisionFor(
   lists: { irregularities: string[]; correctiveActions: string[] },
 ): ResultsFinalDecision {
   const decidedAt = new Date().toISOString();
-  const existing = all.flatMap((b) => (b.finalDecision ? [b.finalDecision.verificationCode] : []));
   return {
     outcome,
     decidedAt,
     decidedBy: actor.name,
     decidedById: actor.id,
-    verificationCode: buildVerificationCode('eisa', lastEisaDateOf(batch), today(), existing),
+    verificationCode: verificationCodeOf(batch) || buildVerificationCode('eisa', lastEisaDateOf(batch), today(), verificationCodesOf(all)),
     ...lists,
     ...reviewersFromAudit(getAuditTrail(EISA_RESULTS_RECORD_TYPE, batch.id)),
   };

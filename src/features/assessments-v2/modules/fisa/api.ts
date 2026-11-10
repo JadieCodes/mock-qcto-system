@@ -1,4 +1,4 @@
-import { buildFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
+import { buildFisaStandardChecklist, isLegacyFisaStandardChecklist } from '../../mock/data/fisaStandardChecklistItems';
 import { seedFisaStandards } from '../../mock/data/fisaStandardsSeed';
 import { DIRECTOR_OFFICE_DIFFERENT_PERSON_MESSAGE, hasActedInRoles } from '../../shared/iac/differentPerson';
 import type { IacMinutesFile } from '../../shared/iac/types';
@@ -32,8 +32,18 @@ import {
 
 const STANDARDS_KEY = 'fisa:standards';
 
+// Batch W: a Standard stored on the previous checklist. Not yet past the ASD: the new items start
+// unanswered and the old answers stay readable as "Answered on the previous checklist". Past the
+// ASD: the old answers stay as they are, read-only. Idempotent: the new items have new ids.
+function upgradeFisaStandardRecord(record: FisaStandardRecord): FisaStandardRecord {
+  if (!isLegacyFisaStandardChecklist(record.checklist)) return record;
+  const notPastAsd = record.workflow.stageId === 'qd-submission' || record.workflow.stageId === 'asd-evaluation';
+  if (!notPastAsd) return record;
+  return { ...record, previousChecklist: record.checklist, checklist: buildFisaStandardChecklist() };
+}
+
 function loadStandards(): FisaStandardRecord[] {
-  return readStore<FisaStandardRecord[]>(STANDARDS_KEY, seedFisaStandards());
+  return readStore<FisaStandardRecord[]>(STANDARDS_KEY, seedFisaStandards()).map(upgradeFisaStandardRecord);
 }
 
 function saveStandards(records: FisaStandardRecord[]): void {
@@ -68,7 +78,7 @@ export async function createFisaStandard(input: NewFisaStandardInput): Promise<F
     notes: input.notes,
     workflow: { stageId: 'qd-submission', submittedBy: input.createdBy },
     checklist: buildFisaStandardChecklist(),
-    evaluationReport: { findings: '', recommendation: '' },
+    evaluationReport: { findings: '', recommendation: '', recommendationText: '' },
     iacMinutesFile: null,
     createdBy: input.createdBy,
     createdAt: new Date().toISOString(),
@@ -113,8 +123,8 @@ export async function performStandardAction(params: StandardActionParams): Promi
     if (!isChecklistComplete(record.checklist, true)) {
       throw new Error('Every checklist line needs an answer and a comment before sending to the Deputy Director.');
     }
-    if (!record.evaluationReport.findings.trim() || !record.evaluationReport.recommendation) {
-      throw new Error('Complete the evaluation report (findings and recommendation) before sending to the Deputy Director.');
+    if (!record.evaluationReport.findings.trim() || !record.evaluationReport.recommendationText?.trim()) {
+      throw new Error('Complete the Evaluation Findings and the Recommendation before sending to the Deputy Director.');
     }
   }
   if (
@@ -136,7 +146,12 @@ export async function performStandardAction(params: StandardActionParams): Promi
     recordId: record.id,
   });
 
-  const updated: FisaStandardRecord = { ...record, workflow: nextWorkflow };
+  // Batch W: the evaluator line on QCTO's report is the ASD and the date they sent it on.
+  const evaluatorLine =
+    params.actionId === 'standard-asd-send-to-dd'
+      ? { evaluationReport: { ...record.evaluationReport, evaluatorName: params.actorName, evaluatedOn: new Date().toISOString().slice(0, 10) } }
+      : {};
+  const updated: FisaStandardRecord = { ...record, ...evaluatorLine, workflow: nextWorkflow };
   saveStandards(replaceStandard(all, updated));
 
   // Every handoff notifies whoever needs to act next — a terminal stage (approved/declined)

@@ -218,7 +218,7 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
 
   // B2 — waiting for the ASD to approve or reject.
   {
-    const { batch, rows } = propose(2, plumbing, 14, 4);
+    const { batch, rows } = propose(2, plumbing, 14, 2);
     batches.push(batch);
     sittings.push(...rows);
   }
@@ -568,7 +568,7 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
       notify(log, submittedAt, {
         recipientRole,
         title: 'On-demand schedule updated',
-        body: `${batch.qpName} updated the on-demand schedule for ${batch.qualificationTitle} (${batch.dates.length} dates)`,
+        body: `${batch.qpName} updated the on-demand schedule for ${batch.qualificationTitle} (${batch.dates.length} ${batch.dates.length === 1 ? 'date' : 'dates'})`,
       });
     }
   }

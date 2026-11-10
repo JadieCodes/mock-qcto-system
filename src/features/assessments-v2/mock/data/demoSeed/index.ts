@@ -17,7 +17,8 @@
 //                            the 6th, Approved with conditions, added with QCTO's report form in 3.10)
 //   rplToolkit.ts            11 RPL Toolkit submissions at every stage (phase C3)
 //   administration.ts        2 acting appointments (one active this week, one past) and 1 registration closing date override (Batch S)
-// FISA Standards keep their own fallback seed (mock/data/fisaStandardsSeed.ts).
+// FISA Standards keep their own fallback seed (mock/data/fisaStandardsSeed.ts); fisaStandardTrails.ts adds their audit trails.
+// overdueTuning.ts runs last: only a few items stay overdue, every other open item entered its stage within 2 working days (Batch W).
 //
 // Order matters: the calendar reads the approved QASAs' sittings per year; Instrument
 // Validation needs approved QASAs and the published sittings; Registration needs published
@@ -45,10 +46,13 @@ import { seedResultsBatches, seedResultsDrafts } from './approvalOfResults';
 import { seedEisaCalendar } from './eisaCalendar';
 import { seedEisaConfirmations } from './eisaConfirmation';
 import { seedEisaRegistrations } from './eisaRegistration';
+import { seedFisaStandards } from '../fisaStandardsSeed';
+import { seedFisaStandardTrails } from './fisaStandardTrails';
 import { seedFisaValidations } from './fisaValidation';
 import { seedFisaResultsBatches } from './fisaResults';
 import { createSeedLog } from './helpers';
 import { seedInstrumentValidations } from './instrumentValidation';
+import { quietenSeededWaits } from './overdueTuning';
 import { seedQasaSubmissions } from './qasa';
 import { seedRplToolkits } from './rplToolkit';
 import { seedSiteVisits } from './siteVisits';
@@ -68,6 +72,22 @@ export function seedDemoData(): void {
   // Batch S: acting appointments and the one closing-date override (no role names are seeded).
   const actingAppointments = seedActingAppointments(log);
   const sittings = applyClosingOverride(log, calendar.sittings, confirmations, calendar.requests);
+  // Batch W: the FISA Standards get their audit trails, then the overdue list is quietened (last, over the finished seed).
+  seedFisaStandardTrails(log);
+  quietenSeededWaits(log, {
+    qasa,
+    iv: validations,
+    batches: calendar.batches,
+    requests: calendar.requests,
+    registrations,
+    confirmations,
+    results: siteVisits.results,
+    fisaResults,
+    standards: seedFisaStandards(),
+    fisaValidations,
+    rpl: rplToolkits,
+    visits: siteVisits.visits,
+  });
 
   writeStore(QASA_KEY, qasa);
   writeStore(BATCHES_KEY, calendar.batches);

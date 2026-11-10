@@ -59,7 +59,7 @@ function QpResultsView() {
                     <TableCell className="whitespace-nowrap">{a.sittingDate}</TableCell>
                     <TableCell>{a.learners.length}</TableCell>
                     <TableCell>
-                      <DeadlineBadge deadline={submissionDeadlineFor(a.sittingDate)} />
+                      <DeadlineBadge deadline={submissionDeadlineFor(a.sittingDate, a.resultsSubmissionDate)} />
                     </TableCell>
                     <TableCell>
                       <Button size="sm" onClick={() => setSubmitSittingId(a.sittingId)}>

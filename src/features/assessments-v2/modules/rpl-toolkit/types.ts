@@ -10,6 +10,43 @@ export type RplToolkitType = 'new' | 'updated';
 
 export type RplRecommendation = 'recommended' | 'not-recommended' | '';
 
+// Batch W: QCTO's "QP RPL Evaluation". The QP answers every question (Yes / No / In process, with
+// Notes / Evidence) when submitting; the ASD writes the QCTO feedback per question.
+export type RplSelfAuditAnswer = 'yes' | 'no' | 'in-process';
+
+export interface RplSelfAuditLine {
+  answer: RplSelfAuditAnswer | null;
+  // "n/a" is allowed under No, with the reason in the notes.
+  notes: string;
+  qctoFeedback: string;
+}
+
+// "Self audit checklist completed by".
+export interface RplSelfAuditCompletedBy {
+  fullName: string;
+  designation: string;
+  organisation: string;
+  date: string;
+}
+
+export interface RplSelfAudit {
+  // Keyed by question id (mock/data/rplToolkitChecklistItems.ts).
+  lines: Record<string, RplSelfAuditLine>;
+  completedBy: RplSelfAuditCompletedBy;
+}
+
+export type RplApproved = 'yes' | 'no' | '';
+
+// "RPL Toolkit Approved (Yes / No)", "Comments" and "Evaluated by (QCTO official)".
+export interface RplQctoEvaluation {
+  approved: RplApproved;
+  comments: string;
+  evaluatedByName: string;
+  evaluatedByDesignation: string;
+  evaluatedOn: string;
+}
+
+// Before Batch W: the ASD's findings and recommendation. Kept so stored records load.
 export interface RplEvaluationReport {
   findings: string;
   recommendation: RplRecommendation;
@@ -44,8 +81,13 @@ export interface RplToolkitApplication {
   // PM-09 allocation: a named ASD person, not a free-text name.
   allocatedAsdId: string | null;
   allocatedAsdName: string | null;
+  // Batch W: the checklist used before QCTO's own form. New toolkits hold none; one stored with
+  // answers shows them read-only as "Answered on the previous checklist".
   checklist: ChecklistSection[];
   evaluationReport: RplEvaluationReport;
+  // Batch W: optional so records stored before Batch W still load — read them through rpl-toolkit/selfAudit.ts.
+  selfAudit?: RplSelfAudit;
+  qctoEvaluation?: RplQctoEvaluation;
 
   // Row 46 (test findings J-03): a team-level moderation checklist, completed by the Director
   // & Team before sending to the IAC, plus the IAC's own endorsement note before it approves,
@@ -79,4 +121,6 @@ export interface NewRplToolkitInput {
   updatesToolkitId?: string;
   // QCTO feedback 3.13: optional — a submission without files is still valid.
   toolkitFiles?: RplToolkitFile[];
+  // Batch W: the QP's self-audit, complete when the toolkit is submitted.
+  selfAudit: RplSelfAudit;
 }

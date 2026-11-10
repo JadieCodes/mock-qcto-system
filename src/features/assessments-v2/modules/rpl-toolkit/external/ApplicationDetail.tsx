@@ -6,8 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { generateLetter } from '../../../shared/letters/templates';
 import { LetterView } from '../../../shared/letters/LetterView';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
+import { SelfAuditForm } from '../components/SelfAuditForm';
 import { RplToolkitStatusBadge } from '../components/StatusBadge';
-import { useRplEvaluationAction, useRplToolkitApplication } from '../hooks';
+import { useRplEvaluationAction, useRplToolkitApplication, useSaveRplSelfAudit } from '../hooks';
+import { qctoEvaluationOf, selfAuditIssues, selfAuditOf } from '../selfAudit';
 
 function DetailRow({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: ReactNode }) {
   return (
@@ -30,6 +33,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
   const actorId = person.id;
   const actorName = person.name;
   const evaluationAction = useRplEvaluationAction();
+  const saveSelfAudit = useSaveRplSelfAudit();
 
   return (
     <Dialog open={!!applicationId} onOpenChange={(open) => !open && onClose()}>
@@ -43,6 +47,7 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
             <Tabs defaultValue="details">
               <TabsList>
                 <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="self-audit">QP RPL Evaluation</TabsTrigger>
                 <TabsTrigger value="outcome">Outcome Letter</TabsTrigger>
               </TabsList>
 
@@ -83,8 +88,11 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                 {application.evalState.stageId === 'qp-corrections' && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
                     <p className="text-sm font-semibold text-amber-800">Corrections requested by the ASD</p>
+                    <p className="text-xs text-amber-800">Read the QCTO feedback on the QP RPL Evaluation tab, correct your answers, then resubmit.</p>
+                    <ValidationSummary issues={selfAuditIssues(selfAuditOf(application))} title="Complete the self audit before you resubmit:" />
                     <Button
                       size="sm"
+                      disabled={selfAuditIssues(selfAuditOf(application)).length > 0 || evaluationAction.isPending}
                       onClick={() =>
                         evaluationAction.mutate({ applicationId: application.id, actionId: 'rpl-qp-resubmit', actorRole: role, actorId, actorName })
                       }
@@ -104,6 +112,22 @@ export function ApplicationDetail({ applicationId, onClose }: { applicationId: s
                     )}
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="self-audit" className="space-y-4">
+                {qctoEvaluationOf(application).comments && (
+                  <div className="rounded-xl border bg-gray-50 p-3 text-sm">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">QCTO comments</p>
+                    <p className="whitespace-pre-wrap">{qctoEvaluationOf(application).comments}</p>
+                  </div>
+                )}
+                <SelfAuditForm
+                  audit={selfAuditOf(application)}
+                  mode={application.evalState.stageId === 'qp-corrections' ? 'qp' : 'read'}
+                  onChange={(selfAudit) => saveSelfAudit.mutate({ applicationId: application.id, selfAudit })}
+                  idPrefix="detail-rpl"
+                  showFeedback={!['ad-allocation', 'asd-evaluation'].includes(application.evalState.stageId)}
+                />
               </TabsContent>
 
               <TabsContent value="outcome" className="space-y-2">
