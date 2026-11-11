@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { listAccreditedAssessmentCentres } from '../../mock/api/accreditation';
+import { listAccreditedAssessmentCentres, listAssessmentCentresByName } from '../../mock/api/accreditation';
 import { acceptConfirmation, getRecord, listRecords, listUpcomingShares, returnConfirmationToQp, saveConfirmationDraft, submitConfirmation } from './api';
 import type { EisaConfirmationRecord } from './types';
 
@@ -50,6 +50,14 @@ export function useReturnConfirmation() {
 }
 
 // 29.21: the assessment centres accredited for one qualification.
+// The centres a record names, with their coordinates, for the read-only map.
+export function useCentresByName(names: string[]) {
+  return useQuery({
+    queryKey: ['eisa-confirmation', 'centres-by-name', names],
+    queryFn: () => listAssessmentCentresByName(names),
+  });
+}
+
 export function useAccreditedCentres(qualificationTitle: string | null) {
   return useQuery({
     queryKey: ['eisa-confirmation', 'accredited-centres', qualificationTitle ?? 'none'],

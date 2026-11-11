@@ -42,3 +42,8 @@ export async function listAccreditedAssessmentCentres(qualificationIdOrName: str
   if (!qualification) return [];
   return ASSESSMENT_CENTRES.filter((c) => qualification.accreditedSdpIds.includes(c.centreId));
 }
+
+// The centres a confirmation record names (records keep centre names), for the read-only map.
+export async function listAssessmentCentresByName(names: string[]): Promise<AssessmentCentre[]> {
+  return ASSESSMENT_CENTRES.filter((c) => names.includes(c.name));
+}

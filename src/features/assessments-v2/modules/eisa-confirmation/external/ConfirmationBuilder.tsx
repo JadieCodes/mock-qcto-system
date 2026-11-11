@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { CentreMap } from '../components/CentreMap';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { CONFIRMATION_DECLARATION_TEXT, defaultResultsSubmissionDate } from '../config';
 import { useAccreditedCentres, useSaveConfirmationDraft, useSubmitConfirmation } from '../hooks';
@@ -54,6 +56,7 @@ export function ConfirmationBuilder({ record }: { record: EisaConfirmationRecord
   const [declared, setDeclared] = useState(false);
   const [bulkSdp, setBulkSdp] = useState('');
   const [bulkCentre, setBulkCentre] = useState('');
+  const [centreView, setCentreView] = useState<'list' | 'map'>('list');
 
   const sdpNames = useMemo(() => [...new Set(record.learners.map((l) => l.sdpName))], [record.learners]);
   const unallocated = record.learners.filter((l) => !allocation[l.learnerId]).length;
@@ -100,8 +103,28 @@ export function ConfirmationBuilder({ record }: { record: EisaConfirmationRecord
 
       <div className="space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessment Centres Accredited for this Qualification</p>
+        {accredited.length > 0 && (
+          <ToggleGroup type="single" variant="outline" size="sm" value={centreView} onValueChange={(v) => v && setCentreView(v as 'list' | 'map')} aria-label="Centre view" className="justify-start">
+            <ToggleGroupItem value="list">List</ToggleGroupItem>
+            <ToggleGroupItem value="map">Map</ToggleGroupItem>
+          </ToggleGroup>
+        )}
         {accredited.length === 0 ? (
           <p className="text-sm text-gray-500">No assessment centres are accredited for this qualification.</p>
+        ) : centreView === 'map' ? (
+          <div className="space-y-2">
+            <CentreMap
+              centres={accredited}
+              selectedIds={accredited.filter((c) => centres.includes(c.name)).map((c) => c.centreId)}
+              onToggle={(id) => {
+                const c = accredited.find((x) => x.centreId === id);
+                if (c) toggleCentre(c.name, !centres.includes(c.name));
+              }}
+            />
+            <p className="text-sm text-gray-600">
+              {accredited.filter((c) => centres.includes(c.name)).length} of {accredited.length} centres selected
+            </p>
+          </div>
         ) : (
           accredited.map((c) => (
             <div key={c.centreId} className="flex items-center gap-3 rounded-xl border px-3 py-2">
