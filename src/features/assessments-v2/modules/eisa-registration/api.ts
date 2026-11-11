@@ -4,6 +4,8 @@ import { performAction } from '../../shared/workflow/engine';
 import { verifyLearnerIdentity } from '../../mock/integrations/homeAffairs';
 import { validateSorAgainstModules } from '../../mock/integrations/qualificationsModules';
 import { getSdpComplianceStatus, getSdpLastMonitoringDate, listEnrolledLearners } from '../../mock/api/qaDomain';
+import { findQualification, listAccreditedAssessmentCentres } from '../../mock/api/accreditation';
+import { sdpDirectoryEntryByName } from '../../mock/data/sdpDirectory';
 import { createMonitoringItem } from '../../mock/api/siteVisitsStore';
 import { readStore, writeStore } from '../../mock/api/storage';
 import type { Role } from '../../types';
@@ -12,18 +14,57 @@ import { listBatches as listResultsBatches } from '../approval-of-results/api';
 import { listPublishedSittings, listSittings } from '../eisa-calendar/api';
 import { closingDateOf, isClosedFor } from '../eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../eisa-calendar/types';
+import { listApprovedQsaAddenda } from '../qsa-addendum/api';
 import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from './config';
 import { monitoringBlockReason, sdpMonitoringStatusOf, type SdpMonitoringStatus } from './monitoring';
+import { buildFile4Csv, file4FileName, parseFile4, type File4ParseContext, type File4ParseResult } from './file4';
+import { checkReadiness, isRplArplType, readinessDataOf, readinessFromLegacy, type ReadinessData, type ReadinessInput } from './readiness';
 import { learnerCountText } from './summary';
 import { REGISTRATION_WORKFLOW } from './workflow';
-import type { EisaRegistrationRecord, NewRegistrationInput, SorFile, SorStatus, SupportingDocument } from './types';
+import type { EisaRegistrationRecord, NewRegistrationInput, RegistrationLearner, SorFile, SorStatus, SupportingDocument } from './types';
 
 export const KEY = 'eisaRegistration:records';
+
+// A learner as stored before Batch R2: the RPL/ARPL tick box instead of the readiness fields.
+type StoredLearner = Omit<RegistrationLearner, keyof ReadinessData> & Partial<ReadinessData> & { rplArpl?: boolean };
+type StoredDeclined = StoredLearner & Pick<EisaRegistrationRecord['declinedLearners'][number], 'declinedReason' | 'declinedAt' | 'declinedBy' | 'declinedById'>;
+type StoredRecord = Omit<EisaRegistrationRecord, 'learners' | 'declinedLearners' | 'returns' | 'file4'> & {
+  learners: StoredLearner[];
+  declinedLearners?: StoredDeclined[];
+  returns?: EisaRegistrationRecord['returns'];
+  file4?: EisaRegistrationRecord['file4'];
+};
+
+// Batch R2 (29.15): the old tick box becomes a readiness type (ticked 2, not ticked 4, SOR status
+// from whether an SOR was uploaded). A learner that already has a readiness type is left alone, so
+// loading again changes nothing.
+function mapLearner(l: StoredLearner): RegistrationLearner {
+  const { rplArpl, ...rest } = l;
+  if (l.readinessType !== undefined) {
+    return {
+      ...rest,
+      readinessType: l.readinessType,
+      statementStatus: l.statementStatus ?? '02',
+      statementIssueDate: l.statementIssueDate ?? null,
+      assessmentCentre: l.assessmentCentre ?? null,
+      flc: l.flc ?? null,
+      flcStatementNumber: l.flcStatementNumber ?? null,
+      dateStamp: l.dateStamp ?? null,
+    };
+  }
+  return { ...rest, ...readinessFromLegacy(rplArpl ?? false, l.sor), assessmentCentre: null, flc: null, flcStatementNumber: null, dateStamp: null };
+}
 
 // Batch R1: a record stored before declined learners and returns existed reads as having none
 // (idempotent, nothing is written back).
 function loadAll(): EisaRegistrationRecord[] {
-  return readStore<EisaRegistrationRecord[]>(KEY, []).map((r) => ({ ...r, declinedLearners: r.declinedLearners ?? [], returns: r.returns ?? [] }));
+  return readStore<StoredRecord[]>(KEY, []).map((r) => ({
+    ...r,
+    learners: r.learners.map(mapLearner),
+    declinedLearners: (r.declinedLearners ?? []).map((d) => ({ ...d, ...mapLearner(d) })),
+    returns: r.returns ?? [],
+    file4: r.file4 ?? null,
+  }));
 }
 
 function saveAll(records: EisaRegistrationRecord[]): void {
@@ -140,6 +181,7 @@ export async function startRegistration(input: NewRegistrationInput): Promise<Ei
     declinedLearners: [],
     returns: [],
     supportingDocuments: [],
+    file4: null,
     registrationNumber: null,
     nonTradesHandoff: null,
     rplMonitoringItemId: null,
@@ -172,7 +214,32 @@ export async function withdrawRegistration(registrationId: string, actorId: stri
 
 // CR-036/CR-039: adds one enrolled learner to the draft registration, with the CR-040 duplicate
 // block and a call into the (backend-dependent, no-screen) Home Affairs ID check stub.
-export async function addLearner(registrationId: string, learnerId: string): Promise<EisaRegistrationRecord> {
+export function blockedLearnerMessage(learnerName: string, block: LearnerBlock): string {
+  const until =
+    block.reason === 'open'
+      ? 'until that registration is complete and the results for that sitting are approved or declined'
+      : 'until the results for that sitting are approved or declined';
+  return `${learnerName} already has an active EISA registration (${block.registration.qualificationTitle}, sitting ${block.registration.sittingDate}) — cannot register for another at the same time ${until}.`;
+}
+
+// Batch R2: what the readiness check needs, shared by adding a learner by hand and File 4.
+async function readinessContextOf(record: EisaRegistrationRecord) {
+  const centres = (await listAccreditedAssessmentCentres(record.qualificationTitle)).map((c) => ({ code: c.centreId, name: c.name }));
+  const qasa = (await listApprovedQsaAddenda()).find((a) => a.qualificationTitle === record.qualificationTitle);
+  return {
+    centres,
+    context: {
+      eisaDate: record.sittingDate,
+      today: toIsoDate(new Date()),
+      accreditedCentreCodes: centres.map((c) => c.code),
+      flcRequired: qasa?.flcRequired === true,
+    },
+  };
+}
+
+// Batch R2 (29.17): the SDP adds a learner by hand from the enrolled list, choosing the readiness
+// type, SOR status, SOR date and FLC (the same rules as File 4, on the same fields).
+export async function addLearner(registrationId: string, learnerId: string, readiness: ReadinessInput): Promise<EisaRegistrationRecord> {
   const all = loadAll();
   const record = getOrThrow(all, registrationId);
   if (record.workflow.stageId !== 'sdp-submission') {
@@ -191,15 +258,13 @@ export async function addLearner(registrationId: string, learnerId: string): Pro
   }
 
   const concurrent = await findConcurrentRegistration(learnerId, record.id);
-  if (concurrent) {
-    const until =
-      concurrent.reason === 'open'
-        ? 'until that registration is complete and the results for that sitting are approved or declined'
-        : 'until the results for that sitting are approved or declined';
-    throw new Error(
-      `${learner.fullName} already has an active EISA registration (${concurrent.registration.qualificationTitle}, sitting ${concurrent.registration.sittingDate}) — cannot register for another at the same time ${until}.`,
-    );
-  }
+  if (concurrent) throw new Error(blockedLearnerMessage(learner.fullName, concurrent));
+
+  const { centres, context } = await readinessContextOf(record);
+  const check = checkReadiness(readiness, context);
+  if (check.errors.length > 0) throw new Error(check.errors.join(' '));
+  const data = readinessDataOf(readiness, centres);
+  if (!data) throw new Error('The readiness details are not valid.');
 
   // CR-039: backend-dependent, no screen — call the stub and move on regardless of the result.
   await verifyLearnerIdentity(learner.idNumber);
@@ -215,24 +280,10 @@ export async function addLearner(registrationId: string, learnerId: string): Pro
         sor: null,
         sorStatus: null,
         sorFlagReason: null,
-        rplArpl: false,
+        ...data,
         addedAt: new Date().toISOString(),
       },
     ],
-  };
-  saveAll(replace(all, updated));
-  return updated;
-}
-
-export async function setLearnerRplArpl(registrationId: string, learnerId: string, rplArpl: boolean): Promise<EisaRegistrationRecord> {
-  const all = loadAll();
-  const record = getOrThrow(all, registrationId);
-  if (record.workflow.stageId !== 'sdp-submission') {
-    throw new Error('The RPL/ARPL indicator can only be set while the registration is still being built.');
-  }
-  const updated: EisaRegistrationRecord = {
-    ...record,
-    learners: record.learners.map((l) => (l.learnerId === learnerId ? { ...l, rplArpl } : l)),
   };
   saveAll(replace(all, updated));
   return updated;
@@ -558,7 +609,7 @@ export async function performRegistrationAction(params: RegistrationActionParams
 
     // CR-042/CR-044: the ONLY automatic trigger into Site Visits & Monitoring. One monitoring
     // item per registration, covering every RPL/ARPL-flagged learner on it.
-    const rplLearners = updated.learners.filter((l) => l.rplArpl);
+    const rplLearners = updated.learners.filter((l) => isRplArplType(l.readinessType));
     if (rplLearners.length > 0 && !updated.rplMonitoringItemId) {
       const item = await createMonitoringItem({
         sourceRegistrationId: updated.id,
@@ -612,4 +663,95 @@ export async function listSittingIdsWithCompletedRegistrations(): Promise<string
 // complete) against a sitting, not only completed ones.
 export async function listSittingIdsWithRegistrations(): Promise<string[]> {
   return [...new Set(loadAll().map((r) => r.sittingId))];
+}
+
+// Batch R2 (29.15): File 4 download and upload. The checks run on the whole file and nothing is
+// saved unless every row is clean.
+async function file4ContextOf(record: EisaRegistrationRecord): Promise<{ parse: File4ParseContext; registrableIds: Set<string> }> {
+  const { centres, context } = await readinessContextOf(record);
+  const enrolled = (await listEnrolledLearners(record.sdpName)).map((l) => ({ learnerId: l.id, fullName: l.fullName, idNumber: l.idNumber }));
+  const blocked = new Map<string, string>();
+  for (const learner of enrolled) {
+    const block = await findConcurrentRegistration(learner.learnerId, record.id);
+    if (block) blocked.set(learner.learnerId, blockedLearnerMessage(learner.fullName, block));
+  }
+  const declinedLearnerIds = new Set(record.declinedLearners.map((l) => l.learnerId));
+  return {
+    parse: {
+      registration: {
+        sdpName: record.sdpName,
+        sdpCode: sdpDirectoryEntryByName(record.sdpName)?.accreditationNumber ?? '',
+        qualificationId: findQualification(record.qualificationTitle)?.qualificationId ?? '',
+        eisaDate: record.sittingDate,
+      },
+      enrolled,
+      blocked,
+      declinedLearnerIds,
+      centres,
+      today: context.today,
+      flcRequired: context.flcRequired,
+    },
+    registrableIds: new Set(enrolled.filter((l) => !blocked.has(l.learnerId) && !declinedLearnerIds.has(l.learnerId)).map((l) => l.learnerId)),
+  };
+}
+
+// One row per learner enrolled with this SDP who can still be registered.
+export async function downloadFile4(registrationId: string): Promise<{ fileName: string; content: string; learnerCount: number }> {
+  const record = getOrThrow(loadAll(), registrationId);
+  const { parse, registrableIds } = await file4ContextOf(record);
+  const learners = parse.enrolled.filter((l) => registrableIds.has(l.learnerId));
+  return { fileName: file4FileName(record.sdpName, parse.today), content: buildFile4Csv(parse.registration, learners), learnerCount: learners.length };
+}
+
+export async function previewFile4Upload(registrationId: string, text: string): Promise<File4ParseResult> {
+  const record = getOrThrow(loadAll(), registrationId);
+  if (record.workflow.stageId !== 'sdp-submission') throw new Error('File 4 can only be uploaded while the registration is still being built.');
+  return parseFile4(text, (await file4ContextOf(record)).parse);
+}
+
+export async function applyFile4Upload(
+  registrationId: string,
+  fileName: string,
+  text: string,
+  actorId: string,
+  actorName: string,
+): Promise<EisaRegistrationRecord> {
+  const all = loadAll();
+  const record = getOrThrow(all, registrationId);
+  if (record.workflow.stageId !== 'sdp-submission') throw new Error('File 4 can only be uploaded while the registration is still being built.');
+  const { parse } = await file4ContextOf(record);
+  const result = parseFile4(text, parse);
+  if (!result.ok) throw new Error(`Nothing was changed. ${result.error}`);
+  if (!result.updates) throw new Error('Nothing was changed. Fix the rows marked in the preview and upload the file again.');
+
+  const now = new Date().toISOString();
+  let added = 0;
+  let learners = record.learners;
+  for (const update of result.updates) {
+    if (learners.some((l) => l.learnerId === update.learnerId)) {
+      learners = learners.map((l) => (l.learnerId === update.learnerId ? { ...l, ...update.data } : l));
+      continue;
+    }
+    const enrolled = parse.enrolled.find((l) => l.learnerId === update.learnerId);
+    if (!enrolled) continue;
+    // CR-039: backend-dependent, no screen — called and ignored, as when a learner is added by hand.
+    await verifyLearnerIdentity(enrolled.idNumber);
+    added++;
+    learners = [
+      ...learners,
+      { learnerId: enrolled.learnerId, fullName: enrolled.fullName, idNumber: enrolled.idNumber, sor: null, sorStatus: null, sorFlagReason: null, ...update.data, addedAt: now },
+    ];
+  }
+  const updated: EisaRegistrationRecord = { ...record, learners, file4: { fileName, uploadedAt: now } };
+  saveAll(replace(all, updated));
+
+  appendAuditEntry({
+    recordType: 'eisa-registration',
+    recordId: record.id,
+    actorRole: 'SDP',
+    actorId,
+    actorName,
+    action: `Uploaded File 4 "${fileName}": ${added} learner(s) added, ${result.updates.length - added} updated`,
+  });
+  return updated;
 }

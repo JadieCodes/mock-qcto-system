@@ -3,7 +3,9 @@ import { toast } from 'sonner';
 import {
   acceptLearnerSor,
   addLearner,
+  applyFile4Upload,
   declineLearner,
+  downloadFile4,
   flagLearnerSor,
   getRecord,
   getSdpMonitoringStatus,
@@ -12,12 +14,13 @@ import {
   listRegistrableSittings,
   markLearnerSorUnderReview,
   performRegistrationAction,
-  setLearnerRplArpl,
+  previewFile4Upload,
   startRegistration,
   uploadLearnerSor,
   uploadSupportingDocument,
   withdrawRegistration,
 } from './api';
+import type { ReadinessInput } from './readiness';
 import type { EisaRegistrationRecord, NewRegistrationInput } from './types';
 
 const LIST_KEY = ['eisa-registration', 'records'] as const;
@@ -70,12 +73,30 @@ export function useStartRegistration() {
 }
 
 export function useAddLearner() {
-  return useRegistrationMutation((args: { registrationId: string; learnerId: string }) => addLearner(args.registrationId, args.learnerId));
+  return useRegistrationMutation((args: { registrationId: string; learnerId: string; readiness: ReadinessInput }) =>
+    addLearner(args.registrationId, args.learnerId, args.readiness),
+  );
 }
 
-export function useSetLearnerRplArpl() {
-  return useRegistrationMutation((args: { registrationId: string; learnerId: string; rplArpl: boolean }) =>
-    setLearnerRplArpl(args.registrationId, args.learnerId, args.rplArpl),
+// Batch R2: File 4 (QCTO 29.15). The preview and the download change nothing.
+export function useDownloadFile4() {
+  return useMutation({
+    mutationFn: (registrationId: string) => downloadFile4(registrationId),
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
+}
+
+export function usePreviewFile4() {
+  return useMutation({
+    mutationFn: (args: { registrationId: string; text: string }) => previewFile4Upload(args.registrationId, args.text),
+    onError: (error: Error) => toast.error(error.message || 'Something went wrong.'),
+  });
+}
+
+export function useApplyFile4() {
+  return useRegistrationMutation(
+    (args: { registrationId: string; fileName: string; text: string; actorId: string; actorName: string }) =>
+      applyFile4Upload(args.registrationId, args.fileName, args.text, args.actorId, args.actorName),
   );
 }
 

@@ -1,4 +1,5 @@
 import type { WorkflowRecordState } from '../../shared/workflow/types';
+import type { FlcCode, ReadinessTypeId, StatementStatus } from './readiness';
 
 // CR-035, CR-019: registration is its own section, separate from EISA Instrument Validation.
 export type RegistrationCategory = 'trades' | 'non-trades';
@@ -27,8 +28,17 @@ export interface RegistrationLearner {
   sor: SorFile | null;
   sorStatus: SorStatus | null;
   sorFlagReason: string | null;
-  // CR-042: drives the automatic Site Visits monitoring-item trigger.
-  rplArpl: boolean;
+  // Batch R2 (29.15): RPL/ARPL or formal comes from the readiness type (see readiness.ts
+  // isRplArplType); it drives the counts and the CR-042 automatic Site Visits monitoring-item trigger.
+  readinessType: ReadinessTypeId;
+  // File 4 "readiness for EISA" columns. Dates are YYYY-MM-DD.
+  statementStatus: StatementStatus;
+  statementIssueDate: string | null;
+  // The accredited assessment centre's name (File 4 holds its code).
+  assessmentCentre: string | null;
+  flc: FlcCode | null;
+  flcStatementNumber: string | null;
+  dateStamp: string | null;
   addedAt: string;
 }
 
@@ -57,6 +67,12 @@ export interface NonTradesHandoff {
   sdpListSharedAt: string;
 }
 
+// Batch R2: the File 4 the registration was built from (the last clean upload).
+export interface File4Upload {
+  fileName: string;
+  uploadedAt: string;
+}
+
 export interface EisaRegistrationRecord {
   id: string;
   sittingId: string;
@@ -81,6 +97,8 @@ export interface EisaRegistrationRecord {
   // registration is back in their building stage.
   returns: ReturnToSdpEntry[];
   supportingDocuments: SupportingDocument[];
+  // Batch R2: null when no File 4 was uploaded.
+  file4: File4Upload | null;
   registrationNumber: string | null;
   nonTradesHandoff: NonTradesHandoff | null;
   // CR-042/CR-044: set once the automatic monitoring item has been created, so it only ever

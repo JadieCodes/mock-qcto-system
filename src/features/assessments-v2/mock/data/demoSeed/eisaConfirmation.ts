@@ -22,6 +22,7 @@ import { CONFIRMATION_REVIEWER_ROLE, defaultResultsSubmissionDate } from '../../
 import { isListShareable, shareDateFor, sharedAtFor } from '../../../modules/eisa-confirmation/sharing';
 import { CONFIRMATION_WORKFLOW } from '../../../modules/eisa-confirmation/workflow';
 import type { ConsolidatedLearnerRow, EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
+import { isRplArplType } from '../../../modules/eisa-registration/readiness';
 import type { EisaRegistrationRecord } from '../../../modules/eisa-registration/types';
 import { audit, createClock, dateOf, notify, seedId, seedPerson, step, todayIso, type SeedLog } from './helpers';
 import { sittingAt } from './eisaRegistration';
@@ -101,7 +102,7 @@ export function seedEisaConfirmations(log: SeedLog, sittings: EisaSitting[], reg
         fullName: l.fullName,
         idNumber: l.idNumber,
         sdpName: r.sdpName,
-        pathway: l.rplArpl ? ('RPL/ARPL' as const) : ('Formal' as const),
+        pathway: isRplArplType(l.readinessType) ? ('RPL/ARPL' as const) : ('Formal' as const),
         registrationNumber: r.registrationNumber ?? '',
         assessmentCentre: null,
       })),

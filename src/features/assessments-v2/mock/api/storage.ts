@@ -70,7 +70,9 @@ export function writeStore<T>(key: string, value: T): void {
 // overdue list (4 to 6 items), and no Reject/Decline where QCTO's process maps return for rework.
 // 'A24' = Batch V2: Site Visits notices, stakeholder responses, reminders and moved visits (five visits added), and
 // the Post-EISA questionnaires read the real results batch instead of a manual switch.
-export const SEED_VERSION = 'A24';
+// 'A25' = Batch R2: File 4 (QCTO 29.15) — RPL or formal comes from the readiness type, one submitted registration
+// was built from a File 4 upload and shows its file name, the building registration has no file yet.
+export const SEED_VERSION = 'A25';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

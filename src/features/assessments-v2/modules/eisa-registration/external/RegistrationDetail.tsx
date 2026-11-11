@@ -14,9 +14,10 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { AddLearnerDialog } from './AddLearnerDialog';
+import { File4Panel } from './File4Panel';
 import { MonitoringStatusLine } from '../components/MonitoringStatusLine';
 import { RegistrationStatusBadge } from '../components/StatusBadge';
 import { SorStatusBadge } from '../components/SorStatusBadge';
@@ -26,11 +27,11 @@ import {
   useRegistrationAction,
   useRegistrationRecord,
   useSdpMonitoringStatus,
-  useSetLearnerRplArpl,
   useUploadLearnerSor,
   useUploadSupportingDocument,
   useWithdrawRegistration,
 } from '../hooks';
+import { isRplArplType, readinessTypeText } from '../readiness';
 import { learnerCountText } from '../summary';
 import type { EisaRegistrationRecord } from '../types';
 
@@ -90,6 +91,7 @@ function AddLearnerPanel({ record }: { record: EisaRegistrationRecord }) {
   const { data: enrollable = [] } = useEnrollableLearners(record.sdpName);
   const addLearner = useAddLearner();
   const [error, setError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState<{ id: string; fullName: string } | null>(null);
 
   const addedIds = new Set([...record.learners, ...record.declinedLearners].map((l) => l.learnerId));
   const available = enrollable.filter((l) => !addedIds.has(l.id));
@@ -121,10 +123,7 @@ function AddLearnerPanel({ record }: { record: EisaRegistrationRecord }) {
                 disabled={addLearner.isPending}
                 onClick={() => {
                   setError(null);
-                  addLearner.mutate(
-                    { registrationId: record.id, learnerId: l.id },
-                    { onError: (e: Error) => setError(e.message) },
-                  );
+                  setChoosing({ id: l.id, fullName: l.fullName });
                 }}
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -133,6 +132,26 @@ function AddLearnerPanel({ record }: { record: EisaRegistrationRecord }) {
             </div>
           ))}
         </div>
+      )}
+      {choosing && (
+        <AddLearnerDialog
+          learnerName={choosing.fullName}
+          qualificationTitle={record.qualificationTitle}
+          pending={addLearner.isPending}
+          onCancel={() => setChoosing(null)}
+          onSubmit={(readiness) =>
+            addLearner.mutate(
+              { registrationId: record.id, learnerId: choosing.id, readiness },
+              {
+                onSuccess: () => setChoosing(null),
+                onError: (e: Error) => {
+                  setChoosing(null);
+                  setError(e.message);
+                },
+              },
+            )
+          }
+        />
       )}
     </div>
   );
@@ -143,7 +162,6 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
   const { role, person } = useV2Role();
   const actorId = person.id;
   const actorName = person.name;
-  const setRplArpl = useSetLearnerRplArpl();
   const uploadSupportingDocument = useUploadSupportingDocument();
   const registrationAction = useRegistrationAction();
   const withdrawRegistration = useWithdrawRegistration();
@@ -234,7 +252,7 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {['Learner', 'SOR', 'SOR Status', 'RPL/ARPL'].map((h) => (
+                        {['Learner', 'Readiness for EISA', 'SOR', 'SOR Status'].map((h) => (
                           <TableHead key={h} className="whitespace-nowrap">
                             {h}
                           </TableHead>
@@ -248,19 +266,16 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
                             <p className="font-medium">{l.fullName}</p>
                             <p className="text-xs text-gray-400">{l.idNumber}</p>
                           </TableCell>
+                          <TableCell className="text-xs max-w-[220px]">
+                            <p>{readinessTypeText(l.readinessType)}</p>
+                            <p className="font-medium">{isRplArplType(l.readinessType) ? 'RPL/ARPL' : 'Formal'}</p>
+                          </TableCell>
                           <TableCell>
                             <LearnerSorCell record={record} learnerId={l.learnerId} canAct={canAct} actorId={actorId} actorName={actorName} />
                           </TableCell>
                           <TableCell>
                             <SorStatusBadge status={l.sorStatus} />
                             {l.sorStatus === 'flagged' && <p className="mt-1 text-xs text-red-600 max-w-[180px]">{l.sorFlagReason}</p>}
-                          </TableCell>
-                          <TableCell>
-                            <Switch
-                              checked={l.rplArpl}
-                              disabled={!canAct || !isBuilding}
-                              onCheckedChange={(checked) => setRplArpl.mutate({ registrationId: record.id, learnerId: l.learnerId, rplArpl: checked })}
-                            />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -288,6 +303,8 @@ export function RegistrationDetail({ recordId, onClose }: { recordId: string | n
               </div>
             </div>
           )}
+
+          {canAct && isBuilding && <File4Panel record={record} actorId={actorId} actorName={actorName} />}
 
           {canAct && isBuilding && (
             <div className="space-y-2">

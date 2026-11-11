@@ -52,6 +52,8 @@ import { SDP_DIRECTORY } from '../sdpDirectory';
 import { closingDateOf, isClosedFor } from '../../../modules/eisa-calendar/registrationClosing';
 import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import { REGISTRATION_NUMBER_PREFIX, REGISTRATION_PROCESSOR_ROLE } from '../../../modules/eisa-registration/config';
+import { file4FileName } from '../../../modules/eisa-registration/file4';
+import { isRplArplType, readinessFromLegacy } from '../../../modules/eisa-registration/readiness';
 import { learnerCountText } from '../../../modules/eisa-registration/summary';
 import { REGISTRATION_WORKFLOW } from '../../../modules/eisa-registration/workflow';
 import type { EisaRegistrationRecord, RegistrationCategory, SorStatus } from '../../../modules/eisa-registration/types';
@@ -89,6 +91,8 @@ interface RegistrationSeedBuilder {
   // (Batch R1), so addLearner() lets them join this one.
   addLearners: (learnerIds: string[], atDaysAgo: number, again?: boolean) => RegistrationSeedBuilder;
   rplArpl: (learnerIds: string[]) => RegistrationSeedBuilder;
+  // Batch R2: the registration was built from a File 4 upload (every learner gets its readiness columns).
+  file4: (atDaysAgo: number) => RegistrationSeedBuilder;
   uploadSors: (learnerIds: string[] | 'all', atDaysAgo: number) => RegistrationSeedBuilder;
   supportingDocument: (fileName: string, fileSize: number, atDaysAgo: number) => RegistrationSeedBuilder;
   submit: (atDaysAgo: number) => RegistrationSeedBuilder;
@@ -150,6 +154,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
       declinedLearners: [],
       returns: [],
       supportingDocuments: [],
+      file4: null,
       registrationNumber: null,
       nonTradesHandoff: null,
       rplMonitoringItemId: null,
@@ -193,17 +198,17 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
             ...record,
             learners: [
               ...record.learners,
-              { learnerId: learner.id, fullName: learner.fullName, idNumber: learner.idNumber, sor: null, sorStatus: null, sorFlagReason: null, rplArpl: false, addedAt },
+              { learnerId: learner.id, fullName: learner.fullName, idNumber: learner.idNumber, sor: null, sorStatus: null, sorFlagReason: null, ...readinessFromLegacy(false, null), assessmentCentre: null, flc: null, flcStatementNumber: null, dateStamp: null, addedAt },
             ],
           });
         }
         return api;
       },
-      // setLearnerRplArpl(): only while the registration is still being built (no audit entry).
+      // Batch R2: RPL/ARPL now comes from the readiness type; 2 is RPL for access determined by the SDP.
       rplArpl(learnerIds: string[]) {
         if (record.workflow.stageId !== 'sdp-submission') throw new Error('Demo seed: the RPL/ARPL indicator can only be set while the registration is being built.');
         for (const learnerId of learnerIds) learnerOf(learnerId);
-        set({ ...record, learners: record.learners.map((l) => (learnerIds.includes(l.learnerId) ? { ...l, rplArpl: true } : l)) });
+        set({ ...record, learners: record.learners.map((l) => (learnerIds.includes(l.learnerId) ? { ...l, readinessType: 2 as const } : l)) });
         return api;
       },
       uploadSors(learnerIds: string[] | 'all', atDaysAgo: number) {
@@ -216,10 +221,39 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
           set({
             ...record,
             learners: record.learners.map((l) =>
-              l.learnerId === learnerId ? { ...l, sor: { fileName: sorFileName(l.fullName), fileSize, uploadedAt }, sorStatus: l.sor ? 'replaced' : 'uploaded', sorFlagReason: null } : l,
+              l.learnerId === learnerId
+                ? {
+                    ...l,
+                    sor: { fileName: sorFileName(l.fullName), fileSize, uploadedAt },
+                    sorStatus: l.sor ? 'replaced' : 'uploaded',
+                    sorFlagReason: null,
+                    // as the migration of the old tick box: an SOR uploaded means the statement is issued
+                    ...(l.statementStatus === '02' ? { statementStatus: '01' as const, statementIssueDate: dateOf(uploadedAt) } : {}),
+                  }
+                : l,
             ),
           });
         }
+        return api;
+      },
+      file4(atDaysAgo: number) {
+        if (record.workflow.stageId !== 'sdp-submission') throw new Error('Demo seed: File 4 can only be uploaded while the registration is being built.');
+        const uploadedAt = clock.at(atDaysAgo, 10);
+        const issued = dateOf(clock.at(atDaysAgo + 20, 10));
+        set({
+          ...record,
+          file4: { fileName: file4FileName(record.sdpName, dateOf(uploadedAt)), uploadedAt },
+          learners: record.learners.map((l) => ({
+            ...l,
+            readinessType: 4 as const,
+            statementStatus: '01' as const,
+            statementIssueDate: issued,
+            assessmentCentre: record.sdpName,
+            flc: '01' as const,
+            flcStatementNumber: `FLC${l.idNumber.slice(0, 6)}`,
+            dateStamp: dateOf(uploadedAt),
+          })),
+        });
         return api;
       },
       supportingDocument(fileName: string, fileSize: number, atDaysAgo: number) {
@@ -288,7 +322,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
         }
         // CR-042/CR-044: the only automatic trigger into Site Visits & Monitoring — one
         // monitoring item per registration, covering every RPL/ARPL-flagged learner on it.
-        const rplLearners = record.learners.filter((l) => l.rplArpl);
+        const rplLearners = record.learners.filter((l) => isRplArplType(l.readinessType));
         if (rplLearners.length > 0 && !record.rplMonitoringItemId) {
           const item: RplArplMonitoringItem = {
             id: seedId(RPL_MONITORING_ITEM_ID_GROUP, monitoringItems.length + 1),
@@ -419,6 +453,7 @@ export function seedEisaRegistrations(log: SeedLog, sittings: EisaSitting[]): Re
   // G7 — Lerato, Plumbing at today + 150: just submitted, nothing reviewed yet.
   start(LERATO, sittingAt(sittings, 'Plumbing', 150), 'trades', 14)
     .addLearners(['learner-054', 'learner-055', 'learner-056'], 14)
+    .file4(14)
     .uploadSors('all', 13)
     .supportingDocument('Assessment_Centre_Readiness_Declaration.pdf', 398_336, 13)
     .submit(8);

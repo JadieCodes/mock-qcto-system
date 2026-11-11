@@ -21,6 +21,7 @@ import {
   useSdpMonitoringStatus,
 } from '../hooks';
 import { monitoringBlockReason } from '../monitoring';
+import { flcText, isRplArplType, readinessTypeText, statementStatusText } from '../readiness';
 import { learnerCountText } from '../summary';
 import type { EisaRegistrationRecord } from '../types';
 
@@ -75,6 +76,12 @@ function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationReco
           <p className="font-medium">{learnerCountText(record)}</p>
         </div>
         <div>
+          <p className="text-xs text-gray-400 uppercase">File 4</p>
+          <p className="font-medium">
+            {record.file4 ? `${record.file4.fileName} (uploaded ${record.file4.uploadedAt.slice(0, 10)})` : 'No File 4 uploaded'}
+          </p>
+        </div>
+        <div>
           <p className="text-xs text-gray-400 uppercase">SDP QA monitoring</p>
           <MonitoringStatusLine sdpName={record.sdpName} />
         </div>
@@ -98,7 +105,7 @@ function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationReco
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Learner', 'SOR', 'RPL/ARPL', 'SOR Status', ''].map((h) => (
+                  {['Learner', 'Readiness for EISA', 'Statement of Results', 'Assessment centre', 'FLC', 'SOR', 'SOR Status', ''].map((h) => (
                     <TableHead key={h} className="whitespace-nowrap">
                       {h}
                     </TableHead>
@@ -112,6 +119,16 @@ function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationReco
                       <p className="font-medium">{l.fullName}</p>
                       <p className="text-xs text-gray-400">{l.idNumber}</p>
                     </TableCell>
+                    <TableCell className="text-xs max-w-[200px]">
+                      <p>{readinessTypeText(l.readinessType)}</p>
+                      <p className="font-medium">{isRplArplType(l.readinessType) ? 'RPL/ARPL' : 'Formal'}</p>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <p>{statementStatusText(l.statementStatus)}</p>
+                      <p className="text-gray-500">{l.statementIssueDate ?? 'No date'}</p>
+                    </TableCell>
+                    <TableCell className="text-xs">{l.assessmentCentre ?? 'None'}</TableCell>
+                    <TableCell className="text-xs max-w-[180px]">{flcText(l.flc)}</TableCell>
                     <TableCell>
                       {l.sor ? (
                         <p className="text-xs font-mono bg-gray-50 rounded px-2 py-1 inline-block">
@@ -121,7 +138,6 @@ function RegistrationWorkspaceContent({ record }: { record: EisaRegistrationReco
                         <p className="text-xs text-gray-400">No SOR</p>
                       )}
                     </TableCell>
-                    <TableCell>{l.rplArpl ? 'Yes' : 'No'}</TableCell>
                     <TableCell>
                       <SorStatusBadge status={l.sorStatus} />
                       {l.sorStatus === 'flagged' && <p className="mt-1 text-xs text-red-600 max-w-[200px]">{l.sorFlagReason}</p>}

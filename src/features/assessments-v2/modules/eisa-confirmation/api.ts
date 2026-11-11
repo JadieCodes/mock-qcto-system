@@ -7,6 +7,7 @@ import { listAccreditedAssessmentCentres } from '../../mock/api/accreditation';
 import { readStore, writeStore } from '../../mock/api/storage';
 import { listSittings } from '../eisa-calendar/api';
 import { listRegisteredRegistrationsForSitting } from '../eisa-registration/api';
+import { isRplArplType } from '../eisa-registration/readiness';
 import { CONFIRMATION_REVIEWER_ROLE } from './config';
 import { isListShareable, shareDateFor, sharedAtFor } from './sharing';
 import { CONFIRMATION_WORKFLOW } from './workflow';
@@ -136,7 +137,7 @@ async function shareDueLists(): Promise<void> {
         fullName: l.fullName,
         idNumber: l.idNumber,
         sdpName: r.sdpName,
-        pathway: l.rplArpl ? ('RPL/ARPL' as const) : ('Formal' as const),
+        pathway: isRplArplType(l.readinessType) ? ('RPL/ARPL' as const) : ('Formal' as const),
         registrationNumber: r.registrationNumber ?? '',
         assessmentCentre: null,
       })),
