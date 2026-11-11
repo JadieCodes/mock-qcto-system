@@ -11,9 +11,10 @@
 //                            one awaiting sitting has a saved capture draft, one is empty (Batch L2)
 //   fisaResults.ts           4 FISA results batches: awaiting submission, with the ASD, with the DD,
 //                            approved with the letter sent (QCTO feedback 3.14)
-//   siteVisits.ts            25 site visits — every type, every planning and report stage (phase C3, Batch G);
+//   siteVisits.ts            32 site visits — every type, every planning and report stage (phase C3, Batch G);
 //                            4 added in Batch V1: three qualifications, RPL with two, two remediation states;
-//                            5 added in Batch V2: notice waiting with a reminder, accepted, not available, moved, unannounced
+//                            5 added in Batch V2: notice waiting with a reminder, accepted, not available, moved, unannounced;
+//                            7 added in Batch Z2: next month's visit schedule (sub-units, officials, a multi-day visit)
 //   fisaValidation.ts        6 FISA Instrument Validations against the approved FISA Standard (phase C3;
 //                            the 6th, Approved with conditions, added with QCTO's report form in 3.10)
 //   rplToolkit.ts            11 RPL Toolkit submissions at every stage (phase C3)

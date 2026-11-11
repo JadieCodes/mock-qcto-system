@@ -10,7 +10,7 @@ export const XLSX_UNREADABLE_MESSAGE = 'Save the file as .xlsx or .csv and uploa
 
 export type XlsxResult = { ok: true; rows: string[][] } | { ok: false; error: string };
 
-const FAILED: XlsxResult = { ok: false, error: XLSX_UNREADABLE_MESSAGE };
+const FAILED = { ok: false, error: XLSX_UNREADABLE_MESSAGE } as const;
 const RELATIONSHIPS_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
@@ -124,7 +124,61 @@ function targetPath(target: string): string {
   return target.startsWith('/') ? target.slice(1) : `xl/${target}`;
 }
 
+function readSheetRows(sheet: Element, shared: string[], options: { dateHeading?: string }): string[][] {
+  const grid: { text: string; numeric: boolean }[][] = [];
+  for (const row of descendants(sheet, 'row')) {
+    const cells: { text: string; numeric: boolean }[] = [];
+    let next = 0;
+    for (const cell of childrenNamed(row, 'c')) {
+      const ref = cell.getAttribute('r');
+      const index = ref ? columnIndex(ref) : next;
+      next = index + 1;
+      const type = cell.getAttribute('t');
+      const value = childrenNamed(cell, 'v')[0]?.textContent ?? '';
+      let text = '';
+      let numeric = false;
+      if (type === 's') text = shared[Number(value)] ?? '';
+      else if (type === 'inlineStr') text = childrenNamed(cell, 'is').map(stringItemText).join('');
+      else if (type === 'str') text = value;
+      else if (type === 'b') text = value === '1' ? 'TRUE' : 'FALSE';
+      else if (type === 'e') text = '';
+      else {
+        text = value;
+        numeric = value.trim() !== '' && Number.isFinite(Number(value));
+      }
+      while (cells.length < index) cells.push({ text: '', numeric: false });
+      cells[index] = { text, numeric };
+    }
+    grid.push(cells);
+  }
+
+  const headerIndex = grid.findIndex((cells) => cells.some((c) => c.text.trim() !== ''));
+  const dateColumn =
+    options.dateHeading && headerIndex >= 0
+      ? grid[headerIndex].findIndex((c) => normaliseHeading(c.text) === normaliseHeading(options.dateHeading ?? ''))
+      : -1;
+  const rows = grid.map((cells, rowIndex) =>
+    cells.map((cell, col) => {
+      if (rowIndex > headerIndex && col === dateColumn && cell.numeric) return excelSerialToIso(Number(cell.text)) ?? cell.text;
+      return cell.text;
+    }),
+  );
+  return rows;
+}
+
+export type XlsxSheetsResult = { ok: true; sheets: { name: string; rows: string[][] }[] } | { ok: false; error: string };
+
+// Batch Z2: every sheet with its name, in workbook order (readXlsx reads the first one only).
+export async function readXlsxSheets(data: ArrayBuffer | Uint8Array): Promise<XlsxSheetsResult> {
+  return readWorkbook(data, {}, true);
+}
+
 export async function readXlsx(data: ArrayBuffer | Uint8Array, options: { dateHeading?: string } = {}): Promise<XlsxResult> {
+  const result = await readWorkbook(data, options, false);
+  return result.ok ? { ok: true, rows: result.sheets[0]?.rows ?? [] } : result;
+}
+
+async function readWorkbook(data: ArrayBuffer | Uint8Array, options: { dateHeading?: string }, allSheets: boolean): Promise<XlsxSheetsResult> {
   try {
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
     if (OLD_EXCEL_SIGNATURE.every((b, i) => bytes[i] === b)) return FAILED;
@@ -138,59 +192,24 @@ export async function readXlsx(data: ArrayBuffer | Uint8Array, options: { dateHe
     const rels = parseXml(relsXml);
     if (!workbook || !rels) return FAILED;
 
-    const firstSheet = descendants(workbook, 'sheet')[0];
-    const relationshipId = firstSheet?.getAttributeNS(RELATIONSHIPS_NS, 'id') || firstSheet?.getAttribute('r:id');
-    const target = descendants(rels, 'Relationship').find((r) => r.getAttribute('Id') === relationshipId)?.getAttribute('Target');
-    if (!target) return FAILED;
-
     const sharedXml = await readEntryText(bytes, entries, 'xl/sharedStrings.xml');
     const sharedRoot = sharedXml ? parseXml(sharedXml) : null;
     if (sharedXml && !sharedRoot) return FAILED;
     const shared = sharedRoot ? descendants(sharedRoot, 'si').map(stringItemText) : [];
 
-    const sheetXml = await readEntryText(bytes, entries, targetPath(target));
-    const sheet = sheetXml ? parseXml(sheetXml) : null;
-    if (!sheet) return FAILED;
-
-    const grid: { text: string; numeric: boolean }[][] = [];
-    for (const row of descendants(sheet, 'row')) {
-      const cells: { text: string; numeric: boolean }[] = [];
-      let next = 0;
-      for (const cell of childrenNamed(row, 'c')) {
-        const ref = cell.getAttribute('r');
-        const index = ref ? columnIndex(ref) : next;
-        next = index + 1;
-        const type = cell.getAttribute('t');
-        const value = childrenNamed(cell, 'v')[0]?.textContent ?? '';
-        let text = '';
-        let numeric = false;
-        if (type === 's') text = shared[Number(value)] ?? '';
-        else if (type === 'inlineStr') text = childrenNamed(cell, 'is').map(stringItemText).join('');
-        else if (type === 'str') text = value;
-        else if (type === 'b') text = value === '1' ? 'TRUE' : 'FALSE';
-        else if (type === 'e') text = '';
-        else {
-          text = value;
-          numeric = value.trim() !== '' && Number.isFinite(Number(value));
-        }
-        while (cells.length < index) cells.push({ text: '', numeric: false });
-        cells[index] = { text, numeric };
-      }
-      grid.push(cells);
+    const sheetElements = descendants(workbook, 'sheet');
+    const sheets: { name: string; rows: string[][] }[] = [];
+    for (const sheetElement of allSheets ? sheetElements : sheetElements.slice(0, 1)) {
+      const relationshipId = sheetElement.getAttributeNS(RELATIONSHIPS_NS, 'id') || sheetElement.getAttribute('r:id');
+      const target = descendants(rels, 'Relationship').find((r) => r.getAttribute('Id') === relationshipId)?.getAttribute('Target');
+      if (!target) return FAILED;
+      const sheetXml = await readEntryText(bytes, entries, targetPath(target));
+      const sheet = sheetXml ? parseXml(sheetXml) : null;
+      if (!sheet) return FAILED;
+      sheets.push({ name: sheetElement.getAttribute('name') ?? '', rows: readSheetRows(sheet, shared, options) });
     }
-
-    const headerIndex = grid.findIndex((cells) => cells.some((c) => c.text.trim() !== ''));
-    const dateColumn =
-      options.dateHeading && headerIndex >= 0
-        ? grid[headerIndex].findIndex((c) => normaliseHeading(c.text) === normaliseHeading(options.dateHeading ?? ''))
-        : -1;
-    const rows = grid.map((cells, rowIndex) =>
-      cells.map((cell, col) => {
-        if (rowIndex > headerIndex && col === dateColumn && cell.numeric) return excelSerialToIso(Number(cell.text)) ?? cell.text;
-        return cell.text;
-      }),
-    );
-    return { ok: true, rows };
+    if (sheets.length === 0) return FAILED;
+    return { ok: true, sheets };
   } catch {
     return FAILED;
   }

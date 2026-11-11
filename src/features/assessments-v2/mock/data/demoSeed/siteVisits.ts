@@ -135,10 +135,11 @@ import { isMultiQualificationVisit, qualificationListIssues, saqaIdForQualificat
 import { DEFAULT_VISIT_DOMAIN } from '../../../modules/site-visits/visitDomains';
 import { isPerQualificationVisit, visitHasPurpose, visitHasQp, visitHasSdp, visitIsMeeting, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../../../modules/site-visits/workflow';
-import { isWorkingDay, subtractWorkingDays, toIsoDate } from '../../../shared/dates/workingDays';
+import { addWorkingDays, isWorkingDay, subtractWorkingDays, toIsoDate } from '../../../shared/dates/workingDays';
+import { defaultSubUnitFor, type SubUnit } from '../../../modules/site-visits/subUnits';
 import { RESULTS_SEED_IDS } from './approvalOfResults';
 import { sittingAt } from './eisaRegistration';
-import { answerChecklist, audit, createClock, dateOf, notify, seedId, seedPerson, step, todayIso, workingDateFromToday, type SeedClock, type SeedLog } from './helpers';
+import { answerChecklist, audit, createClock, dateOf, nextWorkingDay, notify, seedId, seedPerson, step, todayIso, workingDateFromToday, type SeedClock, type SeedLog } from './helpers';
 
 const VISIT_ID_GROUP = 8;
 
@@ -236,6 +237,12 @@ interface PlanInput {
   // Batch V1 (05.13): an RPL/ARPL visit planned by an official, at an SDP, for these qualifications.
   rplSdpId?: string;
   rplQualifications?: string[];
+  // Post-EISA Monitoring planned by an official (Batch Z2): held at this SDP, for this qualification, with no sitting link.
+  postEisaSdpId?: string;
+  qualificationTitle?: string;
+  // Batch Z2 (11.9): when given, the visit stores its sub-unit, officials (the planner first) and last day.
+  // Visits seeded before Batch Z2 leave it out and stay exactly as they were.
+  schedule?: { subUnit?: SubUnit; officialIds?: string[]; endDate?: string };
   visitDate?: string;
   venue: string;
   notificationFlag?: NotificationFlag;
@@ -669,14 +676,18 @@ export function seedSiteVisits(
     const perQualification = isPerQualificationVisit(input.visitType);
     const sittingList = input.sittings ?? (input.sitting ? [input.sitting] : []);
     const isRpl = input.visitType === 'rpl-arpl-monitoring';
-    if (isRpl) {
+    const isPostEisa = input.visitType === 'post-eisa-monitoring';
+    if (isPostEisa) {
+      if (!input.postEisaSdpId || !input.qualificationTitle || sittingList.length > 0) throw new Error('Demo seed: a planned Post-EISA visit needs an SDP and a qualification, and has no sitting link here.');
+    } else if (isRpl) {
       if (!input.rplSdpId || !input.rplQualifications?.length || sittingList.length > 0) throw new Error('Demo seed: an RPL/ARPL visit needs an SDP and qualifications, and has no sitting.');
     } else if (perQualification !== (sittingList.length > 0)) {
       throw new Error(`Demo seed: a ${input.visitType} visit ${perQualification ? 'needs' : 'cannot have'} a sitting link here.`);
     }
     if (input.sitting && input.sitting.qpId !== input.qpId) throw new Error('Demo seed: the sitting belongs to another QP.');
-    const rplSdp = isRpl ? SDP_DIRECTORY.find((d) => d.sdpId === input.rplSdpId) : undefined;
-    if (isRpl && !rplSdp) throw new Error(`Demo seed: no SDP ${input.rplSdpId}.`);
+    const siteSdpId = isPostEisa ? input.postEisaSdpId : input.rplSdpId;
+    const rplSdp = isRpl || isPostEisa ? SDP_DIRECTORY.find((d) => d.sdpId === siteSdpId) : undefined;
+    if ((isRpl || isPostEisa) && !rplSdp) throw new Error(`Demo seed: no SDP ${siteSdpId}.`);
     const visitId = seedId(VISIT_ID_GROUP, ++n);
     // Batch V1 (05.13): createVisit() list for Marking & Moderation and RPL/ARPL.
     let qualifications: VisitQualification[] | undefined;
@@ -691,15 +702,25 @@ export function seedSiteVisits(
     if (visitIsMeeting(input.visitType) !== !!input.meetingTitle?.trim()) throw new Error('Demo seed: only a special meeting has a title, and it needs one.');
     if (visitHasPurpose(input.visitType) !== !!input.purpose?.trim()) throw new Error(`Demo seed: a ${input.visitType} visit ${input.purpose ? 'has no' : 'needs a'} purpose.`);
     const notificationFlag = input.notificationFlag ?? 'notified';
+    // Batch Z2 (11.9): createVisit() stores the sub-unit (the type's default unless chosen), the officials with the planner first, and the last day.
+    let scheduleFields: Pick<SiteVisit, 'subUnit' | 'officials' | 'visitEndDate'> | undefined;
+    if (input.schedule) {
+      const domain = input.domain ?? DEFAULT_VISIT_DOMAIN;
+      const subUnit = input.schedule.subUnit ?? defaultSubUnitFor(input.visitType, domain);
+      if (!subUnit) throw new Error(`Demo seed: a ${input.visitType} visit has no default sub-unit, so one must be chosen.`);
+      const ids = [planner.id, ...(input.schedule.officialIds ?? [])].filter((id, i, all) => all.indexOf(id) === i);
+      scheduleFields = { subUnit, officials: ids.map((id) => ({ personId: id, name: seedPerson(id).name })), visitEndDate: input.schedule.endDate ?? null };
+    }
     const visit: SiteVisit = {
       id: visitId,
+      ...scheduleFields,
       visitType: input.visitType,
       domain: input.domain ?? DEFAULT_VISIT_DOMAIN,
       meetingTitle: input.meetingTitle,
       purpose: input.purpose,
       qpId: qp?.id ?? '',
       qpName: qp?.name ?? '',
-      qualificationTitle: qualifications?.[0]?.qualificationTitle ?? sittingList[0]?.qualificationTitle ?? '',
+      qualificationTitle: qualifications?.[0]?.qualificationTitle ?? sittingList[0]?.qualificationTitle ?? input.qualificationTitle ?? '',
       qualifications,
       // A2: Readiness and Marking & Moderation have no SDP; an RPL/ARPL visit planned here is held at one.
       sdpId: rplSdp?.sdpId ?? null,
@@ -728,7 +749,7 @@ export function seedSiteVisits(
       createdAt: clock.at(input.createdDaysAgo, 9),
     };
     if (!visit.visitDate) throw new Error('Demo seed: a visit needs a date.');
-    if (visitHasSdp(input.visitType) && !isRpl) throw new Error('Demo seed: Post-EISA visits come from a results batch here.');
+    if (visitHasSdp(input.visitType) && !isRpl && !isPostEisa) throw new Error('Demo seed: Post-EISA visits come from a results batch here.');
     return builder(visit, clock, planner.id);
   }
 
@@ -1266,6 +1287,85 @@ export function seedSiteVisits(
     .plan('plan-recommend', GRACE, wdAgo(6))
     .plan('plan-approve', MICHAEL, wdAgo(4))
     .plan('plan-book', KATLEGO, wdAgo(2))
+    .done();
+
+  // Batch Z2 (QCTO 11 Nov, 11.9): seven visits in the month after today, counted from the seed clock, so the monthly
+  // Visit schedule always has something to show. Appended after SV25, so every earlier visit is unchanged.
+  //  SV26  QASA development visit        Assessment Standards            booked, notified
+  //  SV27  Instrument validation visit   Assessment Standards            booked, THREE officials
+  //  SV28  EISA Readiness                EISA Registrations, Conduct...  booked, runs over THREE days
+  //  SV29  Marking guideline discussion  EISA Registrations, Conduct...  booked
+  //  SV30  Post-EISA Monitoring          Approval of Results             booked, held at Thabo Technical College
+  //  SV31  Other / special meeting       Approval of Results (chosen)    booked, no QP
+  //  SV32  RPL/ARPL Monitoring           EISA Registrations, Conduct...  still in planning (Deputy Director recommendation)
+  // The QP and SDP notices go out at booking, as everywhere else.
+  const nextMonthDate = (dayOfMonth: number): string => {
+    const [year, month] = todayIso().split('-').map(Number);
+    return nextWorkingDay(toIsoDate(new Date(Date.UTC(year, month, dayOfMonth))));
+  };
+  const bookChain = (b: VisitSeedBuilder, submitNote: string, recommend: string, approve: string, book: string): VisitSeedBuilder =>
+    b
+      .submitPlan(wdAgo(11), submitNote)
+      .plan('plan-recommend', recommend, wdAgo(9))
+      .plan('plan-approve', approve, wdAgo(6))
+      .plan('plan-book', book, wdAgo(4))
+      .sendNotice()
+      .remindersSoFar();
+
+  bookChain(
+    planVisit({ visitType: 'qasa-development-visit', qpId: NOMVULA, purpose: 'Work through the draft QASA components with the QP.', visitDate: nextMonthDate(3), venue: 'QP offices, Sandton', schedule: { officialIds: [SIPHO] }, plannerId: LINDIWE, createdDaysAgo: wdAgo(12) }),
+    'Development visit for the draft QASA.', GRACE, MICHAEL, KARABO,
+  ).done();
+
+  bookChain(
+    planVisit({ visitType: 'instrument-validation-visit', qpId: PRECIOUS, purpose: 'Validate the revised instrument on site with the QP.', visitDate: nextMonthDate(8), venue: 'QP offices, Vanderbijlpark', schedule: { officialIds: [THANDEKA, SIPHO] }, plannerId: RIAAN, createdDaysAgo: wdAgo(12) }),
+    'On-site validation of the revised instrument.', PETER, NOKUTHULA, KATLEGO,
+  ).done();
+
+  bookChain(
+    planVisit({ visitType: 'eisa-readiness', qpId: JOHAN, visitDate: nextMonthDate(10), venue: 'Assessment centre, Bloemfontein', schedule: { officialIds: [SIPHO], endDate: addWorkingDays(nextMonthDate(10), 2) }, plannerId: LINDIWE, createdDaysAgo: wdAgo(12) }),
+    'Three-day readiness check across the assessment centres.', GRACE, MICHAEL, KARABO,
+  ).done();
+
+  bookChain(
+    planVisit({ visitType: 'marking-guideline-discussion', qpId: NOMVULA, purpose: 'Agree the final marking guideline with the markers.', visitDate: nextMonthDate(14), venue: 'Marking centre, Pretoria', schedule: { officialIds: [THANDEKA] }, plannerId: RIAAN, createdDaysAgo: wdAgo(12) }),
+    'Discussion of the final marking guideline.', PETER, NOKUTHULA, KATLEGO,
+  ).done();
+
+  bookChain(
+    planVisit({ visitType: 'post-eisa-monitoring', qpId: JOHAN, postEisaSdpId: 'sdp-thabo-technical-college', qualificationTitle: 'Welding', visitDate: nextMonthDate(5), venue: 'Thabo Technical College, Bloemfontein', schedule: { officialIds: [SIPHO] }, plannerId: LINDIWE, createdDaysAgo: wdAgo(12) }),
+    'Monitor the SDP after its EISA results.', GRACE, MICHAEL, KARABO,
+  ).done();
+
+  // The planner chooses the sub-unit of a special meeting (capacitation sessions appear on all three schedules).
+  planVisit({
+    visitType: 'other-meeting',
+    meetingTitle: 'Capacitation session on results submission',
+    purpose: 'Capacitate QPs on submitting EISA results for approval.',
+    visitDate: nextMonthDate(12),
+    venue: 'QCTO head office, Pretoria',
+    schedule: { subUnit: 'approval-of-results', officialIds: [THANDEKA] },
+    plannerId: RIAAN,
+    createdDaysAgo: wdAgo(12),
+  })
+    .submitPlan(wdAgo(11), 'Capacitation session for QPs.')
+    .plan('plan-recommend', PETER, wdAgo(9))
+    .plan('plan-approve', NOKUTHULA, wdAgo(6))
+    .plan('plan-book', KATLEGO, wdAgo(4))
+    .done();
+
+  // Still in the planning chain: submitted one working day ago, now with the Deputy Director.
+  planVisit({
+    visitType: 'rpl-arpl-monitoring',
+    rplSdpId: 'sdp-vuma-trade-centre',
+    rplQualifications: ['Plumbing'],
+    visitDate: nextMonthDate(16),
+    venue: 'Vuma Trade Centre, Gqeberha',
+    schedule: { officialIds: [SIPHO] },
+    plannerId: LINDIWE,
+    createdDaysAgo: wdAgo(2),
+  })
+    .submitPlan(wdAgo(1), 'Monitor the RPL/ARPL process at the SDP for Plumbing.')
     .done();
 
   // QCTO feedback 2.8: final approval below the threshold always creates the visit, so the seed

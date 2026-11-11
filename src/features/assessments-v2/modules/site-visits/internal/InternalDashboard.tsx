@@ -17,6 +17,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { filterByScope, type ListScope } from '../../../shared/visibility/recordVisibility';
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
+import { VisitSchedulePanel } from '../components/VisitSchedulePanel';
 import { useSiteVisits } from '../hooks';
 import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
 import { remediationRecordedByAsd, REMEDIATION_AWAITING_STAGE } from '../remediation';
@@ -148,6 +149,7 @@ export function InternalDashboard() {
             <StatTile label="Awaiting Report" value={awaitingReport.length} />
             <StatTile label={LABELS.reportsReceived} value={reportsReceived.length} />
           </StatTileGrid>
+          <VisitSchedulePanel onSelectVisit={setSelectedId} />
           <SectionCard title="Recent Activity">
             <div className="p-4 max-h-80 overflow-y-auto">
               <AuditTrailView recordTypes={['site-visit-planning', 'site-visit-report']} />

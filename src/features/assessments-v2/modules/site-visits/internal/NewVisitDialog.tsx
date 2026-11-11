@@ -11,7 +11,10 @@ import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { SDP_DIRECTORY } from '../../../mock/data/sdpDirectory';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
+import { OfficialsPicker } from '../components/OfficialsPicker';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS } from '../config';
+import { visitEndDateIssue } from '../schedule';
+import { defaultSubUnitFor, SUB_UNIT_OPTIONS, type SubUnit } from '../subUnits';
 import { useCreateVisit, useSchedulableSittings, useSdpsForSitting } from '../hooks';
 import { DEFAULT_VISIT_DOMAIN, VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS } from '../visitDomains';
 import {
@@ -72,6 +75,10 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [meetingTitle, setMeetingTitle] = useState('');
   const [purpose, setPurpose] = useState('');
   const [rows, setRows] = useState<QualificationRow[]>([newRow()]);
+  // Batch Z2 (11.9): null until the planner chooses, so the type's default applies.
+  const [subUnitChoice, setSubUnitChoice] = useState<SubUnit | null>(null);
+  const [officialIds, setOfficialIds] = useState<string[]>([person.id]);
+  const [visitEndDate, setVisitEndDate] = useState('');
 
   const { data: linkedSdps = [] } = useSdpsForSitting(sittingId === NO_SITTING ? null : sittingId);
 
@@ -91,6 +98,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     setMeetingTitle('');
     setPurpose('');
     setRows([newRow()]);
+    setSubUnitChoice(null);
+    setOfficialIds([person.id]);
+    setVisitEndDate('');
   };
 
   const onSittingChange = (value: string) => {
@@ -123,6 +133,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   // any sitting link, and the date that came from that sitting.
   const onVisitTypeChange = (value: VisitType) => {
     setVisitType(value);
+    setSubUnitChoice(null);
     setRows([newRow()]);
     if (!isPerQualificationVisit(value)) {
       setSittingId(NO_SITTING);
@@ -135,6 +146,8 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     }
   };
 
+  const subUnit = subUnitChoice ?? defaultSubUnitFor(visitType, domain);
+  const endDateIssue = visitEndDateIssue(visitDate, visitEndDate);
   const selectedQp = QP_DIRECTORY.find((q) => q.qpId === qpId);
   const selectedSiteSdp = SDP_DIRECTORY.find((s) => s.sdpId === siteSdpId);
   const siteChosen = siteKind === 'sdp' ? !!selectedSiteSdp : !!assessmentCentreName.trim();
@@ -152,7 +165,7 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const qualificationIssues = multiQualification ? qualificationListIssues(visitType, qualificationEntries) : [];
   const rowsComplete = !multiQualification || (rows.every((r) => !!r.value) && qualificationIssues.length === 0);
   const canSubmit =
-    partyChosen && rowsComplete && (!perQualification || qualificationTitle.trim()) && (!hasPurpose || purpose.trim()) && visitDate && venue.trim();
+    partyChosen && rowsComplete && (!perQualification || qualificationTitle.trim()) && (!hasPurpose || purpose.trim()) && visitDate && venue.trim() && !!subUnit && !endDateIssue;
 
   const onSubmit = () => {
     if (!canSubmit) return;
@@ -164,6 +177,9 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         domain,
         meetingTitle: isMeeting ? meetingTitle.trim() : undefined,
         purpose: hasPurpose ? purpose.trim() : undefined,
+        subUnit: subUnit ?? undefined,
+        officials: officialIds.map((id) => ({ personId: id, name: '' })),
+        visitEndDate: visitEndDate || null,
         qpId: hasQp ? (selectedQp?.qpId ?? '') : '',
         qpName: hasQp ? (selectedQp?.name ?? '') : '',
         qualificationTitle: perQualification ? qualificationTitle.trim() : '',
@@ -429,6 +445,39 @@ export function NewVisitDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               <Label>Venue *</Label>
               <Input value={venue} onChange={(e) => setVenue(e.target.value)} />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="visit-end-date">Last day (if the visit runs over several days)</Label>
+            <Input id="visit-end-date" type="date" className="w-48" min={visitDate || undefined} value={visitEndDate} onChange={(e) => setVisitEndDate(e.target.value)} />
+            {endDateIssue && visitEndDate && (
+              <p role="alert" className="text-xs text-red-600">
+                {endDateIssue}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Sub-unit *</Label>
+            <Select value={subUnit ?? ''} onValueChange={(v) => setSubUnitChoice(v as SubUnit)}>
+              <SelectTrigger aria-label="Sub-unit">
+                <SelectValue placeholder="Choose the sub-unit" />
+              </SelectTrigger>
+              <SelectContent>
+                {SUB_UNIT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-400">The monthly visit schedule of this sub-unit lists the visit.{isMeeting && ' A special meeting has no default: choose one.'}</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>QCTO officials *</Label>
+            <OfficialsPicker idPrefix="new-visit-official" value={officialIds} onChange={setOfficialIds} lockedId={person.id} />
+            <p className="text-xs text-gray-400">You are always on the visit. Tick the colleagues who go with you.</p>
           </div>
 
           <div className="space-y-2">

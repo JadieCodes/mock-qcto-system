@@ -15,6 +15,10 @@ export interface XlsxSheet {
   sheetName: string;
   headings: string[];
   rows: XlsxCell[][];
+  // Batch Z2: rows above the heading row (a title) and below the data (a sign-off block). The heading row
+  // is what is frozen. Both are optional, so a sheet without them is written exactly as before.
+  titleRows?: XlsxCell[][];
+  footerRows?: XlsxCell[][];
 }
 
 export const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -170,7 +174,7 @@ function cellXml(ref: string, cell: XlsxCell): string {
 
 function columnWidths(sheet: XlsxSheet): number[] {
   return sheet.headings.map((heading, col) => {
-    const lengths = sheet.rows.map((row) => {
+    const lengths = [...sheet.rows, ...(sheet.footerRows ?? [])].map((row) => {
       const cell = row[col] ?? null;
       if (typeof cell === 'string') return cell.length;
       if (typeof cell === 'number') return String(cell).length;
@@ -184,19 +188,29 @@ function worksheetXml(sheet: XlsxSheet): string {
   const cols = columnWidths(sheet)
     .map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`)
     .join('');
-  const header = sheet.headings.map((h, c) => textCell(`${columnLetters(c)}1`, h, STYLE_HEADER)).join('');
-  const body = sheet.rows
-    .map((row, r) => {
-      const cells = sheet.headings.map((_, c) => cellXml(`${columnLetters(c)}${r + 2}`, row[c] ?? null)).join('');
-      return `<row r="${r + 2}">${cells}</row>`;
-    })
-    .join('');
+  const width = sheet.headings.length;
+  const rowXml = (r: number, row: XlsxCell[], style?: number): string => {
+    const cells = Array.from({ length: width }, (_, c) => {
+      const ref = `${columnLetters(c)}${r}`;
+      const cell = row[c] ?? null;
+      return style === STYLE_HEADER && typeof cell === 'string' && cell !== '' ? textCell(ref, cell, style) : cellXml(ref, cell);
+    }).join('');
+    return `<row r="${r}">${cells}</row>`;
+  };
+  const titles = sheet.titleRows ?? [];
+  const headerRow = titles.length + 1;
+  const header = sheet.headings.map((h, c) => textCell(`${columnLetters(c)}${headerRow}`, h, STYLE_HEADER)).join('');
+  const titleXml = titles.map((row, i) => rowXml(i + 1, row, STYLE_HEADER)).join('');
+  const body = sheet.rows.map((row, r) => rowXml(headerRow + 1 + r, row)).join('');
+  const footerStart = headerRow + sheet.rows.length + 2;
+  const footer = (sheet.footerRows ?? []).map((row, i) => rowXml(footerStart + i, row)).join('');
+  const below = `A${headerRow + 1}`;
   return (
     `${XML_HEADER}<worksheet xmlns="${MAIN_NS}" xmlns:r="${REL_NS}">` +
-    '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' +
-    '<selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>' +
+    `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${headerRow}" topLeftCell="${below}" activePane="bottomLeft" state="frozen"/>` +
+    `<selection pane="bottomLeft" activeCell="${below}" sqref="${below}"/></sheetView></sheetViews>` +
     `<sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols>` +
-    `<sheetData><row r="1">${header}</row>${body}</sheetData></worksheet>`
+    `<sheetData>${titleXml}<row r="${headerRow}">${header}</row>${body}${footer}</sheetData></worksheet>`
   );
 }
 
@@ -218,9 +232,28 @@ function safeSheetName(name: string): string {
   return name.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 31) || 'Sheet1';
 }
 
+// Every sheet name is made safe and unique (Excel compares names without regard to case).
+function sheetNames(sheets: XlsxSheet[]): string[] {
+  const used = new Set<string>();
+  return sheets.map((sheet) => {
+    const base = safeSheetName(sheet.sheetName);
+    let name = base;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base.slice(0, 31 - String(n).length - 1)} ${n}`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+}
+
 export function writeXlsx(sheet: XlsxSheet): Uint8Array {
+  return writeXlsxWorkbook([sheet]);
+}
+
+// Batch Z2: one worksheet per sheet, in the order given.
+export function writeXlsxWorkbook(sheets: XlsxSheet[]): Uint8Array {
   const encoder = new TextEncoder();
   const part = (name: string, xml: string): ZipPart => ({ name, data: encoder.encode(xml) });
+  const names = sheetNames(sheets);
+  const stylesId = sheets.length + 1;
   return zipStored([
     part(
       '[Content_Types].xml',
@@ -228,7 +261,7 @@ export function writeXlsx(sheet: XlsxSheet): Uint8Array {
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
         '<Default Extension="xml" ContentType="application/xml"/>' +
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
         '</Types>',
     ),
@@ -240,16 +273,17 @@ export function writeXlsx(sheet: XlsxSheet): Uint8Array {
     part(
       'xl/workbook.xml',
       `${XML_HEADER}<workbook xmlns="${MAIN_NS}" xmlns:r="${REL_NS}"><sheets>` +
-        `<sheet name="${escapeXml(safeSheetName(sheet.sheetName))}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+        names.map((name, i) => `<sheet name="${escapeXml(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') +
+        '</sheets></workbook>',
     ),
     part(
       'xl/_rels/workbook.xml.rels',
       `${XML_HEADER}<Relationships xmlns="${PACKAGE_REL_NS}">` +
-        `<Relationship Id="rId1" Type="${REL_NS}/worksheet" Target="worksheets/sheet1.xml"/>` +
-        `<Relationship Id="rId2" Type="${REL_NS}/styles" Target="styles.xml"/></Relationships>`,
+        sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${REL_NS}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+        `<Relationship Id="rId${stylesId}" Type="${REL_NS}/styles" Target="styles.xml"/></Relationships>`,
     ),
     part('xl/styles.xml', STYLES_XML),
-    part('xl/worksheets/sheet1.xml', worksheetXml(sheet)),
+    ...sheets.map((sheet, i) => part(`xl/worksheets/sheet${i + 1}.xml`, worksheetXml(sheet))),
   ]);
 }
 

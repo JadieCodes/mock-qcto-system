@@ -61,3 +61,10 @@ export const INTERNAL_MODULE_ROLE_OVERRIDE: Partial<Record<string, Role[]>> = {
   'administration/acting': ['Super Admin'],
   'administration/overdue': ['Super Admin'],
 };
+
+// Batch Z2 (QCTO 11 Nov, item 11.9): the Director and the Chief Director support and approve the monthly
+// visit schedules, so they open Site Visits & Monitoring read-only and see ONLY the Visit schedule: no
+// planning, no visit records. Neither is on the site-visits team, so this is the only way in.
+export const INTERNAL_SCHEDULE_ONLY_ROLES: Partial<Record<string, Role[]>> = {
+  'site-visits': ['Director', 'Chief Director'],
+};

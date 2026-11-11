@@ -79,7 +79,10 @@ export function writeStore<T>(key: string, value: T): void {
 // for the ASD with the QP's proposed exemplar.
 // 'A28' = Batch Z1: every seeded EISA results batch has an invigilator report and answers the irregularities question
 // (11.4) — No on all but one batch (the Plumbing batch with the Deputy Director), which says Yes and has an irregularities report.
-export const SEED_VERSION = 'A28';
+// 'A29' = Batch Z2: Site Visits monthly schedule (11.9) — seven visits in the month after the seed clock (booked in each
+// of the three sub-units, one over three days, one with three officials, a special meeting with a chosen sub-unit, one still
+// in planning), each with a sub-unit, officials and last day. Every earlier visit is unchanged.
+export const SEED_VERSION = 'A29';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

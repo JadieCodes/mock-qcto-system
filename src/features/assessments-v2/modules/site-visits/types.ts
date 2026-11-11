@@ -1,5 +1,6 @@
 import type { ChecklistSection } from '../../shared/checklist/types';
 import type { WorkflowRecordState } from '../../shared/workflow/types';
+import type { SubUnit } from './subUnits';
 
 // CR-044: one standalone hub, every visit type lives on the same record shape. QCTO feedback
 // 2.5 adds the last four types.
@@ -150,6 +151,12 @@ export interface StakeholderShare {
   changedById: string;
 }
 
+// Batch Z2: one QCTO official on a visit.
+export interface VisitOfficial {
+  personId: string;
+  name: string;
+}
+
 export interface SiteVisit {
   id: string;
   visitType: VisitType;
@@ -159,6 +166,13 @@ export interface SiteVisit {
   meetingTitle?: string;
   // QCTO feedback 2.5: the purpose captured with the plan for the four new visit types.
   purpose?: string;
+
+  // Batch Z2 (11.9): the sub-unit whose monthly schedule lists the visit, the QCTO officials going
+  // (the first is the planner) and the last day of a multi-day visit. All optional so visits stored
+  // before Batch Z2 still load: read them through subUnits.ts subUnitOf().
+  subUnit?: SubUnit;
+  officials?: VisitOfficial[];
+  visitEndDate?: string | null;
 
   // CR-049: QP + qualification selectors at the top of every execution form. Empty ('') for
   // RPL/ARPL monitoring, which has no QP (QCTO feedback 2.7).
@@ -259,6 +273,9 @@ export interface NewVisitInput {
   domain?: VisitDomain;
   meetingTitle?: string;
   purpose?: string;
+  subUnit?: SubUnit;
+  officials?: VisitOfficial[];
+  visitEndDate?: string | null;
   qpId: string;
   qpName: string;
   qualificationTitle: string;

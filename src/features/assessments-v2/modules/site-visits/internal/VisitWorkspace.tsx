@@ -17,6 +17,7 @@ import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
+import { OfficialsPicker } from '../components/OfficialsPicker';
 import { QualificationList } from '../components/QualificationList';
 import { StakeholderResponseCard } from '../components/StakeholderResponseCard';
 import { RemediationHistory, RemediationResponseForm } from '../components/RemediationSection';
@@ -49,6 +50,7 @@ import {
   visitCanHaveRemediation,
 } from '../remediation';
 import { isSharedWithStakeholder, SHARE_WITH_STAKEHOLDER_LABEL, shareIsLockedByRemediation, visitCanBeShared, visitShareRecipientOf } from '../stakeholderShare';
+import { SUB_UNIT_OPTIONS, subUnitOf, type SubUnit } from '../subUnits';
 import { isMultiQualificationVisit } from '../visitQualifications';
 import { PLAN_SEND_BACK_TO_PLANNER_LABEL, PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
@@ -232,6 +234,42 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Venue</Label>
           <Input value={visit.venue} disabled={!canEdit} onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { venue: e.target.value } })} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`visit-end-${visit.id}`} className="text-xs text-gray-400 uppercase">Last day (multi-day visit)</Label>
+          <Input
+            id={`visit-end-${visit.id}`}
+            type="date"
+            min={visit.visitDate || undefined}
+            value={visit.visitEndDate ?? ''}
+            disabled={!canEdit}
+            onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { visitEndDate: e.target.value || null } })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-400 uppercase">Sub-unit</Label>
+          <Select value={subUnitOf(visit)} onValueChange={(v) => updateDetails.mutate({ id: visit.id, patch: { subUnit: v as SubUnit } })} disabled={!canEdit}>
+            <SelectTrigger aria-label="Sub-unit">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SUB_UNIT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1 col-span-2">
+          <Label className="text-xs text-gray-400 uppercase">QCTO officials</Label>
+          <OfficialsPicker
+            idPrefix={`visit-official-${visit.id}`}
+            value={(visit.officials ?? []).map((o) => o.personId)}
+            lockedId={visit.officials?.[0]?.personId}
+            disabled={!canEdit}
+            onChange={(ids) => updateDetails.mutate({ id: visit.id, patch: { officialIds: ids } })}
+          />
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Notification</Label>

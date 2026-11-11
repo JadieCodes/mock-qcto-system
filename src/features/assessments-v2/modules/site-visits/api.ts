@@ -4,7 +4,7 @@ import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { addNotification } from '../../shared/notifications/store';
 import { getPerson } from '../../shared/people/directory';
-import { toIsoDate } from '../../shared/dates/workingDays';
+import { addWorkingDays, toIsoDate, workingDaysBetween } from '../../shared/dates/workingDays';
 import { canActInStage, performAction, WorkflowError } from '../../shared/workflow/engine';
 import { listMonitoringItems, type RplArplMonitoringItem } from '../../mock/api/siteVisitsStore';
 import { readStore, writeStore } from '../../mock/api/storage';
@@ -49,7 +49,9 @@ import {
   REMEDIATION_AWAITING_STAGE,
   visitCanHaveRemediation,
 } from './remediation';
+import { visitEndDateIssue } from './schedule';
 import { getScriptVerificationIssues } from './scriptVerification';
+import { MISSING_SUB_UNIT_MESSAGE, defaultSubUnitFor } from './subUnits';
 import {
   MOVE_VISIT_DATE_MESSAGE,
   MOVE_VISIT_REASON_MESSAGE,
@@ -70,6 +72,7 @@ import type {
   VisitDateMove,
   VisitQualification,
   VisitStakeholder,
+  VisitOfficial,
   VisitStakeholderResponse,
   VisitType,
 } from './types';
@@ -302,6 +305,18 @@ async function resolveQualifications(visitType: VisitType, entries: VisitQualifi
   return resolved;
 }
 
+// Batch Z2: the planner is always the first official; the rest are internal staff, each listed once.
+export const MISSING_OFFICIALS_MESSAGE = 'Choose at least one QCTO official.';
+
+function resolveOfficials(plannerId: string, officialIds: string[]): VisitOfficial[] {
+  const ids = [plannerId, ...officialIds].filter((id, i, all) => !!id && all.indexOf(id) === i);
+  return ids.map((id) => {
+    const person = getPerson(id);
+    if (!person || person.portal !== 'internal') throw new Error('Choose QCTO officials from the internal staff.');
+    return { personId: person.id, name: person.name };
+  });
+}
+
 export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assessmentCentreName'>): Promise<SiteVisit> {
   // QCTO feedback 2.7: an RPL/ARPL visit needs its SDP or assessment centre, and never has a
   // QP or a sitting link.
@@ -313,6 +328,13 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
   const isMeeting = visitIsMeeting(input.visitType);
   if (isMeeting && !input.meetingTitle?.trim()) throw new Error('Enter the title of the meeting.');
   if (visitHasPurpose(input.visitType) && !input.purpose?.trim()) throw new Error('Enter the purpose of the visit.');
+  // Batch Z2 (11.9): the sub-unit has no default for a special meeting; the last day of a multi-day visit is checked.
+  const domain = input.domain ?? DEFAULT_VISIT_DOMAIN;
+  const subUnit = input.subUnit ?? defaultSubUnitFor(input.visitType, domain);
+  if (!subUnit) throw new Error(MISSING_SUB_UNIT_MESSAGE);
+  const endDateIssue = visitEndDateIssue(input.visitDate, input.visitEndDate);
+  if (endDateIssue) throw new Error(endDateIssue);
+  const officials = resolveOfficials(input.createdById, (input.officials ?? []).map((o) => o.personId));
   // Batch V1 (05.13): Marking & Moderation and RPL/ARPL cover a list of qualifications.
   const qualifications = isMultiQualificationVisit(input.visitType) ? await resolveQualifications(input.visitType, input.qualifications ?? []) : undefined;
   const visit: SiteVisit = {
@@ -321,6 +343,9 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
     domain: input.domain ?? DEFAULT_VISIT_DOMAIN,
     meetingTitle: isMeeting ? input.meetingTitle?.trim() : undefined,
     purpose: visitHasPurpose(input.visitType) ? input.purpose?.trim() : undefined,
+    subUnit,
+    officials,
+    visitEndDate: input.visitEndDate || null,
     qpId: hasQp ? input.qpId : '',
     qpName: hasQp ? input.qpName : '',
     qualificationTitle: qualifications ? (qualifications[0]?.qualificationTitle ?? '') : input.qualificationTitle,
@@ -356,7 +381,7 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
 
 export async function updateVisitDetails(
   id: string,
-  patch: Partial<Pick<SiteVisit, 'qpId' | 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate' | 'domain' | 'meetingTitle' | 'purpose'>>,
+  patch: Partial<Pick<SiteVisit, 'qpId' | 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate' | 'domain' | 'meetingTitle' | 'purpose' | 'subUnit' | 'visitEndDate'>> & { officialIds?: string[] },
 ): Promise<SiteVisit> {
   const all = loadAll();
   const visit = getOrThrow(all, id);
@@ -365,7 +390,18 @@ export async function updateVisitDetails(
   if (patch.visitDate !== undefined && patch.visitDate !== visit.visitDate && visit.planningWorkflow.stageId === 'booked' && visit.visitDate) {
     throw new Error('This visit is booked. Use "Move the visit" to change its date.');
   }
-  let updated: SiteVisit = { ...visit, ...patch };
+  const { officialIds, ...rest } = patch;
+  let updated: SiteVisit = { ...visit, ...rest };
+  // Batch Z2: the last day stays valid against the date, and the planner (the first official) stays on the visit.
+  if (patch.visitEndDate !== undefined) updated = { ...updated, visitEndDate: patch.visitEndDate || null };
+  const endDateIssue = visitEndDateIssue(updated.visitDate, updated.visitEndDate);
+  if (endDateIssue) throw new Error(endDateIssue);
+  if (officialIds) {
+    const plannerId = visit.officials?.[0]?.personId ?? officialIds[0] ?? '';
+    const officials = resolveOfficials(plannerId, officialIds);
+    if (officials.length === 0) throw new Error(MISSING_OFFICIALS_MESSAGE);
+    updated = { ...updated, officials };
+  }
   if (patch.visitDate && !visit.visitDate && !visit.stakeholderNotice && patch.visitDate >= toIsoDate(new Date())) {
     updated = sendNotice(updated, SYSTEM_ACTOR);
   }
@@ -472,9 +508,12 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
       previousResponse: visit.stakeholderResponse ?? null,
       previousReminders: visit.reminders?.length ?? 0,
     };
+    // Batch Z2: a multi-day visit keeps its length in working days on the new date; the last day stays editable.
+    const spanWorkingDays = visit.visitEndDate ? workingDaysBetween(visit.visitDate, visit.visitEndDate) : 0;
     updated = {
       ...updated,
       visitDate: move.toDate,
+      visitEndDate: visit.visitEndDate ? addWorkingDays(move.toDate, spanWorkingDays) : visit.visitEndDate,
       dateMoves: [...(visit.dateMoves ?? []), move],
       stakeholderNotice: undefined,
       stakeholderResponse: undefined,
