@@ -19,6 +19,7 @@ import type { SiteVisit } from './types';
 
 // Audit-entry action label the Planning tab looks up to show the latest send-back note.
 export const PLAN_SEND_BACK_TO_PLANNER_LABEL = 'Send back to ASD';
+export const PLAN_MOVE_VISIT_LABEL = 'Move the visit';
 
 // Planning chain: ASD plans -> Deputy Director recommends -> Domain Director approves -> Sub
 // Domain Admin books. Row 33 (test findings): every REVIEW stage (the three stages downstream
@@ -33,10 +34,14 @@ export const PLANNING_WORKFLOW: WorkflowDefinition = {
     { id: 'dd-recommend', label: 'Deputy Director recommendation', allowedRoles: [PLAN_RECOMMENDER_ROLE] },
     { id: 'domain-director-approval', label: 'Domain Director approval', allowedRoles: [PLAN_APPROVER_ROLE] },
     { id: 'sda-booking', label: 'Sub Domain Admin booking', allowedRoles: [BOOKING_ROLE] },
-    { id: 'booked', label: 'Booked', allowedRoles: [] },
+    // Batch V2: the ASD can move a booked visit (the only action from here), which sends it back
+    // through approval. Booked is a resting stage, so this does not make it an overdue wait.
+    { id: 'booked', label: 'Booked', allowedRoles: [PLANNER_ROLE] },
     { id: 'planning-rejected', label: 'Planning rejected', allowedRoles: [] },
   ],
   actions: [
+    // Batch V2 (QCTO 29.36): a new date goes through the same approval as a new plan.
+    { id: 'plan-move', label: PLAN_MOVE_VISIT_LABEL, fromStage: 'booked', toStage: 'dd-recommend', kind: 'send-back', requiresNote: true },
     { id: 'plan-submit', label: 'Submit plan', fromStage: 'ad-planning', toStage: 'dd-recommend', kind: 'advance' },
     { id: 'plan-recommend', label: 'Recommend to Domain Director', fromStage: 'dd-recommend', toStage: 'domain-director-approval', kind: 'advance' },
     {
@@ -110,9 +115,9 @@ export const REPORT_WORKFLOW: WorkflowDefinition = {
     // received anything.
     // Batch V1 (05.14): 'approved' now means "Approved (final)" only. Complete Visit starts here.
     { id: 'approved', label: APPROVED_FINAL_LABEL, allowedRoles: [REPORT_APPROVER_ROLE] },
-    // Batch V1 (05.14): the stakeholder answers the DD's items. The QP does it for a visit with a
-    // QP; the ASD records it for a visit without one (api.ts checks which).
-    { id: REMEDIATION_AWAITING_STAGE, label: REMEDIATION_AWAITING_LABEL, allowedRoles: ['QP', REPORT_SUBMITTER_ROLE] },
+    // Batch V1 (05.14): the stakeholder answers the DD's items: the QP for a visit with a QP, the SDP for a
+    // visit held at an SDP (Batch V2), the ASD for an assessment centre (api.ts checks which).
+    { id: REMEDIATION_AWAITING_STAGE, label: REMEDIATION_AWAITING_LABEL, allowedRoles: ['QP', 'SDP', REPORT_SUBMITTER_ROLE] },
     { id: REMEDIATION_REVIEW_STAGE, label: REMEDIATION_SUBMITTED_LABEL, allowedRoles: [REPORT_APPROVER_ROLE] },
     { id: 'rejected', label: 'Rejected', allowedRoles: [] },
     { id: 'outcome-shared', label: 'Outcome shared', allowedRoles: ['QP'] },
@@ -191,7 +196,7 @@ export function planningStatusLabel(visit: SiteVisit): string {
       // QCTO feedback 2.8: an auto-created Post-EISA Monitoring visit waits here for its date.
       return visit.visitDate ? 'Planning' : 'To be scheduled';
     case 'dd-recommend':
-      return 'Awaiting DD recommendation';
+      return visit.dateMoves?.length ? 'New date awaiting DD recommendation' : 'Awaiting DD recommendation';
     case 'domain-director-approval':
       return 'Awaiting Domain Director approval';
     case 'sda-booking':
@@ -225,7 +230,7 @@ export function overallStatusLabel(visit: SiteVisit, opts?: { forQp?: boolean })
       return APPROVED_FINAL_LABEL;
     case REMEDIATION_AWAITING_STAGE:
       // QCTO still has to confirm the status names. A visit without a QP says who it awaits instead.
-      return opts?.forQp || visit.qpId ? REMEDIATION_AWAITING_LABEL : `Approved with remediation — awaiting ${remediationStakeholderLabel(visit)}`;
+      return `Approved with remediation — awaiting ${remediationStakeholderLabel(visit)}`;
     case REMEDIATION_REVIEW_STAGE:
       return REMEDIATION_SUBMITTED_LABEL;
     case 'rejected':

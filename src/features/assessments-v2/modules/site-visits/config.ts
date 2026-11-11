@@ -45,10 +45,10 @@ export const REMEDIATION_SUBMITTED_LABEL = 'Remediation submitted — DD review'
 // whether it is shared with the QP.
 export const STAKEHOLDER_SHARE_ROLE: Role = REPORT_APPROVER_ROLE;
 
-// CR-057 placeholder: there is no Phase 6 "Approval of Results" module yet to check a real
-// results-batch status against, so this flag lives directly on the visit and is toggled by an
-// official for demo purposes. Replace with a real read from Phase 6 once it exists.
-export const RESULTS_APPROVAL_IS_SIMULATED = true;
+// Batch V2 (QCTO 29 Oct 3:05:39 to 3:16:43, ASSUMPTION): a notified visit with no response from the
+// stakeholder after this many working days gets a reminder, and again every this many working days
+// until they answer or the visit date passes. QCTO to confirm the number.
+export const REMINDER_WORKING_DAYS = 2;
 
 // CR-054 (Open item): cross-unit report visibility, built as a configurable rule table rather
 // than hard-coded logic, so QCTO's eventual answer is a data change here, not a code change.

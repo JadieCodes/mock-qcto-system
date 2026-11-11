@@ -4,6 +4,7 @@ import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { addNotification } from '../../shared/notifications/store';
 import { getPerson } from '../../shared/people/directory';
+import { toIsoDate } from '../../shared/dates/workingDays';
 import { canActInStage, performAction, WorkflowError } from '../../shared/workflow/engine';
 import { listMonitoringItems, type RplArplMonitoringItem } from '../../mock/api/siteVisitsStore';
 import { readStore, writeStore } from '../../mock/api/storage';
@@ -28,22 +29,50 @@ import {
   STAKEHOLDER_SHARE_ROLE,
 } from './config';
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory, type VisitEvidenceFile } from './evidence';
-import { bookedVisitNotificationBody, remediationRequestedNotification, remediationSubmittedNotification } from './notificationText';
+import {
+  bookedVisitNotificationBody,
+  remediationRequestedNotification,
+  remediationSubmittedNotification,
+  visitMovedNotification,
+  visitNoticeNotification,
+  visitReminderNotification,
+  visitResponseNotification,
+} from './notificationText';
 import {
   COMPLETE_VISIT_BLOCKED_MESSAGE,
   MISSING_REMEDIATION_ITEMS_MESSAGE,
   MISSING_REMEDIATION_RESPONSE_MESSAGE,
   openRemediationRound,
-  remediationRecordedByAsd,
+  remediationResponderOf,
   remediationRoundsOf,
   remediationStakeholderName,
   REMEDIATION_AWAITING_STAGE,
   visitCanHaveRemediation,
 } from './remediation';
 import { getScriptVerificationIssues } from './scriptVerification';
-import { isSharedWithStakeholder, shareIsLockedByRemediation, visitCanBeShared } from './stakeholderShare';
+import {
+  MOVE_VISIT_DATE_MESSAGE,
+  MOVE_VISIT_REASON_MESSAGE,
+  NOT_AVAILABLE_REASON_MESSAGE,
+  remindersDueBy,
+  visitIsUnannounced,
+  visitNeedsNotice,
+  visitStakeholderOf,
+} from './stakeholderResponse';
+import { isSharedWithStakeholder, shareIsLockedByRemediation, visitCanBeShared, visitShareRecipientOf } from './stakeholderShare';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW, overallStatusLabel } from './workflow';
-import type { NewVisitInput, RemediationRound, ScriptVerification, SiteVisit, VisitQualification, VisitType } from './types';
+import type {
+  NewVisitInput,
+  RemediationRound,
+  ScriptVerification,
+  SiteVisit,
+  StakeholderAnswer,
+  VisitDateMove,
+  VisitQualification,
+  VisitStakeholder,
+  VisitStakeholderResponse,
+  VisitType,
+} from './types';
 import { isMultiQualificationVisit, qualificationEntriesHaveSitting, qualificationListIssues, saqaIdForQualification, visitQualificationsOf } from './visitQualifications';
 import { DEFAULT_VISIT_DOMAIN } from './visitDomains';
 import { visitHasPurpose, visitHasQp, visitHasSdp, visitHasSiteSelection, visitHasSittingLink, visitIsMeeting, visitSubject } from './visitTypeLabels';
@@ -134,7 +163,6 @@ function buildAutoCreatedVisit(item: RplArplMonitoringItem): SiteVisit {
     freeTextNotes: {},
     facilitatorAnswers: {},
     learnerAnswers: {},
-    resultsApprovedForSitting: false,
     completedBy: '',
     completedDate: '',
     sourceRegistrationId: item.sourceRegistrationId,
@@ -158,13 +186,83 @@ async function syncAutoCreatedVisits(): Promise<void> {
   saveAll([...newItems.map(buildAutoCreatedVisit), ...all]);
 }
 
+const SYSTEM_ACTOR = { actorRole: REPORT_SUBMITTER_ROLE, actorId: 'system', actorName: 'System (visit notice)' } as const;
+
+// Batch V2: told through the system. An assessment centre has no portal, so its notices go to the ASD,
+// who records the answer for it.
+function notifyStakeholder(stakeholder: VisitStakeholder, text: { title: string; body: string }): void {
+  if (stakeholder.kind === 'assessment-centre') {
+    addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, ...text });
+    return;
+  }
+  addNotification({ recipientRole: stakeholder.kind, recipientPersonId: stakeholder.id ?? undefined, ...text });
+}
+
+// Batch V2 (QCTO 29.36): the notice for a booked, notified visit. Called when the visit is booked (or
+// booked again after a move), and when an auto-created RPL/ARPL visit, booked from the start, is given
+// its date. Unannounced visits get none (CR-051).
+function sendNotice(visit: SiteVisit, actor: { actorRole: Role; actorId: string; actorName: string }): SiteVisit {
+  const stakeholder = visitStakeholderOf(visit);
+  if (!stakeholder || !visitNeedsNotice(visit)) return visit;
+  const text = visitNoticeNotification(visit, stakeholder.kind === 'assessment-centre', stakeholder.name);
+  notifyStakeholder(stakeholder, text);
+  appendAuditEntry({
+    recordType: 'site-visit-planning',
+    recordId: visit.id,
+    actorRole: actor.actorRole,
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    action: `Visit notice sent to ${stakeholder.name} (${stakeholder.kind === 'assessment-centre' ? 'assessment centre' : stakeholder.kind})`,
+    note: `Visit date ${visit.visitDate}`,
+  });
+  return {
+    ...visit,
+    stakeholderNotice: { sentAt: new Date().toISOString(), sentTo: stakeholder.kind, sentToName: stakeholder.name },
+    stakeholderResponse: undefined,
+    reminders: [],
+  };
+}
+
+// Worked out on load (the same pattern as the Batch S escalation): a notified visit with no response
+// gets a reminder REMINDER_WORKING_DAYS working days after the notice, and again every
+// REMINDER_WORKING_DAYS after that, until the stakeholder answers or the visit date passes. Each
+// reminder is sent once: the count already stored is never sent again.
+function syncStakeholderReminders(): void {
+  const today = toIsoDate(new Date());
+  const all = loadAll();
+  let changed = false;
+  const next = all.map((visit) => {
+    const due = remindersDueBy(visit, today);
+    const sent = visit.reminders?.length ?? 0;
+    const stakeholder = visitStakeholderOf(visit);
+    if (!stakeholder || due.length <= sent) return visit;
+    const fresh = due.slice(sent).map((date, i) => ({ number: sent + i + 1, sentAt: new Date(Math.min(Date.parse(`${date}T07:00:00Z`), Date.now())).toISOString() }));
+    for (const reminder of fresh) {
+      notifyStakeholder(stakeholder, visitReminderNotification(visit, stakeholder.kind === 'assessment-centre', stakeholder.name, reminder.number));
+      appendAuditEntry({
+        recordType: 'site-visit-planning',
+        recordId: visit.id,
+        ...SYSTEM_ACTOR,
+        actorName: 'System (reminder)',
+        action: `Reminder ${reminder.number} sent to ${stakeholder.name}`,
+        note: `No response to the visit date ${visit.visitDate} yet.`,
+      });
+    }
+    changed = true;
+    return { ...visit, reminders: [...(visit.reminders ?? []), ...fresh] };
+  });
+  if (changed) saveAll(next);
+}
+
 export async function listVisits(): Promise<SiteVisit[]> {
   await syncAutoCreatedVisits();
+  syncStakeholderReminders();
   return loadAll();
 }
 
 export async function getVisit(id: string): Promise<SiteVisit | undefined> {
   await syncAutoCreatedVisits();
+  syncStakeholderReminders();
   return loadAll().find((v) => v.id === id);
 }
 
@@ -244,7 +342,6 @@ export async function createVisit(input: NewVisitInput & Pick<SiteVisit, 'assess
     freeTextNotes: {},
     facilitatorAnswers: {},
     learnerAnswers: {},
-    resultsApprovedForSitting: false,
     completedBy: '',
     completedDate: '',
     sourceRegistrationId: null,
@@ -262,7 +359,16 @@ export async function updateVisitDetails(
   patch: Partial<Pick<SiteVisit, 'qpId' | 'qpName' | 'qualificationTitle' | 'sdpName' | 'venue' | 'visitDate' | 'domain' | 'meetingTitle' | 'purpose'>>,
 ): Promise<SiteVisit> {
   const all = loadAll();
-  const updated = { ...getOrThrow(all, id), ...patch };
+  const visit = getOrThrow(all, id);
+  // QCTO 29.36: a booked visit's date only changes through "Move the visit", which sends the new date
+  // back through approval. A booked visit with no date yet (auto-created RPL/ARPL) can still be given one.
+  if (patch.visitDate !== undefined && patch.visitDate !== visit.visitDate && visit.planningWorkflow.stageId === 'booked' && visit.visitDate) {
+    throw new Error('This visit is booked. Use "Move the visit" to change its date.');
+  }
+  let updated: SiteVisit = { ...visit, ...patch };
+  if (patch.visitDate && !visit.visitDate && !visit.stakeholderNotice && patch.visitDate >= toIsoDate(new Date())) {
+    updated = sendNotice(updated, SYSTEM_ACTOR);
+  }
   saveAll(replace(all, updated));
   return updated;
 }
@@ -277,7 +383,8 @@ type PlanningActionId =
   | 'plan-domain-director-send-back'
   | 'plan-domain-director-reject'
   | 'plan-sda-send-back'
-  | 'plan-sda-reject';
+  | 'plan-sda-reject'
+  | 'plan-move';
 
 interface PlanningActionParams {
   visitId: string;
@@ -286,8 +393,12 @@ interface PlanningActionParams {
   actorId: string;
   actorName: string;
   planNote?: string;
-  // Row 33: mandatory on every send-back/reject action.
+  // Row 33: mandatory on every send-back/reject action. For 'plan-move' it is the reason.
   note?: string;
+  // 'plan-move' only (Batch V2): the new visit date, and whether the reason is the stakeholder's "not
+  // available" or QCTO's own decision.
+  newDate?: string;
+  moveReasonSource?: VisitDateMove['reasonSource'];
 }
 
 // Row 33: notify the role that will need to act next. Send-back goes to whichever role owns
@@ -302,11 +413,32 @@ const PLANNING_NEXT_OWNER: Partial<Record<PlanningActionId, Role>> = {
   'plan-sda-reject': PLANNER_ROLE,
 };
 
+// QCTO 29.36: "Move the visit" is for a booked visit that has not been carried out yet. The new date must
+// be a different day that is not in the past, and the reason is always written down.
+function assertCanMoveVisit(visit: SiteVisit, params: PlanningActionParams): void {
+  if (visit.planningWorkflow.stageId !== 'booked') throw new Error('Only a booked visit can be moved.');
+  if (visit.reportWorkflow.stageId !== 'awaiting-execution') throw new Error('A visit can only be moved before it is carried out.');
+  if (!params.newDate) throw new Error(MOVE_VISIT_DATE_MESSAGE);
+  if (!params.note?.trim()) throw new Error(MOVE_VISIT_REASON_MESSAGE);
+  if (params.newDate === visit.visitDate) throw new Error('The new date must be different from the current date.');
+  if (params.newDate < toIsoDate(new Date())) throw new Error('The new date cannot be in the past.');
+  if (params.moveReasonSource === 'stakeholder-not-available' && visit.stakeholderResponse?.answer !== 'not-available') {
+    throw new Error('The stakeholder has not said they are not available for this date.');
+  }
+}
+
+function moveAuditNote(visit: SiteVisit, params: PlanningActionParams): string {
+  const source = params.moveReasonSource === 'stakeholder-not-available' ? 'Stakeholder not available' : 'QCTO decision';
+  return `From ${visit.visitDate} to ${params.newDate ?? ''}. ${source}: ${params.note?.trim() ?? ''}`;
+}
+
 export async function performPlanningAction(params: PlanningActionParams): Promise<SiteVisit> {
   const all = loadAll();
   const visit = getOrThrow(all, params.visitId);
   // QCTO feedback 2.8: an auto-created Post-EISA Monitoring visit has no date until the planner picks one.
   if (params.actionId === 'plan-submit' && !visit.visitDate) throw new Error(MISSING_VISIT_DATE_MESSAGE);
+  const movedFromDate = visit.visitDate;
+  if (params.actionId === 'plan-move') assertCanMoveVisit(visit, params);
 
   const nextWorkflow = performAction({
     definition: PLANNING_WORKFLOW,
@@ -315,7 +447,7 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
     actorRole: params.actorRole,
     actorId: params.actorId,
     actorName: params.actorName,
-    note: params.note,
+    note: params.actionId === 'plan-move' ? moveAuditNote(visit, params) : params.note,
     recordType: 'site-visit-planning',
     recordId: visit.id,
   });
@@ -324,6 +456,32 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
   if (params.actionId === 'plan-submit' && params.planNote !== undefined) {
     updated = { ...updated, planNote: params.planNote };
   }
+  // Batch V2 (QCTO 29.36): the old date, the reason and the stakeholder's answer stay in dateMoves; the
+  // new date starts again with no notice, answer or reminders, and is put to the stakeholder when booked.
+  if (params.actionId === 'plan-move') {
+    const move: VisitDateMove = {
+      id: crypto.randomUUID(),
+      fromDate: visit.visitDate,
+      toDate: params.newDate ?? '',
+      reason: params.note?.trim() ?? '',
+      reasonSource: params.moveReasonSource ?? 'qcto',
+      movedBy: params.actorName,
+      movedById: params.actorId,
+      movedAt: new Date().toISOString(),
+      previousNotice: visit.stakeholderNotice ?? null,
+      previousResponse: visit.stakeholderResponse ?? null,
+      previousReminders: visit.reminders?.length ?? 0,
+    };
+    updated = {
+      ...updated,
+      visitDate: move.toDate,
+      dateMoves: [...(visit.dateMoves ?? []), move],
+      stakeholderNotice: undefined,
+      stakeholderResponse: undefined,
+      reminders: undefined,
+    };
+  }
+  if (params.actionId === 'plan-book') updated = sendNotice(updated, params);
   saveAll(replace(all, updated));
 
   // Every forward step notifies whoever owns the stage it just moved into — plan-recommend and
@@ -337,6 +495,10 @@ export async function performPlanningAction(params: PlanningActionParams): Promi
   }
   if (params.actionId === 'plan-approve') {
     addNotification({ recipientRole: BOOKING_ROLE, title: 'Visit plan awaiting booking', body: `"${visitSubject(visit)}" (${visit.visitType}) needs Sub Domain Admin booking.` });
+  }
+  if (params.actionId === 'plan-move') {
+    const text = visitMovedNotification(updated, movedFromDate, params.note?.trim() ?? '');
+    addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, ...text });
   }
   if (nextWorkflow.stageId === 'booked') {
     addNotification({
@@ -392,8 +554,13 @@ interface RemediationActor {
 // Batch V1 (05.14): the QP named on the visit answers the items; for a stakeholder without a QP
 // (RPL at an SDP or assessment centre) the ASD records the response until SDPs get their own view.
 function assertCanRespondToRemediation(visit: SiteVisit, actor: RemediationActor): void {
-  if (remediationRecordedByAsd(visit)) {
+  const responder = remediationResponderOf(visit);
+  if (responder === 'ASD') {
     if (actor.actorRole !== REPORT_SUBMITTER_ROLE) throw new Error(`Only the ${REPORT_SUBMITTER_ROLE} records the response for this visit.`);
+    return;
+  }
+  if (responder === 'SDP') {
+    if (actor.actorRole !== 'SDP' || actor.actorId !== visit.sdpId) throw new Error('Only the SDP named on this visit can respond to the remediation.');
     return;
   }
   if (actor.actorRole !== 'QP' || actor.actorId !== visit.qpId) throw new Error('Only the QP named on this visit can respond to the remediation.');
@@ -422,9 +589,11 @@ function newRemediationRound(visit: SiteVisit, items: string, actor: Remediation
 // instead, because the ASD records the response.
 function notifyRemediationRequested(visit: SiteVisit, round: RemediationRound): void {
   const text = remediationRequestedNotification(visit, round.items, round.round);
-  if (remediationRecordedByAsd(visit)) {
+  const responder = remediationResponderOf(visit);
+  if (responder === 'ASD') {
     addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, title: `${text.title} — record the response`, body: `${text.body} Record the response of ${round.sharedWith} on the visit.` });
-    if (visit.sdpName) addNotification({ recipientRole: 'SDP', title: text.title, body: text.body });
+  } else if (responder === 'SDP') {
+    addNotification({ recipientRole: 'SDP', recipientPersonId: visit.sdpId ?? undefined, title: text.title, body: `${text.body} (${round.sharedWith}). See Site Visits.` });
   } else {
     addNotification({ recipientRole: 'QP', title: text.title, body: `${text.body} (${visit.qpName}). See Visit Outcomes.` });
   }
@@ -536,7 +705,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
       ...updated,
       remediationRounds: remediationRoundsOf(visit).map((r) =>
         r.id === openRound.id
-          ? { ...r, response: items, submittedBy: params.actorName, submittedById: params.actorId, submittedByRole: params.actorRole === 'QP' ? 'QP' : 'ASD', submittedAt: now }
+          ? { ...r, response: items, submittedBy: params.actorName, submittedById: params.actorId, submittedByRole: params.actorRole === 'QP' ? 'QP' : params.actorRole === 'SDP' ? 'SDP' : 'ASD', submittedAt: now }
           : r,
       ),
     };
@@ -545,7 +714,7 @@ export async function performReportAction(params: ReportActionParams): Promise<S
     updated = { ...updated, remediationRounds: remediationRoundsOf(visit).map((r) => (r.id === openRound.id ? { ...r, review: review('approved-final') } : r)) };
   }
   // The report and the items go to the stakeholder automatically, whatever the share Yes/No says.
-  if (params.actionId === 'report-approve-remediation' && visitHasQp(visit.visitType) && !isSharedWithStakeholder(visit)) {
+  if (params.actionId === 'report-approve-remediation' && visitShareRecipientOf(visit) && !isSharedWithStakeholder(visit)) {
     updated = {
       ...updated,
       stakeholderShare: {
@@ -641,13 +810,14 @@ export async function setStakeholderShare(params: {
   const all = loadAll();
   const visit = getOrThrow(all, params.visitId);
   if (params.actorRole !== STAKEHOLDER_SHARE_ROLE) throw new Error(`Only the ${STAKEHOLDER_SHARE_ROLE} can choose whether a report is shared.`);
-  if (!visitCanBeShared(visit)) throw new Error('This report cannot be shared yet.');
+  const recipient = visitShareRecipientOf(visit);
+  if (!recipient || !visitCanBeShared(visit)) throw new Error('This report cannot be shared yet.');
   if (params.shared === isSharedWithStakeholder(visit)) return visit;
   if (!params.shared && shareIsLockedByRemediation(visit)) {
     throw new Error('Sharing cannot be stopped: remediation was requested, so the report and items were shared automatically.');
   }
   const outcomeSummary = params.outcomeSummary?.trim() ?? visit.stakeholderShare?.outcomeSummary ?? '';
-  if (params.shared && !outcomeSummary) throw new Error('Enter the outcome summary the QP will see.');
+  if (params.shared && !outcomeSummary) throw new Error(`Enter the outcome summary the ${recipient.kind} will see.`);
 
   const updated: SiteVisit = {
     ...visit,
@@ -660,12 +830,79 @@ export async function setStakeholderShare(params: {
     actorRole: params.actorRole,
     actorId: params.actorId,
     actorName: params.actorName,
-    action: params.shared ? `Report shared with the QP (${visit.qpName})` : `Report no longer shared with the QP (${visit.qpName})`,
+    action: params.shared ? `Report shared with the ${recipient.kind} (${recipient.name})` : `Report no longer shared with the ${recipient.kind} (${recipient.name})`,
     note: params.shared ? outcomeSummary : undefined,
   });
   if (params.shared) {
-    addNotification({ recipientRole: 'QP', title: 'Visit outcome shared', body: `QCTO has shared the outcome of the visit for "${visitSubject(visit)}" (${visit.qpName}). See Visit Outcomes.` });
+    const where = recipient.kind === 'QP' ? 'Visit Outcomes' : 'Site Visits';
+    addNotification({
+      recipientRole: recipient.kind,
+      recipientPersonId: recipient.id ?? undefined,
+      title: 'Visit outcome shared',
+      body: `QCTO has shared the outcome of the visit for "${visitSubject(visit)}" (${recipient.name}). See ${where}.`,
+    });
   }
+  return updated;
+}
+
+interface RespondToNoticeParams {
+  visitId: string;
+  answer: StakeholderAnswer;
+  reason?: string;
+  suggestedDate?: string;
+  actorRole: Role;
+  actorId: string;
+  actorName: string;
+}
+
+const ISO_DATE = /^d{4}-d{2}-d{2}$/;
+
+// Batch V2 (QCTO 29.36): the stakeholder accepts the date, or says they are not available (a reason is
+// required, a suggested date is optional). Recorded with who, when and the reason, on the visit and in
+// the audit trail; the ASD and DD are told. An assessment centre has no portal, so the ASD records the
+// answer for it.
+export async function respondToVisitNotice(params: RespondToNoticeParams): Promise<SiteVisit> {
+  const all = loadAll();
+  const visit = getOrThrow(all, params.visitId);
+  const stakeholder = visitStakeholderOf(visit);
+  const today = toIsoDate(new Date());
+  if (!stakeholder || visitIsUnannounced(visit)) throw new Error('This visit has no notice to respond to.');
+  if (!visit.stakeholderNotice || !visitNeedsNotice(visit)) throw new Error('This visit has not been notified yet.');
+  if (visit.stakeholderResponse) throw new Error('This visit date has already been answered.');
+  if (visit.visitDate < today) throw new Error('The visit date has passed.');
+  const byAsd = stakeholder.kind === 'assessment-centre';
+  if (byAsd ? params.actorRole !== REPORT_SUBMITTER_ROLE : params.actorRole !== stakeholder.kind || params.actorId !== stakeholder.id) {
+    throw new Error(byAsd ? `Only the ${REPORT_SUBMITTER_ROLE} records the response for ${stakeholder.name}.` : `Only ${stakeholder.name} can respond to this visit.`);
+  }
+  const reason = params.reason?.trim() ?? '';
+  const suggestedDate = params.answer === 'not-available' ? (params.suggestedDate ?? '') : '';
+  if (params.answer === 'not-available' && !reason) throw new Error(NOT_AVAILABLE_REASON_MESSAGE);
+  if (suggestedDate && (!ISO_DATE.test(suggestedDate) || suggestedDate < today)) throw new Error('The suggested date must be a date that is not in the past.');
+
+  const response: VisitStakeholderResponse = {
+    answer: params.answer,
+    reason: params.answer === 'accepted' ? '' : reason,
+    suggestedDate,
+    respondedBy: params.actorName,
+    respondedById: params.actorId,
+    respondedByRole: params.actorRole === 'QP' ? 'QP' : params.actorRole === 'SDP' ? 'SDP' : 'ASD',
+    respondedAt: new Date().toISOString(),
+  };
+  const updated: SiteVisit = { ...visit, stakeholderResponse: response };
+  saveAll(replace(all, updated));
+  const forWhom = byAsd ? `Recorded for ${stakeholder.name}: ` : '';
+  appendAuditEntry({
+    recordType: 'site-visit-planning',
+    recordId: visit.id,
+    actorRole: params.actorRole,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    action: params.answer === 'accepted' ? `${forWhom}Accepted the visit date (${visit.visitDate})` : `${forWhom}Not available on ${visit.visitDate}`,
+    note: params.answer === 'accepted' ? undefined : `${reason}${suggestedDate ? ` Suggested date: ${suggestedDate}.` : ''}`,
+  });
+  const text = visitResponseNotification(visit, params.answer, stakeholder.name, reason, suggestedDate);
+  addNotification({ recipientRole: REPORT_SUBMITTER_ROLE, ...text });
+  addNotification({ recipientRole: PLAN_RECOMMENDER_ROLE, ...text });
   return updated;
 }
 
@@ -799,15 +1036,6 @@ export async function saveFacilitatorAnswers(id: string, facilitatorAnswers: Rec
 export async function saveLearnerAnswers(id: string, learnerAnswers: Record<string, string>): Promise<SiteVisit> {
   const all = loadAll();
   const updated = { ...getOrThrow(all, id), learnerAnswers };
-  saveAll(replace(all, updated));
-  return updated;
-}
-
-// CR-057 placeholder: toggles the simulated "results approved" flag until Phase 6 exists —
-// see config.ts RESULTS_APPROVAL_IS_SIMULATED.
-export async function setResultsApprovedForSitting(id: string, approved: boolean): Promise<SiteVisit> {
-  const all = loadAll();
-  const updated = { ...getOrThrow(all, id), resultsApprovedForSitting: approved };
   saveAll(replace(all, updated));
   return updated;
 }

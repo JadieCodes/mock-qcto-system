@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { LABELS } from '../../../config/labels';
 import type { Role } from '../../../types';
+import { toIsoDate } from '../../../shared/dates/workingDays';
 import { PageHeader } from '../../../shared/ui/PageHeader';
 import { EmptyState, SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSections';
 import { ScopeToggle } from '../../../shared/ui/ScopeToggle';
@@ -18,8 +19,9 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { SiteVisitStatusBadge } from '../components/StatusBadge';
 import { useSiteVisits } from '../hooks';
 import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
-import { REMEDIATION_AWAITING_STAGE } from '../remediation';
-import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitHasQp, visitIsMeeting, visitPartyName, visitSubject } from '../visitTypeLabels';
+import { remediationRecordedByAsd, REMEDIATION_AWAITING_STAGE } from '../remediation';
+import { responseStatusOf, responseSummaryOf } from '../stakeholderResponse';
+import { qualificationDisplay, VISIT_TYPE_LABELS, VISIT_TYPE_OPTIONS, visitIsMeeting, visitPartyName, visitSubject } from '../visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { NewVisitDialog } from './NewVisitDialog';
 import { VisitWorkspace } from './VisitWorkspace';
@@ -38,10 +40,11 @@ function myItemIds(v: SiteVisit): (string | null | undefined)[] {
 // Every visit is created with its report at `awaiting-execution`, so the report stage only
 // counts once the visit is booked (the Execution & Report tab is closed until then).
 function isUnassignedActionable(v: SiteVisit, role: Role, personId: string): boolean {
-  if (canActInStage(PLANNING_WORKFLOW, v.planningWorkflow.stageId, role)) return true;
-  // Batch V1: only the ASD of a visit without a QP records the remediation response; the QP does it themselves.
+  // A booked visit lists the ASD as able to move it, but it is not waiting for anyone (Batch V2).
+  if (v.planningWorkflow.stageId !== 'booked' && canActInStage(PLANNING_WORKFLOW, v.planningWorkflow.stageId, role)) return true;
+  // Batch V1: only the ASD of a visit for an assessment centre records the remediation response; the QP and SDP do it themselves.
   if (v.planningWorkflow.stageId === 'booked' && v.reportWorkflow.stageId === REMEDIATION_AWAITING_STAGE) {
-    return role === 'ASD' && !visitHasQp(v.visitType);
+    return role === 'ASD' && remediationRecordedByAsd(v);
   }
   if (v.planningWorkflow.stageId === 'booked' && canActInStage(REPORT_WORKFLOW, v.reportWorkflow.stageId, role)) {
     return !v.reroutedToId || v.reroutedToId === personId;
@@ -53,6 +56,7 @@ const REPORT_RECEIVED_STAGES = new Set(['approved', 'remediation-awaiting', 'rem
 const PLANNING_PENDING_STAGES = new Set(['ad-planning', 'dd-recommend', 'domain-director-approval', 'sda-booking']);
 
 function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id: string) => void }) {
+  const today = toIsoDate(new Date());
   if (visits.length === 0) {
     return <EmptyState title="No visits" />;
   }
@@ -78,6 +82,7 @@ function VisitsTable({ visits, onSelect }: { visits: SiteVisit[]; onSelect: (id:
               <TableCell className="whitespace-nowrap">{v.visitDate || 'To be scheduled'}</TableCell>
               <TableCell>
                 <SiteVisitStatusBadge visit={v} />
+                {responseStatusOf(v, today) === 'awaiting' && <p className="mt-1 text-xs text-amber-700">{responseSummaryOf(v, today)}</p>}
               </TableCell>
               <TableCell>
                 <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onSelect(v.id); }}>

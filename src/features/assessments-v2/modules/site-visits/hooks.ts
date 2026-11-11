@@ -17,7 +17,7 @@ import {
   saveFreeTextNotes,
   saveLearnerAnswers,
   saveScriptVerification,
-  setResultsApprovedForSitting,
+  respondToVisitNotice,
   setStakeholderShare,
   updateVisitDetails,
   uploadEvidence,
@@ -138,8 +138,9 @@ export function useSharedVisitOutcomes(qpId: string | undefined) {
   });
 }
 
-export function useSetResultsApprovedForSitting() {
-  return useSiteVisitMutation((args: { id: string; approved: boolean }) => setResultsApprovedForSitting(args.id, args.approved));
+// Batch V2 (QCTO 29.36): the stakeholder's answer to a visit notice (or the ASD's, for an assessment centre).
+export function useRespondToVisitNotice() {
+  return useSiteVisitMutation(respondToVisitNotice);
 }
 
 // Batch V1 (05.14): refreshes the QP's Visit Outcomes list too, since that is where they respond.

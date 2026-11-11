@@ -61,6 +61,18 @@
 //  SV20  RPL/ARPL Monitoring   Khanya Skills Academy (SDP, no QP),      today - 6     Report submitted — waiting for the Deputy Director
 //                              Electrical Trades and Welding
 //
+// Batch V2 (QCTO 29.36, item 2.12): five visits added at the end, for the notice and response step.
+//  SV21  Marking & Moderation  Plumbing sitting today + 62 (Johan van    today + 62    Booked 3 working days ago, notified; the QP has not
+//                              der Merwe)                                               answered and has had one reminder
+//  SV22  RPL/ARPL Monitoring   Thabo Technical College (Welding)        today + 25    Booked; the SDP accepted the date
+//  SV23  RPL/ARPL Monitoring   Lerato Training Institute (Plumbing)     today + 20    Booked; the SDP is not available (reason and a
+//                                                                                     suggested date); the ASD can move the visit
+//  SV24  RPL/ARPL Monitoring   Khanya Skills Academy (Welding)          today + 40    Moved after "not available": back at Deputy Director
+//                                                                                     recommendation, old date, reason and answer in the history
+//  SV25  RPL/ARPL Monitoring   Thabo Technical College (Plumbing)       today + 9     Booked, unannounced: no notice, no response step
+// Every earlier visit predates the step (no notice, no response). SV3's Post-EISA questionnaires open because
+// its results batch (the Welding 40% batch) is approved: they read the real batch, not a flag on the visit.
+//
 // Planners (ASD): Lindiwe Khumalo / Riaan Pretorius. Deputy Director: Grace
 // Mokoena / Peter Botha. Domain Director: Michael van Wyk / Nokuthula Dube. Sub Domain Admin:
 // Karabo Sithole / Katlego Mahlangu. Report submitters (ASD): Sipho Ndlovu / Thandeka Zulu.
@@ -72,6 +84,7 @@ import { buildPostEisaMonitoringVisitSections } from '../postEisaMonitoringSecti
 import { buildRplArplMonitoringVisitSections } from '../rplArplVisitSections';
 import { buildMarkingGuidelineDiscussionSections, buildMarkingModerationVisitSections } from '../siteVisitFormSections';
 import { isChecklistComplete, type ChecklistSection } from '../../../shared/checklist/types';
+import type { Person } from '../../../shared/people/types';
 import type { Role } from '../../../types';
 import type { ResultsBatch } from '../../../modules/approval-of-results/types';
 import { competencyRatePercent, isBelowPostEisaThreshold } from '../../../modules/approval-of-results/workflow';
@@ -92,27 +105,40 @@ import {
 } from '../../../modules/site-visits/config';
 import { evidenceOf, hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE, type VisitEvidenceCategory } from '../../../modules/site-visits/evidence';
 import { freeTextFieldsForType } from '../../../modules/site-visits/freeTextFields';
-import { bookedVisitNotificationBody, remediationRequestedNotification, remediationSubmittedNotification } from '../../../modules/site-visits/notificationText';
-import { openRemediationRound, remediationRecordedByAsd, remediationRoundsOf, remediationStakeholderName } from '../../../modules/site-visits/remediation';
+import {
+  bookedVisitNotificationBody,
+  remediationRequestedNotification,
+  remediationSubmittedNotification,
+  visitMovedNotification,
+  visitNoticeNotification,
+  visitReminderNotification,
+  visitResponseNotification,
+} from '../../../modules/site-visits/notificationText';
+import { openRemediationRound, remediationResponderOf, remediationRoundsOf, remediationStakeholderName } from '../../../modules/site-visits/remediation';
+import { remindersDueBy, visitNeedsNotice, visitStakeholderOf } from '../../../modules/site-visits/stakeholderResponse';
 import { getScriptVerificationIssues, visitHasScriptVerification } from '../../../modules/site-visits/scriptVerification';
-import { isSharedWithStakeholder, visitCanBeShared } from '../../../modules/site-visits/stakeholderShare';
+import { isSharedWithStakeholder, visitCanBeShared, visitShareRecipientOf } from '../../../modules/site-visits/stakeholderShare';
 import type {
   NotificationFlag,
   ScriptVerificationResult,
   RemediationRound,
   ScriptVerificationRow,
   SiteVisit,
+  StakeholderAnswer,
+  VisitDateMove,
   VisitDomain,
   VisitQualification,
+  VisitStakeholder,
   VisitType,
 } from '../../../modules/site-visits/types';
 import { isMultiQualificationVisit, qualificationListIssues, saqaIdForQualification, visitSittingIdsOf } from '../../../modules/site-visits/visitQualifications';
 import { DEFAULT_VISIT_DOMAIN } from '../../../modules/site-visits/visitDomains';
 import { isPerQualificationVisit, visitHasPurpose, visitHasQp, visitHasSdp, visitIsMeeting, visitSubject } from '../../../modules/site-visits/visitTypeLabels';
 import { PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../../../modules/site-visits/workflow';
+import { isWorkingDay, subtractWorkingDays, toIsoDate } from '../../../shared/dates/workingDays';
 import { RESULTS_SEED_IDS } from './approvalOfResults';
 import { sittingAt } from './eisaRegistration';
-import { answerChecklist, audit, createClock, dateOf, notify, seedId, seedPerson, step, workingDateFromToday, type SeedClock, type SeedLog } from './helpers';
+import { answerChecklist, audit, createClock, dateOf, notify, seedId, seedPerson, step, todayIso, workingDateFromToday, type SeedClock, type SeedLog } from './helpers';
 
 const VISIT_ID_GROUP = 8;
 
@@ -229,6 +255,12 @@ interface VisitSeedBuilder {
   requireFurtherRemediation: (actorId: string, atDaysAgo: number, items: string) => VisitSeedBuilder;
   report: (actionId: string, actorId: string, atDaysAgo: number, note?: string) => VisitSeedBuilder;
   shareWithStakeholder: (actorId: string, atDaysAgo: number, outcomeSummary: string) => VisitSeedBuilder;
+  // Batch V2 (QCTO 29.36): the notice sent when the visit was booked, the reminders due by today, the stakeholder's
+  // answer, and the ASD moving the visit back through approval.
+  sendNotice: () => VisitSeedBuilder;
+  remindersSoFar: () => VisitSeedBuilder;
+  respondToNotice: (answer: StakeholderAnswer, personId: string, atDaysAgo: number, reason?: string, suggestedDate?: string) => VisitSeedBuilder;
+  moveVisit: (actorId: string, atDaysAgo: number, newDate: string, source: VisitDateMove['reasonSource'], reason: string) => VisitSeedBuilder;
   done: () => void;
 }
 
@@ -268,12 +300,20 @@ export function seedSiteVisits(
     };
   }
 
+  // api.ts notifyStakeholder(): a QP or SDP by name, an assessment centre through the ASD.
+  function notifyStakeholder(stakeholder: VisitStakeholder, at: string, text: { title: string; body: string }): void {
+    if (stakeholder.kind === 'assessment-centre') notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, ...text });
+    else notify(log, at, { recipientRole: stakeholder.kind, recipientPersonId: stakeholder.id ?? undefined, ...text });
+  }
+
   // api.ts notifyRemediationRequested().
   function notifyRequested(visit: SiteVisit, round: RemediationRound, at: string): void {
     const text = remediationRequestedNotification(visit, round.items, round.round);
-    if (remediationRecordedByAsd(visit)) {
+    const responder = remediationResponderOf(visit);
+    if (responder === 'ASD') {
       notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, title: `${text.title} — record the response`, body: `${text.body} Record the response of ${round.sharedWith} on the visit.` });
-      if (visit.sdpName) notify(log, at, { recipientRole: 'SDP', title: text.title, body: text.body });
+    } else if (responder === 'SDP') {
+      notify(log, at, { recipientRole: 'SDP', recipientPersonId: visit.sdpId ?? undefined, title: text.title, body: `${text.body} (${round.sharedWith}). See Site Visits.` });
     } else {
       notify(log, at, { recipientRole: 'QP', title: text.title, body: `${text.body} (${visit.qpName}). See Visit Outcomes.` });
     }
@@ -282,6 +322,8 @@ export function seedSiteVisits(
   function builder(initial: SiteVisit, clock: SeedClock, plannerId: string | null): VisitSeedBuilder {
     let visit = initial;
     const subject = () => visitSubject(visit);
+    // The booking step: the notice goes out at that moment, from that person (api.ts sendNotice()).
+    let booking: { at: string; actor: Person } | null = null;
 
     const api: VisitSeedBuilder = {
       // updateVisitDetails(): no audit entry or notification.
@@ -302,6 +344,7 @@ export function seedSiteVisits(
         if (actionId === 'plan-book' && dateOf(at) > visit.visitDate) throw new Error(`Demo seed: "${subject()}" booked after its visit date.`);
         const planningWorkflow = step(log, { definition: PLANNING_WORKFLOW, state: visit.planningWorkflow, actionId, actor, at, recordType: 'site-visit-planning', recordId: visit.id, note });
         visit = { ...visit, planningWorkflow };
+        if (planningWorkflow.stageId === 'booked') booking = { at, actor };
         if (actionId === 'plan-submit') {
           notify(log, at, { recipientRole: PLAN_RECOMMENDER_ROLE, title: 'Visit plan awaiting recommendation', body: `"${subject()}" (${visit.visitType}) needs Deputy Director recommendation.` });
         }
@@ -385,7 +428,7 @@ export function seedSiteVisits(
         const reportWorkflow = step(log, { definition: REPORT_WORKFLOW, state: visit.reportWorkflow, actionId: 'report-approve-remediation', actor, at, recordType: 'site-visit-report', recordId: visit.id, note: items });
         const round = seedRemediationRound(visit, items, actor.name, actor.id, at);
         visit = { ...visit, reportWorkflow, remediationRounds: [...remediationRoundsOf(visit), round] };
-        if (visitHasQp(visit.visitType) && !isSharedWithStakeholder(visit)) {
+        if (visitShareRecipientOf(visit) && !isSharedWithStakeholder(visit)) {
           visit = {
             ...visit,
             stakeholderShare: { shared: true, outcomeSummary: 'Approved with remediation. The remediation items are listed with this report.', changedAt: at, changedBy: actor.name, changedById: actor.id },
@@ -401,8 +444,9 @@ export function seedSiteVisits(
         const actor = seedPerson(actorId);
         const round = openRemediationRound(visit);
         if (!round || visit.reportWorkflow.stageId !== 'remediation-awaiting') throw new Error(`Demo seed: "${subject()}" is not waiting for a remediation response.`);
-        const expected = remediationRecordedByAsd(visit) ? REPORT_SUBMITTER_ROLE : 'QP';
-        if (actor.role !== expected || (expected === 'QP' && actor.id !== visit.qpId)) throw new Error(`Demo seed: ${actor.name} cannot respond to the remediation of "${subject()}".`);
+        const responder = remediationResponderOf(visit);
+        const expected = responder === 'ASD' ? REPORT_SUBMITTER_ROLE : responder;
+        if (actor.role !== expected || (responder === 'QP' && actor.id !== visit.qpId) || (responder === 'SDP' && actor.id !== visit.sdpId)) throw new Error(`Demo seed: ${actor.name} cannot respond to the remediation of "${subject()}".`);
         if (!response.trim()) throw new Error('Demo seed: a remediation response needs text.');
         const evidence = evidenceFileNames.map((fileName, i) => ({ fileName, fileSize: 262_144 + i * 1024, uploadedAt: clock.at(atDaysAgo, 11), uploadedBy: actor.name }));
         for (const f of evidence) {
@@ -414,7 +458,7 @@ export function seedSiteVisits(
           ...visit,
           reportWorkflow,
           remediationRounds: remediationRoundsOf(visit).map((r) =>
-            r.id === round.id ? { ...r, evidence, response, submittedBy: actor.name, submittedById: actor.id, submittedByRole: actor.role === 'QP' ? 'QP' : 'ASD', submittedAt: at } : r,
+            r.id === round.id ? { ...r, evidence, response, submittedBy: actor.name, submittedById: actor.id, submittedByRole: actor.role === 'QP' ? 'QP' : actor.role === 'SDP' ? 'SDP' : 'ASD', submittedAt: at } : r,
           ),
         };
         const text = remediationSubmittedNotification(visit);
@@ -498,6 +542,116 @@ export function seedSiteVisits(
         }
         return api;
       },
+      // api.ts sendNotice(), run when the visit was booked: the stakeholder (the ASD, for an assessment centre) is told.
+      sendNotice() {
+        const stakeholder = visitStakeholderOf(visit);
+        if (!booking || !stakeholder || !visitNeedsNotice(visit)) throw new Error(`Demo seed: "${subject()}" has no notice to send (it must be booked, notified, dated and have a stakeholder).`);
+        notifyStakeholder(stakeholder, booking.at, visitNoticeNotification(visit, stakeholder.kind === 'assessment-centre', stakeholder.name));
+        audit(log, {
+          recordType: 'site-visit-planning',
+          recordId: visit.id,
+          actor: booking.actor,
+          action: `Visit notice sent to ${stakeholder.name} (${stakeholder.kind === 'assessment-centre' ? 'assessment centre' : stakeholder.kind})`,
+          note: `Visit date ${visit.visitDate}`,
+          timestamp: booking.at,
+        });
+        visit = { ...visit, stakeholderNotice: { sentAt: booking.at, sentTo: stakeholder.kind, sentToName: stakeholder.name }, stakeholderResponse: undefined, reminders: [] };
+        return api;
+      },
+      // api.ts syncStakeholderReminders(): every reminder due by today, with the same dates and counts, so
+      // the first load of the app finds nothing more to send.
+      remindersSoFar() {
+        const stakeholder = visitStakeholderOf(visit);
+        if (!stakeholder || !visit.stakeholderNotice) throw new Error(`Demo seed: "${subject()}" has no notice, so no reminders.`);
+        const due = remindersDueBy(visit, todayIso());
+        const fresh = due.map((date, i) => ({ number: i + 1, sentAt: new Date(Math.min(Date.parse(`${date}T07:00:00Z`), Date.now())).toISOString() }));
+        for (const reminder of fresh) {
+          notifyStakeholder(stakeholder, reminder.sentAt, visitReminderNotification(visit, stakeholder.kind === 'assessment-centre', stakeholder.name, reminder.number));
+          log.audit.push({
+            id: crypto.randomUUID(),
+            recordType: 'site-visit-planning',
+            recordId: visit.id,
+            actorRole: REPORT_SUBMITTER_ROLE,
+            actorId: 'system',
+            actorName: 'System (reminder)',
+            action: `Reminder ${reminder.number} sent to ${stakeholder.name}`,
+            note: `No response to the visit date ${visit.visitDate} yet.`,
+            timestamp: reminder.sentAt,
+          });
+        }
+        visit = { ...visit, reminders: fresh };
+        return api;
+      },
+      // api.ts respondToVisitNotice().
+      respondToNotice(answer, personId, atDaysAgo, reason = '', suggestedDate = '') {
+        const actor = seedPerson(personId);
+        const stakeholder = visitStakeholderOf(visit);
+        if (!stakeholder || !visit.stakeholderNotice || visit.stakeholderResponse) throw new Error(`Demo seed: "${subject()}" has no open notice to respond to.`);
+        if (stakeholder.id !== actor.id) throw new Error(`Demo seed: ${actor.name} is not the stakeholder of "${subject()}".`);
+        if (answer === 'not-available' && !reason.trim()) throw new Error('Demo seed: "not available" needs a reason.');
+        const at = clock.at(atDaysAgo, 11);
+        if (at <= visit.stakeholderNotice.sentAt) throw new Error(`Demo seed: the answer to "${subject()}" is dated before its notice.`);
+        visit = {
+          ...visit,
+          stakeholderResponse: {
+            answer,
+            reason: answer === 'accepted' ? '' : reason,
+            suggestedDate: answer === 'accepted' ? '' : suggestedDate,
+            respondedBy: actor.name,
+            respondedById: actor.id,
+            respondedByRole: actor.role === 'QP' ? 'QP' : 'SDP',
+            respondedAt: at,
+          },
+        };
+        audit(log, {
+          recordType: 'site-visit-planning',
+          recordId: visit.id,
+          actor,
+          action: answer === 'accepted' ? `Accepted the visit date (${visit.visitDate})` : `Not available on ${visit.visitDate}`,
+          note: answer === 'accepted' ? undefined : `${reason}${suggestedDate ? ` Suggested date: ${suggestedDate}.` : ''}`,
+          timestamp: at,
+        });
+        const text = visitResponseNotification(visit, answer, stakeholder.name, reason, suggestedDate);
+        notify(log, at, { recipientRole: REPORT_SUBMITTER_ROLE, ...text });
+        notify(log, at, { recipientRole: PLAN_RECOMMENDER_ROLE, ...text });
+        return api;
+      },
+      // api.ts performPlanningAction('plan-move'): back to Deputy Director recommendation with the new date.
+      moveVisit(actorId, atDaysAgo, newDate, source, reason) {
+        const actor = seedPerson(actorId);
+        const at = clock.at(atDaysAgo, 12);
+        if (visit.reportWorkflow.stageId !== 'awaiting-execution') throw new Error(`Demo seed: "${subject()}" can only be moved before it is carried out.`);
+        if (source === 'stakeholder-not-available' && visit.stakeholderResponse?.answer !== 'not-available') throw new Error(`Demo seed: the stakeholder of "${subject()}" did not say they are not available.`);
+        if (!newDate || newDate === visit.visitDate || newDate < todayIso()) throw new Error(`Demo seed: "${subject()}" needs a different, future date to move to.`);
+        const sourceLabel = source === 'stakeholder-not-available' ? 'Stakeholder not available' : 'QCTO decision';
+        const planningWorkflow = step(log, {
+          definition: PLANNING_WORKFLOW,
+          state: visit.planningWorkflow,
+          actionId: 'plan-move',
+          actor,
+          at,
+          recordType: 'site-visit-planning',
+          recordId: visit.id,
+          note: `From ${visit.visitDate} to ${newDate}. ${sourceLabel}: ${reason}`,
+        });
+        const move: VisitDateMove = {
+          id: `${visit.id}-move-${(visit.dateMoves ?? []).length + 1}`,
+          fromDate: visit.visitDate,
+          toDate: newDate,
+          reason,
+          reasonSource: source,
+          movedBy: actor.name,
+          movedById: actor.id,
+          movedAt: at,
+          previousNotice: visit.stakeholderNotice ?? null,
+          previousResponse: visit.stakeholderResponse ?? null,
+          previousReminders: visit.reminders?.length ?? 0,
+        };
+        const fromDate = visit.visitDate;
+        visit = { ...visit, planningWorkflow, visitDate: newDate, dateMoves: [...(visit.dateMoves ?? []), move], stakeholderNotice: undefined, stakeholderResponse: undefined, reminders: undefined };
+        notify(log, at, { recipientRole: PLAN_RECOMMENDER_ROLE, ...visitMovedNotification(visit, fromDate, reason) });
+        return api;
+      },
       done() {
         visits.push(visit);
       },
@@ -565,7 +719,6 @@ export function seedSiteVisits(
       freeTextNotes: {},
       facilitatorAnswers: {},
       learnerAnswers: {},
-      resultsApprovedForSitting: false,
       completedBy: '',
       completedDate: '',
       sourceRegistrationId: null,
@@ -621,7 +774,6 @@ export function seedSiteVisits(
       freeTextNotes: {},
       facilitatorAnswers: {},
       learnerAnswers: {},
-      resultsApprovedForSitting: true,
       completedBy: '',
       completedDate: '',
       sourceRegistrationId: null,
@@ -682,7 +834,6 @@ export function seedSiteVisits(
       freeTextNotes: {},
       facilitatorAnswers: {},
       learnerAnswers: {},
-      resultsApprovedForSitting: false,
       completedBy: '',
       completedDate: '',
       sourceRegistrationId: item.sourceRegistrationId,
@@ -1018,6 +1169,103 @@ export function seedSiteVisits(
     .execute(THANDEKA, 3, true)
     .upload('report', 'RPL_ARPL_Monitoring_Visit_Report_Khanya.pdf', THANDEKA, 3)
     .report('report-submit', THANDEKA, 2)
+    .done();
+
+  // Batch V2 (QCTO 29.36, item 2.12): five visits for the notice, response, reminder and move steps. The
+  // days are working days back from today (from the last working day when today is a weekend or a public
+  // holiday), so the reminder counts come out the same on every weekday: a notice sent 3 working days back
+  // has had exactly one reminder (at 2) and the next is due after today (at 4); an answer at 3 or 2 working
+  // days back came before any reminder was due. Every earlier visit predates the step: no notice, no response.
+  const today = todayIso();
+  let lastWorkingDay = today;
+  while (!isWorkingDay(lastWorkingDay)) lastWorkingDay = toIsoDate(new Date(Date.parse(`${lastWorkingDay}T00:00:00Z`) - 24 * 60 * 60 * 1000));
+  // Calendar days ago of that working day, the unit the seed clock takes (it moves back to a working day by itself).
+  const wdAgo = (workingDays: number): number => Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${subtractWorkingDays(lastWorkingDay, workingDays)}T00:00:00Z`)) / (24 * 60 * 60 * 1000));
+
+  // SV21 — Marking & Moderation for Johan van der Merwe (Plumbing sitting at today + 62): booked 3 working
+  // days back and notified; the QP has not answered, and has had one reminder.
+  planVisit({ visitType: 'marking-moderation', qpId: JOHAN, sitting: sittingAt(sittings, 'Plumbing', 62), venue: 'Marking centre, Bloemfontein', plannerId: RIAAN, createdDaysAgo: wdAgo(14) })
+    .submitPlan(wdAgo(13), 'Monitor the marking session and verify a sample of marked and moderated scripts.')
+    .plan('plan-recommend', GRACE, wdAgo(9))
+    .plan('plan-approve', NOKUTHULA, wdAgo(6))
+    .plan('plan-book', KATLEGO, wdAgo(3))
+    .sendNotice()
+    .remindersSoFar()
+    .done();
+
+  // SV22 — RPL/ARPL monitoring at Thabo Technical College (Welding): booked 4 working days back; the SDP accepted the date.
+  planVisit({
+    visitType: 'rpl-arpl-monitoring',
+    rplSdpId: 'sdp-thabo-technical-college',
+    rplQualifications: ['Welding'],
+    visitDate: workingDateFromToday(25),
+    venue: 'Thabo Technical College, Pretoria',
+    plannerId: LINDIWE,
+    createdDaysAgo: wdAgo(15),
+  })
+    .submitPlan(wdAgo(14), 'Monitor the RPL/ARPL process at the SDP for Welding.')
+    .plan('plan-recommend', PETER, wdAgo(10))
+    .plan('plan-approve', MICHAEL, wdAgo(7))
+    .plan('plan-book', KARABO, wdAgo(4))
+    .sendNotice()
+    .respondToNotice('accepted', 'sdp-thabo-technical-college', wdAgo(3))
+    .done();
+
+  // SV23 — RPL/ARPL monitoring at Lerato Training Institute (Plumbing): booked 3 working days back; the SDP said it is not
+  // available, with a reason and a suggested date. The ASD can move the visit.
+  planVisit({
+    visitType: 'rpl-arpl-monitoring',
+    rplSdpId: 'sdp-lerato-training-institute',
+    rplQualifications: ['Plumbing'],
+    visitDate: workingDateFromToday(20),
+    venue: 'Lerato Training Institute, Durban',
+    plannerId: RIAAN,
+    createdDaysAgo: wdAgo(14),
+  })
+    .submitPlan(wdAgo(13), 'Monitor the RPL/ARPL process at the SDP for Plumbing.')
+    .plan('plan-recommend', GRACE, wdAgo(9))
+    .plan('plan-approve', NOKUTHULA, wdAgo(6))
+    .plan('plan-book', KATLEGO, wdAgo(3))
+    .sendNotice()
+    .respondToNotice('not-available', 'sdp-lerato-training-institute', wdAgo(2), 'Our assessors are on the national moderation workshop that week and the venue is booked for a learnership intake.', workingDateFromToday(34))
+    .done();
+
+  // SV24 — RPL/ARPL monitoring at Khanya Skills Academy (Welding): the SDP said it was not available on the first date, and
+  // the ASD moved the visit to the date it suggested. It is back at Deputy Director recommendation, with the old date,
+  // the reason and the SDP's answer in the history.
+  planVisit({
+    visitType: 'rpl-arpl-monitoring',
+    rplSdpId: 'sdp-khanya-skills-academy',
+    rplQualifications: ['Welding'],
+    visitDate: workingDateFromToday(18),
+    venue: 'Khanya Skills Academy, Johannesburg',
+    plannerId: RIAAN,
+    createdDaysAgo: wdAgo(22),
+  })
+    .submitPlan(wdAgo(21), 'Monitor the RPL/ARPL process at the SDP for Welding.')
+    .plan('plan-recommend', PETER, wdAgo(17))
+    .plan('plan-approve', NOKUTHULA, wdAgo(14))
+    .plan('plan-book', KARABO, wdAgo(11))
+    .sendNotice()
+    .respondToNotice('not-available', 'sdp-khanya-skills-academy', wdAgo(10), 'The SDP is closed for the staff development week on that date.', workingDateFromToday(40))
+    .moveVisit(RIAAN, wdAgo(1), workingDateFromToday(40), 'stakeholder-not-available', 'The SDP is closed for the staff development week on that date. Moved to the date it suggested.')
+    .done();
+
+  // SV25 — RPL/ARPL monitoring at Thabo Technical College (Plumbing), unannounced (CR-051): booked, no notice and no response step.
+  planVisit({
+    visitType: 'rpl-arpl-monitoring',
+    rplSdpId: 'sdp-thabo-technical-college',
+    rplQualifications: ['Plumbing'],
+    visitDate: workingDateFromToday(9),
+    venue: 'Thabo Technical College, Pretoria',
+    notificationFlag: 'unannounced',
+    plannerId: LINDIWE,
+    createdDaysAgo: wdAgo(10),
+  })
+    .submitPlan(wdAgo(9), 'Unannounced monitoring of the RPL/ARPL process at the SDP for Plumbing.')
+    .plan('plan-recommend', GRACE, wdAgo(6))
+    .plan('plan-approve', MICHAEL, wdAgo(4))
+    .plan('plan-book', KATLEGO, wdAgo(2))
     .done();
 
   // QCTO feedback 2.8: final approval below the threshold always creates the visit, so the seed

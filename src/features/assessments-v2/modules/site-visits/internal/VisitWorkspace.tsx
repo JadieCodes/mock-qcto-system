@@ -18,6 +18,7 @@ import { ValidationSummary } from '../../../shared/validation/ValidationSummary'
 import { canActInStage } from '../../../shared/workflow/engine';
 import { ExecutionForm } from '../components/ExecutionForm';
 import { QualificationList } from '../components/QualificationList';
+import { StakeholderResponseCard } from '../components/StakeholderResponseCard';
 import { RemediationHistory, RemediationResponseForm } from '../components/RemediationSection';
 import { hasVisitReportFile, MISSING_VISIT_REPORT_MESSAGE } from '../evidence';
 import { getScriptVerificationIssues } from '../scriptVerification';
@@ -47,7 +48,7 @@ import {
   REMEDIATION_REVIEW_STAGE,
   visitCanHaveRemediation,
 } from '../remediation';
-import { isSharedWithStakeholder, SHARE_WITH_STAKEHOLDER_LABEL, shareIsLockedByRemediation, visitCanBeShared } from '../stakeholderShare';
+import { isSharedWithStakeholder, SHARE_WITH_STAKEHOLDER_LABEL, shareIsLockedByRemediation, visitCanBeShared, visitShareRecipientOf } from '../stakeholderShare';
 import { isMultiQualificationVisit } from '../visitQualifications';
 import { PLAN_SEND_BACK_TO_PLANNER_LABEL, PLANNING_WORKFLOW, REPORT_WORKFLOW } from '../workflow';
 import { VISIT_DOMAIN_LABELS, VISIT_DOMAIN_OPTIONS, visitDomainOf } from '../visitDomains';
@@ -148,6 +149,8 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
   const { role } = useV2Role();
   const updateDetails = useUpdateVisitDetails();
   const canEdit = role !== 'QP' && visit.reportWorkflow.stageId === 'awaiting-execution';
+  // QCTO 29.36: a booked visit's date changes only through "Move the visit" (Planning tab), which goes back through approval.
+  const canEditDate = canEdit && (visit.planningWorkflow.stageId !== 'booked' || !visit.visitDate);
 
   return (
     <div className="space-y-4">
@@ -221,9 +224,10 @@ function DetailsTab({ visit }: { visit: SiteVisit }) {
           <Input
             type="date"
             value={visit.visitDate}
-            disabled={!canEdit}
+            disabled={!canEditDate}
             onChange={(e) => updateDetails.mutate({ id: visit.id, patch: { visitDate: e.target.value } })}
           />
+          {canEdit && !canEditDate && <p className="text-xs text-gray-400">Booked: use Move the visit on the Planning tab.</p>}
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-gray-400 uppercase">Venue</Label>
@@ -290,14 +294,18 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
   const [dialogAction, setDialogAction] = useState<PlanningDialogAction>(null);
   const stage = visit.planningWorkflow.stageId;
 
-  if (visit.sourceRegistrationId) {
+  // An auto-created RPL/ARPL visit starts booked. Once it has been moved it goes through the normal chain.
+  if (visit.sourceRegistrationId && stage === 'booked' && !visit.dateMoves?.length) {
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-        <p className="font-semibold">Automatically created — planning chain skipped</p>
-        <p className="mt-1">{visit.planNote}</p>
-        <div className="mt-3 text-gray-900">
-          <QualificationList visit={visit} />
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <p className="font-semibold">Automatically created — planning chain skipped</p>
+          <p className="mt-1">{visit.planNote}</p>
+          <div className="mt-3 text-gray-900">
+            <QualificationList visit={visit} />
+          </div>
         </div>
+        <StakeholderResponseCard visit={visit} />
       </div>
     );
   }
@@ -347,6 +355,8 @@ function PlanningTab({ visit }: { visit: SiteVisit }) {
       </div>
 
       <QualificationList visit={visit} />
+
+      <StakeholderResponseCard visit={visit} />
 
       <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase">ASD planning</p>
@@ -480,6 +490,8 @@ function StakeholderShareCard({ visit }: { visit: SiteVisit }) {
   const canDecide = role === STAKEHOLDER_SHARE_ROLE && !locked;
   const change = visit.stakeholderShare;
   const actor = { visitId: visit.id, actorRole: role, actorId: person.id, actorName: person.name };
+  const recipient = visitShareRecipientOf(visit);
+  const recipientName = recipient?.name ?? '';
 
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
@@ -500,16 +512,16 @@ function StakeholderShareCard({ visit }: { visit: SiteVisit }) {
           <div className="flex items-center gap-1.5">
             <RadioGroupItem id={`share-yes-${visit.id}`} value="yes" />
             <Label htmlFor={`share-yes-${visit.id}`} className="text-sm font-normal">
-              Yes — share with {visit.qpName}
+              Yes — share with {recipientName}
             </Label>
           </div>
         </RadioGroup>
       ) : (
-        <p className="text-sm text-gray-700">{shared ? `Shared with ${visit.qpName}.` : 'Not shared.'}</p>
+        <p className="text-sm text-gray-700">{shared ? `Shared with ${recipientName}.` : 'Not shared.'}</p>
       )}
       {locked && (
         <p className="text-xs text-amber-700">
-          Shared automatically because remediation was requested. The report and the remediation items stay shared with {visit.qpName}.
+          Shared automatically because remediation was requested. The report and the remediation items stay shared with {recipientName}.
         </p>
       )}
       {change && (
@@ -526,8 +538,8 @@ function StakeholderShareCard({ visit }: { visit: SiteVisit }) {
       <ReasonDialog
         open={summaryOpen}
         onOpenChange={setSummaryOpen}
-        title={`Share the report with ${visit.qpName}`}
-        description="The QP will see the visit type, date, this summary and the visit report."
+        title={`Share the report with ${recipientName}`}
+        description={`${recipient?.kind ?? 'The stakeholder'} will see the visit type, date, this summary and the visit report.`}
         fieldLabel="Outcome summary *"
         placeholder="Summarise the outcome of the visit..."
         confirmLabel="Share"
@@ -654,7 +666,7 @@ function ReportTab({ visit }: { visit: SiteVisit }) {
       {canRecordResponse && <RemediationResponseForm visit={visit} />}
       {isRemediationStage(stage) && !canRecordResponse && stage === REMEDIATION_AWAITING_STAGE && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Waiting for {remediationRecordedByAsd(visit) ? `the ASD to record the response of ${remediationStakeholderName(visit)}` : `${visit.qpName} to respond`}.
+          Waiting for {remediationRecordedByAsd(visit) ? `the ASD to record the response of ${remediationStakeholderName(visit)}` : `${remediationStakeholderName(visit)} to respond`}.
         </div>
       )}
       {canReviewRemediation && (

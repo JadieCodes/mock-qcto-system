@@ -1,11 +1,11 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { QP_DIRECTORY } from '../../../mock/data/qpDirectory';
 import { FACILITATOR_QUESTIONNAIRE_QUESTIONS, LEARNER_QUESTIONNAIRE_QUESTIONS } from '../../../mock/data/pemQuestionnaires';
 import { Checklist } from '../../../shared/checklist/Checklist';
+import { useResultsBatches } from '../../approval-of-results/hooks';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { EVIDENCE_AREAS, evidenceOf, type VisitEvidenceCategory } from '../evidence';
 import { freeTextFieldsForType } from '../freeTextFields';
@@ -15,10 +15,10 @@ import {
   useSaveFacilitatorAnswers,
   useSaveFreeTextNotes,
   useSaveLearnerAnswers,
-  useSetResultsApprovedForSitting,
   useUpdateVisitDetails,
   useUploadEvidence,
 } from '../hooks';
+import { QUESTIONNAIRES_LOCKED_MESSAGE, resultsApprovedForVisit } from '../resultsStatus';
 import { visitHasScriptVerification } from '../scriptVerification';
 import type { SiteVisit } from '../types';
 import { isMultiQualificationVisit, visitQualificationsOf } from '../visitQualifications';
@@ -209,10 +209,12 @@ export function ExecutionForm({ visit, readonly }: { visit: SiteVisit; readonly:
   const saveCompletionDetails = useSaveCompletionDetails();
   const saveFacilitatorAnswers = useSaveFacilitatorAnswers();
   const saveLearnerAnswers = useSaveLearnerAnswers();
-  const setResultsApproved = useSetResultsApprovedForSitting();
+  const { data: resultsBatches = [] } = useResultsBatches();
 
   const freeTextFields = freeTextFieldsForType(visit.visitType);
   const isPostEisaMonitoring = visit.visitType === 'post-eisa-monitoring';
+  // CR-057: read from the real results batch in Approval of Results, not switched by hand.
+  const resultsApproved = resultsApprovedForVisit(visit, resultsBatches);
 
   return (
     <div className="space-y-6">
@@ -241,29 +243,13 @@ export function ExecutionForm({ visit, readonly }: { visit: SiteVisit; readonly:
 
       {isPostEisaMonitoring && (
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Facilitator &amp; Learner Questionnaires</p>
-              <p className="text-xs text-gray-500">
-                Only shown once the related results batch is approved.
-              </p>
-            </div>
-            {!readonly && (
-              <div className="flex items-center gap-2">
-                <Label htmlFor="results-approved-toggle" className="text-xs text-gray-500">
-                  Simulate: results approved
-                </Label>
-                <Switch
-                  id="results-approved-toggle"
-                  checked={visit.resultsApprovedForSitting}
-                  onCheckedChange={(checked) => setResultsApproved.mutate({ id: visit.id, approved: checked })}
-                />
-              </div>
-            )}
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Facilitator &amp; Learner Questionnaires</p>
+            <p className="text-xs text-gray-500">Open once the results for this sitting are approved in Approval of Results.</p>
           </div>
 
-          {!visit.resultsApprovedForSitting ? (
-            <p className="text-sm text-gray-400">Not available yet — the related results batch has not been approved.</p>
+          {!resultsApproved ? (
+            <p className="text-sm text-gray-400">{QUESTIONNAIRES_LOCKED_MESSAGE}</p>
           ) : (
             <div className="space-y-6">
               <div className="space-y-3">

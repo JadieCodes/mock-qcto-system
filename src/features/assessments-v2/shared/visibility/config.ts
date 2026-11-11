@@ -13,12 +13,11 @@ export const EXTERNAL_MODULE_HIDDEN_FOR_ROLE: Record<string, Role[]> = {
   'instrument-validation': ['SDP'], // CR-018
   'eisa-registration': ['QP'],
   'eisa-confirmation': ['SDP'],
-  // QCTO feedback 2.12 (replaces CR-047's "QP sees own visits"): visits are scheduled by QCTO,
-  // so external Site Visits is hidden and blocked for every external role. The external screens
-  // stay in modules/site-visits/external/ but are never reached.
-  'site-visits': ['SDP', 'QP'],
-  // Shared visit outcomes: the QP's read-only list of visits shared with them. Separate from
-  // site-visits above, which stays hidden and blocked for the QP.
+  // Batch V2 (QCTO 29.36, 29 Oct 3:05:39 to 3:16:43): the QP and the SDP are told about a booked visit in
+  // the system and respond to it, so external Site Visits is open to both again (CR-047). Each sees only
+  // their own visits. It was hidden for both after QCTO feedback 2.12.
+  // Shared visit outcomes: the QP's read-only list of visits shared with them (the SDP sees its shared
+  // reports on its Site Visits list).
   'visit-outcomes': ['SDP'],
   // QCTO feedback 3.14: the SDP now opens Approval of Results too, but only its FISA tab
   // (APPROVAL_OF_RESULTS_EXTERNAL_TABS below).

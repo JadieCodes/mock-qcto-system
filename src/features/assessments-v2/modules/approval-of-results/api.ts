@@ -11,7 +11,7 @@ import { listRecords as listConfirmationRecords } from '../eisa-confirmation/api
 import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
 import { isConfirmationAccepted } from '../eisa-confirmation/workflow';
 import { listRegistrationsForSitting } from '../eisa-registration/api';
-import { createVisit, listVisits, setResultsApprovedForSitting } from '../site-visits/api';
+import { createVisit, listVisits } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
 import type { SiteVisit } from '../site-visits/types';
 import { visitSittingIdsOf } from '../site-visits/visitQualifications';
@@ -576,7 +576,6 @@ async function ensurePemVisitForBatch(batchId: string, actor: PemActor, how: 'au
       createdBy: actor.name,
       createdById: actor.id,
     });
-    await setResultsApprovedForSitting(visit.id, true);
     visitId = visit.id;
     appendAuditEntry({
       recordType: 'site-visit-planning',

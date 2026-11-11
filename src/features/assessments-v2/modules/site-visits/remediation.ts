@@ -41,8 +41,15 @@ export function remediationStakeholderLabel(visit: SiteVisit): string {
   return visitHasQp(visit.visitType) ? 'QP' : visitSiteKindLabel(visit);
 }
 
-// Who records the response: the QP on their Visit Outcomes page, or — until a later batch gives
-// SDPs their own view — the ASD on the visit, for a stakeholder without a QP.
+// Who answers the items: the QP for a visit with a QP, the SDP for a visit held at an SDP (Batch V2
+// gave SDPs their own Site Visits list), and the ASD for an assessment centre, which has no portal.
+export type RemediationResponder = 'QP' | 'SDP' | 'ASD';
+
+export function remediationResponderOf(visit: SiteVisit): RemediationResponder {
+  if (visitHasQp(visit.visitType)) return 'QP';
+  return visit.sdpId ? 'SDP' : 'ASD';
+}
+
 export function remediationRecordedByAsd(visit: SiteVisit): boolean {
-  return !visitHasQp(visit.visitType);
+  return remediationResponderOf(visit) === 'ASD';
 }

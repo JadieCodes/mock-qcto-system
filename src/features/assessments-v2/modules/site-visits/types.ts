@@ -84,9 +84,62 @@ export interface RemediationRound {
   // without a QP.
   submittedBy: string | null;
   submittedById: string | null;
-  submittedByRole: 'QP' | 'ASD' | null;
+  submittedByRole: 'QP' | 'SDP' | 'ASD' | null;
   submittedAt: string | null;
   review: RemediationReview | null;
+}
+
+// Batch V2 (QCTO 29.36, item 2.12): the party told about a booked visit through the system. An
+// assessment centre has no portal in this build, so the ASD answers for it.
+export type StakeholderKind = 'QP' | 'SDP' | 'assessment-centre';
+
+export interface VisitStakeholder {
+  kind: StakeholderKind;
+  // The QP's or SDP's person id; null for an assessment centre.
+  id: string | null;
+  name: string;
+}
+
+// The notice for the current date. Reset when the visit is moved and booked again.
+export interface VisitNotice {
+  sentAt: string;
+  sentTo: StakeholderKind;
+  sentToName: string;
+}
+
+export type StakeholderAnswer = 'accepted' | 'not-available';
+
+export interface VisitStakeholderResponse {
+  answer: StakeholderAnswer;
+  // Required for 'not-available', '' when accepted.
+  reason: string;
+  // Optional, only with 'not-available' (yyyy-mm-dd, '' when none).
+  suggestedDate: string;
+  respondedBy: string;
+  respondedById: string;
+  respondedByRole: 'QP' | 'SDP' | 'ASD';
+  respondedAt: string;
+}
+
+export interface VisitReminder {
+  number: number;
+  sentAt: string;
+}
+
+// Every time QCTO moved a visit to a new date, oldest first. Keeps what the stakeholder answered
+// about the old date and how many reminders it had.
+export interface VisitDateMove {
+  id: string;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  reasonSource: 'stakeholder-not-available' | 'qcto';
+  movedBy: string;
+  movedById: string;
+  movedAt: string;
+  previousNotice: VisitNotice | null;
+  previousResponse: VisitStakeholderResponse | null;
+  previousReminders: number;
 }
 
 export interface StakeholderShare {
@@ -157,11 +210,10 @@ export interface SiteVisit {
   checklist: ChecklistSection[];
   freeTextNotes: Record<string, string>;
 
-  // CR-057: only ever populated for 'post-eisa-monitoring', and only shown once
-  // resultsApprovedForSitting is true (a Phase 6 placeholder — see config.ts).
+  // CR-057: only ever populated for 'post-eisa-monitoring', and only open once the sitting's EISA
+  // results batch is approved in Approval of Results (resultsStatus.ts reads the real batch).
   facilitatorAnswers: Record<string, string>;
   learnerAnswers: Record<string, string>;
-  resultsApprovedForSitting: boolean;
 
   completedBy: string;
   completedDate: string;
@@ -179,6 +231,14 @@ export interface SiteVisit {
   // the report is shared with the QP. Missing means "not shared" — read it through
   // stakeholderShare.ts isSharedWithStakeholder().
   stakeholderShare?: StakeholderShare;
+
+  // Batch V2: the notice, the stakeholder's answer and the reminders for the CURRENT visit date, and
+  // every earlier date (dateMoves). All optional so visits stored before Batch V2 still load: they
+  // have no notice, so no response step. Read them through stakeholderResponse.ts.
+  stakeholderNotice?: VisitNotice;
+  stakeholderResponse?: VisitStakeholderResponse;
+  reminders?: VisitReminder[];
+  dateMoves?: VisitDateMove[];
 
   // Batch V1 (05.14): every round of "Approved with remediation", oldest first. Missing means none —
   // read it through remediation.ts remediationRoundsOf().
