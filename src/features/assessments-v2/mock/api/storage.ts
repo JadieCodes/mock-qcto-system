@@ -74,7 +74,10 @@ export function writeStore<T>(key: string, value: T): void {
 // was built from a File 4 upload and shows its file name, the building registration has no file yet.
 // 'A26' = Batch Q2: a date per QASA component day on the EISA Calendar (29.12) — every seeded sitting and batch of a
 // qualification whose QASA has components carries componentDates (one 2-day practical, one pair of components on the same day).
-export const SEED_VERSION = 'A26';
+// 'A27' = Batch U: EISA Instrument Validation holds several instruments per submission with an exemplar (29.6) — Electrical
+// Trades has a validated record with 3 instruments and an exemplar that replaced an earlier one, and one record waits
+// for the ASD with the QP's proposed exemplar.
+export const SEED_VERSION = 'A27';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

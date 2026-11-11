@@ -56,12 +56,34 @@ export interface ValidationOutcome {
   notes: string;
   decidedBy: string;
   decidedAt: string;
+  // Batch U (29.6): the exemplar the ASD confirmed with this outcome (null = none in this
+  // submission). Optional so outcomes stored before Batch U still load.
+  exemplarInstrumentId?: string | null;
+  // Required when the ASD's choice differs from the one the QP proposed.
+  exemplarNote?: string;
 }
 
-export interface InstrumentFile {
+// The shape a record had before Batch U (one instrument). Only the load mapping reads it.
+export interface LegacyInstrumentFile {
   fileName: string;
   fileSize: number;
   uploadedAt: string;
+}
+
+// Batch U (29.6): a QP submits several instruments for a qualification; only one is the
+// exemplar, and the exemplar is the one published to SDPs.
+export interface SubmittedInstrument {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  uploadedAt: string;
+  // The EISA sitting this instrument is for (null = "Not for a specific sitting").
+  sittingId: string | null;
+  sittingDate: string | null;
+  proposedExemplar: boolean;
+  confirmedExemplar: boolean;
+  // Set when a later validation confirms a different exemplar. Kept for history, never deleted.
+  replacedAt?: string | null;
 }
 
 export interface InstrumentValidationRecord {
@@ -77,7 +99,7 @@ export interface InstrumentValidationRecord {
   scheduling: SchedulingState;
 
   // CR: instrument upload is UI-only — picking a file, storing its name/size.
-  instrument: InstrumentFile | null;
+  instruments: SubmittedInstrument[];
   // Which validation attempt this is. Starts at 1; increments every time the ASD records
   // "Not approved" and the QP must fix and resubmit (the CR-023 loop).
   cycleCount: number;
@@ -92,6 +114,12 @@ export interface InstrumentValidationRecord {
   // EISA Registration record.
   instrumentStatus: 'not-validated' | 'validated';
 }
+
+// A record as it may sit in localStorage: before Batch U it carried one `instrument`.
+export type StoredInstrumentValidationRecord = Omit<InstrumentValidationRecord, 'instruments'> & {
+  instruments?: SubmittedInstrument[];
+  instrument?: LegacyInstrumentFile | null;
+};
 
 export interface NewValidationInput {
   qsaAddendumId: string;

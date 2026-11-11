@@ -1,30 +1,20 @@
-import { useRef } from 'react';
-import { Award, BookOpen, Upload } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Award, BookOpen } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { InstrumentValidationAuditTrail } from '../components/AuditTrail';
+import { InstrumentsPanel } from '../components/InstrumentsPanel';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
-import { useInstrumentValidationRecord, useUploadInstrument, useValidationAction } from '../hooks';
+import { useInstrumentValidationRecord } from '../hooks';
 import { Modal } from '../../../shared/ui/Modal';
-import { useV2Role } from '../../../shared/ui/useV2Role';
 import type { InstrumentValidationRecord } from '../types';
 
 // Row 18 (C-06, C-07): the QP side gets the same tabbed shape as the internal workspace —
 // Details / Scheduling / Instrument / Validation outcome / Audit trail — instead of one
 // long scrolling dialog.
 function ValidationDetailContent({ record }: { record: InstrumentValidationRecord }) {
-  const { role, person } = useV2Role();
-  const actorId = person.id;
-  const actorName = person.name;
-  const uploadInstrument = useUploadInstrument();
-  const validationAction = useValidationAction();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const latestOutcome = record.outcomeHistory[record.outcomeHistory.length - 1];
   const canUpload = record.validationWorkflow.stageId === 'qp-instrument' && record.scheduling.workflow.stageId === 'agreed';
-  const canSubmit = canUpload && !!record.instrument;
 
   return (
     <Tabs defaultValue="details">
@@ -80,46 +70,13 @@ function ValidationDetailContent({ record }: { record: InstrumentValidationRecor
           </div>
         )}
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Instrument</p>
-          {!record.scheduling.agreedSlot ? (
+        {!record.scheduling.agreedSlot ? (
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <p className="text-sm text-gray-400">Agree a validation date with the ASD before uploading the instrument.</p>
-          ) : (
-            <>
-              {record.instrument ? (
-                <p className="text-sm text-gray-700 font-mono bg-gray-50 rounded px-2 py-1 inline-block">
-                  {record.instrument.fileName} ({Math.round(record.instrument.fileSize / 1024)} KB)
-                </p>
-              ) : (
-                <p className="text-sm text-gray-400">No instrument uploaded yet.</p>
-              )}
-              {canUpload && (
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadInstrument.mutate({ recordId: record.id, file: { fileName: file.name, fileSize: file.size } });
-                    }}
-                  />
-                  <Button type="button" size="sm" variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="h-4 w-4" />
-                    {record.instrument ? 'Replace instrument' : 'Upload instrument'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!canSubmit || validationAction.isPending}
-                    onClick={() => validationAction.mutate({ recordId: record.id, actionId: 'val-submit', actorRole: role, actorId, actorName })}
-                  >
-                    {record.cycleCount > 1 ? 'Resubmit to ASD' : 'Submit for validation'}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+          </div>
+        ) : (
+          <InstrumentsPanel record={record} canUpload={canUpload} />
+        )}
       </TabsContent>
 
       <TabsContent value="outcome" className="space-y-3">
@@ -143,7 +100,7 @@ function ValidationDetailContent({ record }: { record: InstrumentValidationRecor
         )}
         {record.instrumentStatus === 'validated' && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            This instrument is marked <strong>Validated</strong> on the qualification's record.
+            This submission is marked <strong>Validated</strong> on the qualification's record.
           </div>
         )}
       </TabsContent>

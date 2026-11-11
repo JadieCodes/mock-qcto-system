@@ -9,11 +9,13 @@ import { ReasonDialog } from '../../../shared/ui/ReasonDialog';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
+import { ExemplarChoicePanel } from '../components/ExemplarChoicePanel';
 import { InstrumentValidationAuditTrail } from '../components/AuditTrail';
 import { PrefilledFieldsPanel } from '../components/PrefilledFieldsPanel';
 import { SchedulingPanel } from '../components/SchedulingPanel';
 import { InstrumentValidationStatusBadge } from '../components/StatusBadge';
-import { useInstrumentValidationRecord, useSaveValidationChecklist, useValidationAction } from '../hooks';
+import { checkExemplarChoice, hasConfirmedExemplar, outcomeLabel, proposedExemplarId } from '../exemplars';
+import { useInstrumentValidationRecord, useInstrumentValidationRecords, useSaveValidationChecklist, useValidationAction } from '../hooks';
 import type { InstrumentValidationRecord } from '../types';
 
 function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRecord }) {
@@ -24,6 +26,15 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
   const validationAction = useValidationAction();
   const [notApprovedOpen, setNotApprovedOpen] = useState(false);
   const [conditionsOpen, setConditionsOpen] = useState(false);
+  const { data: allRecords = [] } = useInstrumentValidationRecords();
+  const [pickedExemplar, setPickedExemplar] = useState<string | null | undefined>(undefined);
+  const [exemplarNote, setExemplarNote] = useState('');
+
+  // Batch U (29.6): pre-selected to the QP's proposal; "No exemplar" only when one already exists.
+  const hasExemplar = hasConfirmedExemplar(allRecords, record.qsaAddendumId);
+  const proposedId = proposedExemplarId(record.instruments);
+  const exemplarChoice = pickedExemplar !== undefined ? pickedExemplar : (proposedId ?? (hasExemplar ? null : undefined));
+  const exemplarProblem = checkExemplarChoice(record.instruments, exemplarChoice, hasExemplar, exemplarNote);
 
   const canValidate = role === 'ASD' && record.validationWorkflow.stageId === 'asd-validation';
   const checklistComplete = isChecklistComplete(record.checklist, true);
@@ -39,7 +50,16 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
     : [];
 
   const runOutcome = (actionId: string, note?: string) => {
-    validationAction.mutate({ recordId: record.id, actionId, actorRole: role, actorId, actorName, note });
+    const approving = actionId !== 'val-not-approved';
+    validationAction.mutate({
+      recordId: record.id,
+      actionId,
+      actorRole: role,
+      actorId,
+      actorName,
+      note,
+      ...(approving ? { exemplarInstrumentId: exemplarChoice, exemplarNote } : {}),
+    });
   };
 
   return (
@@ -83,8 +103,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
               {record.outcomeHistory.map((o, i) => (
                 <div key={i} className="rounded-xl border bg-gray-50 px-3 py-2 text-xs">
                   <p className="font-medium text-gray-700">
-                    Cycle {o.cycle} —{' '}
-                    {o.decision === 'approved' ? 'Approved' : o.decision === 'approved-with-conditions' ? 'Approved with conditions' : 'Not approved'}
+                    Cycle {o.cycle} — {outcomeLabel(o.decision)}
                   </p>
                   {o.notes && <p className="text-gray-500 mt-0.5 whitespace-pre-wrap">{o.notes}</p>}
                   <p className="text-gray-400 mt-0.5">
@@ -114,12 +133,15 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
           </p>
         ) : (
           <>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Instrument</p>
-              <p className="text-sm text-gray-700 font-mono bg-gray-50 rounded px-2 py-1 inline-block">
-                {record.instrument?.fileName} ({Math.round((record.instrument?.fileSize ?? 0) / 1024)} KB)
-              </p>
-            </div>
+            <ExemplarChoicePanel
+              instruments={record.instruments}
+              editable={canValidate}
+              hasExemplar={hasExemplar}
+              choice={exemplarChoice}
+              onChoice={setPickedExemplar}
+              note={exemplarNote}
+              onNote={setExemplarNote}
+            />
 
             <PrefilledFieldsPanel record={record} readonly={!canValidate} />
 
@@ -135,12 +157,13 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
             {canValidate && (
               <ValidationSummary issues={outcomeIssues} title="Complete these before recording an outcome:" />
             )}
+            {canValidate && exemplarProblem && <p className="text-xs text-amber-700">Exemplar: {exemplarProblem} (not needed for Not approved)</p>}
             {canValidate && (
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button
                   size="sm"
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={!outcomeReady || validationAction.isPending}
+                  disabled={!outcomeReady || !!exemplarProblem || validationAction.isPending}
                   onClick={() => runOutcome('val-approve')}
                 >
                   <CheckCircle2 className="h-4 w-4" />
@@ -149,7 +172,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!outcomeReady || validationAction.isPending}
+                  disabled={!outcomeReady || !!exemplarProblem || validationAction.isPending}
                   onClick={() => setConditionsOpen(true)}
                 >
                   Approved with conditions
@@ -169,7 +192,7 @@ function ValidationWorkspaceContent({ record }: { record: InstrumentValidationRe
 
             {record.instrumentStatus === 'validated' && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                This instrument is marked <strong>Validated</strong> on the qualification's record. This does not create or open a
+                This submission is marked <strong>Validated</strong> on the qualification's record. This does not create or open a
                 Learner EISA Registration.
               </div>
             )}

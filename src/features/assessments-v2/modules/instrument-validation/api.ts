@@ -4,18 +4,22 @@ import { addNotification } from '../../shared/notifications/store';
 import { isChecklistComplete, type ChecklistSection } from '../../shared/checklist/types';
 import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
-import { listPublishedSittings } from '../eisa-calendar/api';
+import type { EisaSitting } from '../eisa-calendar/types';
+import { listPublishedSittings, listSittings } from '../eisa-calendar/api';
 import { listApprovedQsaAddenda } from '../qsa-addendum/api';
 import type { QsaAddendumApplication } from '../qsa-addendum/types';
+import { appendAuditEntry } from '../../shared/audit/auditLog';
 import { PREFILL_NOT_CAPTURED_PLACEHOLDER, PREFILL_NO_UPCOMING_EISA } from './config';
+import { checkExemplarChoice, checkInstrumentsForSubmit, currentExemplarOf, exemplarChoiceDiffers, hasConfirmedExemplar, mapStoredRecord } from './exemplars';
 import { SCHEDULING_WORKFLOW, VALIDATION_WORKFLOW } from './workflow';
 import type {
   AgreedSlot,
-  InstrumentFile,
   InstrumentValidationRecord,
   NewValidationInput,
   PrefilledField,
   SchedulingParty,
+  StoredInstrumentValidationRecord,
+  SubmittedInstrument,
   ValidationOutcome,
   ValidationOutcomeDecision,
 } from './types';
@@ -23,7 +27,7 @@ import type {
 export const KEY = 'instrumentValidation:records';
 
 function loadAll(): InstrumentValidationRecord[] {
-  return readStore<InstrumentValidationRecord[]>(KEY, []);
+  return readStore<StoredInstrumentValidationRecord[]>(KEY, []).map(mapStoredRecord);
 }
 
 function saveAll(records: InstrumentValidationRecord[]): void {
@@ -94,7 +98,7 @@ export async function startValidation(input: NewValidationInput): Promise<Instru
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy,
     scheduling: { workflow: { stageId: 'awaiting-qp-proposal' }, proposals: [], agreedSlot: null },
-    instrument: null,
+    instruments: [],
     cycleCount: 1,
     prefilledFields: await buildPrefilledFields(addendum),
     checklist: buildInstrumentValidationChecklist(),
@@ -183,16 +187,81 @@ export async function performSchedulingAction(params: SchedulingActionParams): P
   return updated;
 }
 
-export async function uploadInstrument(recordId: string, file: { fileName: string; fileSize: number }): Promise<InstrumentValidationRecord> {
-  const all = loadAll();
+function getEditable(all: InstrumentValidationRecord[], recordId: string): InstrumentValidationRecord {
   const record = getOrThrow(all, recordId);
   if (record.validationWorkflow.stageId !== 'qp-instrument') {
-    throw new Error('The instrument can only be uploaded while the record is awaiting the QP.');
+    throw new Error('The instruments can only be changed while the record is awaiting the QP.');
   }
-  const instrument: InstrumentFile = { ...file, uploadedAt: new Date().toISOString() };
-  const updated = { ...record, instrument };
+  return record;
+}
+
+function saveInstruments(all: InstrumentValidationRecord[], record: InstrumentValidationRecord, instruments: SubmittedInstrument[]): InstrumentValidationRecord {
+  const updated = { ...record, instruments };
   saveAll(replace(all, updated));
   return updated;
+}
+
+export async function addInstruments(recordId: string, files: { fileName: string; fileSize: number }[]): Promise<InstrumentValidationRecord> {
+  const all = loadAll();
+  const record = getEditable(all, recordId);
+  const added: SubmittedInstrument[] = files.map((file) => ({
+    ...file,
+    id: crypto.randomUUID(),
+    uploadedAt: new Date().toISOString(),
+    sittingId: null,
+    sittingDate: null,
+    proposedExemplar: false,
+    confirmedExemplar: false,
+  }));
+  return saveInstruments(all, record, [...record.instruments, ...added]);
+}
+
+// The sittings an instrument can be for: this qualification's approved or published sittings.
+export async function listInstrumentSittings(qualificationTitle: string): Promise<EisaSitting[]> {
+  const sittings = await listSittings();
+  return sittings
+    .filter((s) => s.qualificationTitle === qualificationTitle && (s.status === 'approved' || s.status === 'published'))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function setInstrumentSitting(recordId: string, instrumentId: string, sittingId: string | null): Promise<InstrumentValidationRecord> {
+  const all = loadAll();
+  const record = getEditable(all, recordId);
+  let sittingDate: string | null = null;
+  if (sittingId) {
+    const sitting = (await listInstrumentSittings(record.qualificationTitle)).find((s) => s.id === sittingId);
+    if (!sitting) throw new Error("Choose one of this qualification's approved or published EISA sittings.");
+    sittingDate = sitting.date;
+  }
+  return saveInstruments(
+    all,
+    record,
+    record.instruments.map((i) => (i.id === instrumentId ? { ...i, sittingId, sittingDate } : i)),
+  );
+}
+
+// instrumentId null = "No exemplar in this submission".
+export async function setProposedExemplar(recordId: string, instrumentId: string | null): Promise<InstrumentValidationRecord> {
+  const all = loadAll();
+  const record = getEditable(all, recordId);
+  if (instrumentId === null && !hasConfirmedExemplar(all, record.qsaAddendumId)) {
+    throw new Error('This qualification has no confirmed exemplar yet, so one instrument must be the proposed exemplar.');
+  }
+  return saveInstruments(
+    all,
+    record,
+    record.instruments.map((i) => ({ ...i, proposedExemplar: i.id === instrumentId })),
+  );
+}
+
+export async function removeInstrument(recordId: string, instrumentId: string): Promise<InstrumentValidationRecord> {
+  const all = loadAll();
+  const record = getEditable(all, recordId);
+  return saveInstruments(
+    all,
+    record,
+    record.instruments.filter((i) => i.id !== instrumentId),
+  );
 }
 
 export async function saveValidationChecklist(recordId: string, sections: ChecklistSection[]): Promise<InstrumentValidationRecord> {
@@ -218,6 +287,10 @@ interface ValidationActionParams {
   actorId: string;
   actorName: string;
   note?: string;
+  // Approved / Approved with conditions: the exemplar the ASD confirms (null = none in this
+  // submission). exemplarNote is required when it differs from the QP's proposal.
+  exemplarInstrumentId?: string | null;
+  exemplarNote?: string;
 }
 
 const OUTCOME_ACTION_IDS = ['val-approve', 'val-approve-with-conditions', 'val-not-approved'];
@@ -230,9 +303,8 @@ export async function performValidationAction(params: ValidationActionParams): P
     if (record.scheduling.workflow.stageId !== 'agreed') {
       throw new Error('The validation date must be agreed with the ASD before submitting the instrument.');
     }
-    if (!record.instrument) {
-      throw new Error('Upload the instrument before submitting it for validation.');
-    }
+    const problem = checkInstrumentsForSubmit(record.instruments, hasConfirmedExemplar(all, record.qsaAddendumId));
+    if (problem) throw new Error(problem);
   }
 
   if (OUTCOME_ACTION_IDS.includes(params.actionId)) {
@@ -241,6 +313,10 @@ export async function performValidationAction(params: ValidationActionParams): P
     }
     if (record.prefilledFields.some((f) => f.action === null)) {
       throw new Error('Confirm or recapture every pre-filled field before recording an outcome.');
+    }
+    if (params.actionId !== 'val-not-approved') {
+      const problem = checkExemplarChoice(record.instruments, params.exemplarInstrumentId, hasConfirmedExemplar(all, record.qsaAddendumId), params.exemplarNote);
+      if (problem) throw new Error(problem);
     }
   }
 
@@ -257,6 +333,7 @@ export async function performValidationAction(params: ValidationActionParams): P
   });
 
   let updated: InstrumentValidationRecord = { ...record, validationWorkflow: nextWorkflow };
+  let otherRecords = all;
 
   if (OUTCOME_ACTION_IDS.includes(params.actionId)) {
     const decision: ValidationOutcomeDecision =
@@ -267,6 +344,7 @@ export async function performValidationAction(params: ValidationActionParams): P
       notes: params.note ?? '',
       decidedBy: params.actorName,
       decidedAt: new Date().toISOString(),
+      ...(decision !== 'not-approved' ? { exemplarInstrumentId: params.exemplarInstrumentId ?? null, exemplarNote: params.exemplarNote?.trim() || undefined } : {}),
     };
     updated = { ...updated, outcomeHistory: [...updated.outcomeHistory, outcome] };
 
@@ -276,7 +354,7 @@ export async function performValidationAction(params: ValidationActionParams): P
       const addendum = (await listApprovedQsaAddenda()).find((a) => a.id === updated.qsaAddendumId);
       updated = {
         ...updated,
-        instrument: null,
+        instruments: [],
         cycleCount: updated.cycleCount + 1,
         checklist: buildInstrumentValidationChecklist(),
         prefilledFields: addendum ? await buildPrefilledFields(addendum) : updated.prefilledFields.map((f) => ({ ...f, action: null })),
@@ -289,14 +367,44 @@ export async function performValidationAction(params: ValidationActionParams): P
     } else {
       // CR-024: this only flips instrumentStatus. It never creates or opens an EISA Registration.
       updated = { ...updated, instrumentStatus: 'validated' };
+      const chosenId = params.exemplarInstrumentId ?? null;
+      const before = currentExemplarOf(all, updated.qsaAddendumId);
+      if (chosenId) {
+        // Batch U (29.6): the chosen instrument becomes the exemplar; any earlier confirmed
+        // exemplar of this qualification is kept for history with a replacedAt date.
+        updated = { ...updated, instruments: updated.instruments.map((i) => (i.id === chosenId ? { ...i, confirmedExemplar: true, replacedAt: null } : i)) };
+        otherRecords = otherRecords.map((r) =>
+          r.qsaAddendumId === updated.qsaAddendumId
+            ? { ...r, instruments: r.instruments.map((i) => (i.confirmedExemplar && !i.replacedAt ? { ...i, replacedAt: outcome.decidedAt } : i)) }
+            : r,
+        );
+      }
+      const chosen = updated.instruments.find((i) => i.id === chosenId);
+      appendAuditEntry({
+        recordType: 'instrument-validation-validation',
+        recordId: updated.id,
+        actorRole: params.actorRole,
+        actorId: params.actorId,
+        actorName: params.actorName,
+        action: chosen ? 'Exemplar confirmed' : 'No exemplar in this submission',
+        note: [
+          chosen ? chosen.fileName : 'The current exemplar stays in place.',
+          exemplarChoiceDiffers(record.instruments, chosenId) ? `Different from the QP's proposal: ${params.exemplarNote?.trim() ?? ''}` : '',
+        ]
+          .filter(Boolean)
+          .join(' — '),
+      });
+      const exemplarText = chosen
+        ? `The exemplar is "${chosen.fileName}".`
+        : `No new exemplar was confirmed in this submission${before ? '; the current exemplar stays in place' : ''}.`;
       addNotification({
         recipientRole: 'QP',
         title: 'Instrument validation outcome recorded',
-        body: `"${updated.qualificationTitle}" is now ${decision === 'approved' ? 'Approved' : 'Approved with conditions'}.`,
+        body: `"${updated.qualificationTitle}" is now ${decision === 'approved' ? 'Approved' : 'Approved with conditions'}. ${exemplarText}`,
       });
     }
   }
 
-  saveAll(replace(all, updated));
+  saveAll(replace(otherRecords, updated));
   return updated;
 }

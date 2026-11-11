@@ -2,15 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChecklistSection } from '../../shared/checklist/types';
 import {
+  addInstruments,
   getRecord,
+  listInstrumentSittings,
   listEligibleQsaAddenda,
   listRecords,
   performSchedulingAction,
   performValidationAction,
+  removeInstrument,
   savePrefilledFields,
   saveValidationChecklist,
+  setInstrumentSitting,
+  setProposedExemplar,
   startValidation,
-  uploadInstrument,
 } from './api';
 import type { InstrumentValidationRecord, NewValidationInput, PrefilledField } from './types';
 
@@ -67,10 +71,30 @@ export function useSchedulingAction() {
   return useInstrumentValidationMutation(performSchedulingAction);
 }
 
-export function useUploadInstrument() {
-  return useInstrumentValidationMutation((args: { recordId: string; file: { fileName: string; fileSize: number } }) =>
-    uploadInstrument(args.recordId, args.file),
+export function useAddInstruments() {
+  return useInstrumentValidationMutation((args: { recordId: string; files: { fileName: string; fileSize: number }[] }) =>
+    addInstruments(args.recordId, args.files),
   );
+}
+
+export function useSetInstrumentSitting() {
+  return useInstrumentValidationMutation((args: { recordId: string; instrumentId: string; sittingId: string | null }) =>
+    setInstrumentSitting(args.recordId, args.instrumentId, args.sittingId),
+  );
+}
+
+export function useSetProposedExemplar() {
+  return useInstrumentValidationMutation((args: { recordId: string; instrumentId: string | null }) =>
+    setProposedExemplar(args.recordId, args.instrumentId),
+  );
+}
+
+export function useRemoveInstrument() {
+  return useInstrumentValidationMutation((args: { recordId: string; instrumentId: string }) => removeInstrument(args.recordId, args.instrumentId));
+}
+
+export function useInstrumentSittings(qualificationTitle: string) {
+  return useQuery({ queryKey: ['instrument-validation', 'sittings', qualificationTitle], queryFn: () => listInstrumentSittings(qualificationTitle) });
 }
 
 export function useSaveValidationChecklist() {
