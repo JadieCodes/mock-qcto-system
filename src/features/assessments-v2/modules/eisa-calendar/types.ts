@@ -1,8 +1,23 @@
 import type { WorkflowRecordState } from '../../shared/workflow/types';
 import type { Role } from '../../types';
+import type { AssessmentComponentType } from '../qsa-addendum/types';
+import type { ComponentDaySlot } from './componentDays';
 
 // CR-031: status covers the full lifecycle of one sitting date.
 export type EisaSittingStatus = 'proposed' | 'approved' | 'rejected' | 'published' | 'postponed' | 'cancelled';
+
+// Batch Q2 (29.12): one EISA date for one day of one QASA component.
+export interface SittingComponentDate {
+  componentId: string;
+  componentName: string;
+  componentType: AssessmentComponentType;
+  day: number; // 1-based
+  date: string; // ISO yyyy-mm-dd
+}
+
+export interface BatchSittingInput {
+  componentDates: SittingComponentDate[];
+}
 
 export interface EisaSitting {
   id: string;
@@ -16,7 +31,12 @@ export interface EisaSitting {
   qpId: string;
   qpName: string;
   year: number;
+  // Batch Q2: with componentDates this is always the EARLIEST component date, so registration
+  // closing, lists and every other reader work unchanged.
   date: string; // ISO yyyy-mm-dd
+  // Batch Q2 (29.12): a date for every day of every component of the approved QASA. Optional so
+  // older sittings, and qualifications whose QASA has no components, still load and show as before.
+  componentDates?: SittingComponentDate[];
   status: EisaSittingStatus;
   rejectionReason: string | null;
   postponementReason: string | null;
@@ -60,7 +80,9 @@ export interface EisaSittingBatch {
   // QCTO feedback 2.4: an "On demand" qualification has no minimum number of dates. Optional so
   // batches stored before it was added still load.
   onDemand?: boolean;
+  // Each sitting's earliest date (Batch Q2: `sittings` holds the component dates behind them, in the same order).
   dates: string[];
+  sittings?: BatchSittingInput[];
   state: WorkflowRecordState; // stageId: 'qcto-review' | 'approved' | 'rejected' | 'published'
   rejectionReason: string | null;
   // Row 21 (D-08): every past rejection stays visible even after the QP corrects and
@@ -85,6 +107,9 @@ export interface EligibleQualification {
   // QCTO feedback 3.4: pre-filled in the bulk upload template from the QASA, when there is one.
   nqfLevel: string | null;
   credits: string | null;
+  // Batch Q2 (29.12): the date slots asked per sitting, from the approved QASA's components
+  // (componentDays.ts); a single "EISA date" slot when the QASA has none.
+  componentSlots: ComponentDaySlot[];
 }
 
 export interface ProposeSittingBatchInput {
@@ -94,6 +119,8 @@ export interface ProposeSittingBatchInput {
   qpName: string;
   year: number;
   dates: string[];
+  // Batch Q2: when set, one entry per sitting and `dates` holds each one's earliest date.
+  sittings?: BatchSittingInput[];
   submittedBy: string;
   submittedById: string;
 }
@@ -105,6 +132,7 @@ export interface AddSittingInput {
   qpName: string;
   year: number;
   date: string;
+  componentDates?: SittingComponentDate[];
   createdBy: string;
   createdById: string;
 }
@@ -116,6 +144,7 @@ export interface EditSittingInput {
   qpName: string;
   year: number;
   date: string;
+  componentDates?: SittingComponentDate[];
 }
 
 // QCTO feedback 2.4: a postponement or cancellation of a published sitting is a request that
@@ -151,6 +180,9 @@ export interface EisaSittingChangeRequest {
   qpName: string;
   // Postponement only.
   proposedNewDate: string | null;
+  // Batch Q2: a new date per component day when the sitting has component dates; proposedNewDate
+  // is the earliest of them.
+  proposedComponentDates?: SittingComponentDate[];
   reason: string;
   letter: FormalLetterFile;
   raisedByRole: Role;
@@ -172,6 +204,7 @@ export interface RaiseChangeRequestInput {
   kind: ChangeRequestKind;
   sittingId: string;
   proposedNewDate: string | null;
+  proposedComponentDates?: SittingComponentDate[];
   reason: string;
   letter: FormalLetterFile;
   actorRole: Role;

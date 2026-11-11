@@ -6,8 +6,9 @@ import { performAction } from '../../shared/workflow/engine';
 import type { Role } from '../../types';
 import { applyApprovedSittingChange, listSittings } from './api';
 import { CANCELLATION_SECOND_RECOMMENDER_ROLE, REQUEST_RAISER_ROLES, REQUEST_RECOMMENDER_ROLE } from './config';
+import { checkSittingComponentDates, earliestComponentDate, hasSlotErrors, slotsFromSitting } from './componentDays';
 import { checkSittingDate } from './dateChecks';
-import type { ChangeRequestKind, EisaSittingChangeRequest, RaiseChangeRequestInput } from './types';
+import type { ChangeRequestKind, EisaSittingChangeRequest, RaiseChangeRequestInput, SittingComponentDate } from './types';
 import { changeRequestWorkflow, isChangeRequestOpen, recommendationRoleLabel, type ChangeRequestActionId } from './workflow';
 
 // QCTO feedback 2.4 (29 Oct 2026): a published sitting is postponed or cancelled only through a
@@ -52,12 +53,27 @@ export async function raiseChangeRequest(input: RaiseChangeRequestInput): Promis
   assertFileNotEmpty(input.letter);
 
   let proposedNewDate: string | null = null;
+  let proposedComponentDates: SittingComponentDate[] | undefined;
   if (input.kind === 'postponement') {
-    proposedNewDate = input.proposedNewDate?.trim() || null;
-    if (!proposedNewDate) throw new Error('Enter the proposed new date.');
-    if (proposedNewDate <= sitting.date) throw new Error('The new date must be after the current sitting date.');
-    const check = checkSittingDate(proposedNewDate, undefined, sitting.onDemand === true);
-    if (!check.ok) throw new Error(`${proposedNewDate}: ${check.reasons.join(' ')}`);
+    if (sitting.componentDates?.length) {
+      // Batch Q2: a new date for every component day the sitting has, with the same checks.
+      const slots = slotsFromSitting(sitting.componentDates);
+      const given = slots.map((s) => input.proposedComponentDates?.find((c) => c.componentId === s.componentId && c.day === s.day)?.date ?? '');
+      const errors = checkSittingComponentDates(slots, given, undefined, sitting.onDemand === true);
+      if (hasSlotErrors(errors)) {
+        const first = errors.findIndex((e) => e.length > 0);
+        throw new Error(`${slots[first].label}: ${errors[first].join(' ')}`);
+      }
+      proposedComponentDates = sitting.componentDates.map((c, i) => ({ ...c, date: given[i] }));
+      proposedNewDate = earliestComponentDate(proposedComponentDates);
+      if (proposedNewDate <= sitting.date) throw new Error('The new dates must start after the current sitting date.');
+    } else {
+      proposedNewDate = input.proposedNewDate?.trim() || null;
+      if (!proposedNewDate) throw new Error('Enter the proposed new date.');
+      if (proposedNewDate <= sitting.date) throw new Error('The new date must be after the current sitting date.');
+      const check = checkSittingDate(proposedNewDate, undefined, sitting.onDemand === true);
+      if (!check.ok) throw new Error(`${proposedNewDate}: ${check.reasons.join(' ')}`);
+    }
   }
 
   const request: EisaSittingChangeRequest = {
@@ -70,6 +86,7 @@ export async function raiseChangeRequest(input: RaiseChangeRequestInput): Promis
     qpId: sitting.qpId,
     qpName: sitting.qpName,
     proposedNewDate,
+    proposedComponentDates,
     reason,
     letter: input.letter,
     raisedByRole: input.actorRole,
@@ -234,6 +251,7 @@ export async function performChangeRequestAction(params: ChangeRequestActionPara
       actorName: params.actorName,
       reason: request.reason,
       proposedNewDate: request.proposedNewDate,
+      proposedComponentDates: request.proposedComponentDates,
     });
     addNotification({
       recipientRole: 'QP',

@@ -37,6 +37,11 @@
 // Added in Batch T:
 //  S20 Plumbing           today + 62   Published — registration closed; its EISA Confirmation was returned to the QP
 // B1's three dates are published with registration open.
+// Batch Q2 (29.12): every sitting and batch of a qualification whose QASA has components also carries
+// componentDates (withComponentDates below). `date` stays the earliest, so counts, closing dates and
+// registration ids do not move. Each next component is on the next working day (as the old
+// Approval of Results rule had it), a component with two days takes two working days in a row, and
+// S4 (Electrical Trades) holds both of its components on the same day.
 //
 // Postponement and cancellation requests (QCTO feedback 2.4, changeRequests.ts), each with a
 // formal letter:
@@ -60,6 +65,7 @@ import {
   POSTPONEMENT_DECIDER_ROLE,
   REQUEST_RECOMMENDER_ROLE,
 } from '../../../modules/eisa-calendar/config';
+import { buildComponentDates, isSingleDateFallback, slotsFromQasa, type ComponentDaySlot } from '../../../modules/eisa-calendar/componentDays';
 import { checkSittingDate } from '../../../modules/eisa-calendar/dateChecks';
 import {
   BATCH_WORKFLOW,
@@ -68,6 +74,7 @@ import {
   SITTING_LIFECYCLE_WORKFLOW,
 } from '../../../modules/eisa-calendar/workflow';
 import type { ChangeRequestKind, EisaSitting, EisaSittingBatch, EisaSittingChangeRequest } from '../../../modules/eisa-calendar/types';
+import { addWorkingDays } from '../../../shared/dates/workingDays';
 import { approvedSittingsOf } from '../../../modules/qsa-addendum/assessmentDetails';
 import { isQasaApproved } from '../../../modules/qsa-addendum/workflow';
 import type { QsaAddendumApplication } from '../../../modules/qsa-addendum/types';
@@ -102,6 +109,7 @@ interface CalendarQualification {
   qpName: string;
   sittingsPerYear: number;
   onDemand: boolean;
+  slots: ComponentDaySlot[];
 }
 
 function calendarQualification(name: string, qasa: QsaAddendumApplication[]): CalendarQualification {
@@ -117,7 +125,21 @@ function calendarQualification(name: string, qasa: QsaAddendumApplication[]): Ca
     qpName: q.qpName,
     sittingsPerYear: (approved ? approvedSittingsOf(approved).sittingsPerYear : null) ?? DEFAULT_SITTINGS_PER_YEAR,
     onDemand: approved ? approvedSittingsOf(approved).onDemand : false,
+    slots: slotsFromQasa(approved),
   };
+}
+
+// Batch Q2: one date per slot from the sitting's earliest date. Without `sameDay` each next component is
+// on the next working day and the days of one component run on from each other; with it, a new
+// component starts on the same day as the one before it.
+function slotDates(start: string, slots: ComponentDaySlot[], sameDay: boolean): string[] {
+  const dates: string[] = [];
+  slots.forEach((slot, i) => {
+    if (i === 0) dates.push(start);
+    else if (sameDay && slot.day === 1) dates.push(dates[i - 1]);
+    else dates.push(addWorkingDays(dates[i - 1], 1));
+  });
+  return dates;
 }
 
 function sittingRow(id: string, q: CalendarQualification, date: string, batchId: string | null, createdBy: string, createdAt: string): EisaSitting {
@@ -578,10 +600,24 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
   // everything above so no seed id moves.
   sittings.push(addDirect(plumbing, 62, THANDEKA, 130).sitting);
 
+  // Batch Q2 (29.12): component dates on every sitting and batch whose QASA has components.
+  const slotsOf = new Map([electrical, plumbing, welding, calendarQualification('Gas Practitioner', qasa)].map((q) => [q.qualificationId, q.slots]));
+  const sameDaySittingIds = new Set([s1to5[3].id]);
+  const sittingsWithDates = sittings.map((s) => {
+    const slots = slotsOf.get(s.qualificationId ?? '');
+    if (!slots || isSingleDateFallback(slots)) return s;
+    return { ...s, componentDates: buildComponentDates(slots, slotDates(s.date, slots, sameDaySittingIds.has(s.id))) };
+  });
+  const batchesWithDates = batches.map((b) => {
+    const slots = slotsOf.get(b.qualificationId ?? '');
+    if (!slots || isSingleDateFallback(slots)) return b;
+    return { ...b, sittings: b.dates.map((date) => ({ componentDates: buildComponentDates(slots, slotDates(date, slots, false)) })) };
+  });
+
   // Sanity check on the sittings the rest of the seed relies on: past ones are in the past,
   // and every future one has a date after today.
   const today = todayIso();
-  if (sittings.some((s) => s.batchId && s.date <= today)) throw new Error('Demo seed: a batch date is not in the future.');
+  if (sittingsWithDates.some((s) => s.batchId && s.date <= today)) throw new Error('Demo seed: a batch date is not in the future.');
   // QCTO feedback 2.4: every postponement request's new date passes the checks a real one does.
   for (const r of requests) {
     if (!r.proposedNewDate) continue;
@@ -590,8 +626,8 @@ export function seedEisaCalendar(log: SeedLog, qasa: QsaAddendumApplication[]): 
   }
 
   return {
-    batches: batches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
-    sittings: sittings.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    batches: batchesWithDates.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
+    sittings: sittingsWithDates.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     requests: requests.sort((a, b) => b.raisedAt.localeCompare(a.raisedAt)),
   };
 }

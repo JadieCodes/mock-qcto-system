@@ -3,11 +3,17 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { closingDateOf } from '../registrationClosing';
+import { componentDayShortLabel } from '../componentDays';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import { SittingDetailsDialog } from './SittingDetailsDialog';
 import { StatusLegend } from './StatusBadge';
 import { STATUS_CLASSES } from './statusStyles';
 import type { EisaSitting } from '../types';
+
+interface MonthEntry {
+  sitting: EisaSitting;
+  label: string;
+}
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -26,11 +32,19 @@ export function SittingMonthView({ sittings, onSelectSitting }: { sittings: Eisa
   });
 
   const byDate = useMemo(() => {
-    const map = new Map<string, EisaSitting[]>();
+    // Batch Q2: a sitting with component dates shows on every component day, labelled with the component.
+    const map = new Map<string, MonthEntry[]>();
+    const add = (date: string, entry: MonthEntry) => {
+      const existing = map.get(date);
+      if (existing) existing.push(entry);
+      else map.set(date, [entry]);
+    };
     for (const sitting of sittings) {
-      const existing = map.get(sitting.date);
-      if (existing) existing.push(sitting);
-      else map.set(sitting.date, [sitting]);
+      if (!sitting.componentDates?.length) {
+        add(sitting.date, { sitting, label: sitting.qualificationTitle });
+        continue;
+      }
+      for (const c of sitting.componentDates) add(c.date, { sitting, label: componentDayShortLabel(sitting.qualificationTitle, c) });
     }
     return map;
   }, [sittings]);
@@ -74,15 +88,15 @@ export function SittingMonthView({ sittings, onSelectSitting }: { sittings: Eisa
               <div key={idx} className="h-24 border-b border-r p-1.5 overflow-hidden last:border-r-0">
                 <p className="text-xs text-gray-400">{day}</p>
                 <div className="mt-0.5 space-y-0.5">
-                  {daySittings.slice(0, 3).map((s) => (
+                  {daySittings.slice(0, 3).map(({ sitting: s, label }, entryIndex) => (
                     <button
-                      key={s.id}
+                      key={`${s.id}-${entryIndex}`}
                       type="button"
                       onClick={() => selectSitting(s)}
                       title={`${qualificationIdOf(s)} ${displayOrDash(s.qualificationTitle)} — QP: ${displayOrDash(s.qpName)} — Registration closes ${closingDateOf(s)}${s.registrationClosingOverride ? ' (changed by the super admin)' : ''} — ${s.status}`}
                       className={cn('block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-medium', STATUS_CLASSES[s.status])}
                     >
-                      {s.qualificationTitle}
+                      {label}
                     </button>
                   ))}
                   {daySittings.length > 3 && <p className="text-[10px] text-gray-400">+{daySittings.length - 3} more</p>}

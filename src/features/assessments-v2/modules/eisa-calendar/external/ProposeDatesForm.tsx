@@ -1,17 +1,16 @@
 import { useState } from 'react';
-import { AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LABELS } from '../../../config/labels';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
-import { RegistrationCloses } from '../components/RegistrationCloses';
+import { QasaSlotsNote, SittingDateCards } from '../components/SittingDateCards';
+import { buildComponentDates, earliestDate, emptySitting, isSingleDateFallback, singleDateSlots, sittingsReady } from '../componentDays';
 import { minimumDateCount, requiredCountText } from '../api';
-import { checkSittingDate } from '../dateChecks';
 import { useEligibleQualifications, useProposeSittingBatch } from '../hooks';
 
 const YEAR_OPTIONS = [0, 1, 2].map((offset) => new Date().getFullYear() + offset);
@@ -26,7 +25,8 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
 
   const [qualificationId, setQualificationId] = useState('');
   const [year, setYear] = useState<number>(YEAR_OPTIONS[0]);
-  const [dates, setDates] = useState<string[]>(['']);
+  // Batch Q2: one entry per sitting, one date per component day of the QASA (slots).
+  const [sittings, setSittings] = useState<string[][]>([['']]);
 
   // QCTO feedback 1.8: only the qualifications under this QP's ambit with accredited SDPs.
   const eligible = filterExternalRecords(allEligible, person, { qpIdOf: (q) => q.qpId });
@@ -34,32 +34,28 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
   const requiredCount = selected?.sittingsPerYear ?? null;
   const onDemand = selected?.onDemand === true;
   const minimum = selected ? minimumDateCount(selected.sittingsPerYear, selected.onDemand) : 1;
+  const slots = selected?.componentSlots ?? singleDateSlots();
 
   const onSelectQualification = (id: string) => {
     setQualificationId(id);
     const q = eligible.find((e) => e.qualificationId === id);
     const rows = q ? minimumDateCount(q.sittingsPerYear, q.onDemand) : 1;
-    setDates((prev) => {
-      const filled = prev.filter((d) => d.trim() !== '');
-      return [...filled, ...Array<string>(Math.max(rows - filled.length, 0)).fill('')];
-    });
+    const newSlots = q?.componentSlots ?? singleDateSlots();
+    setSittings(Array.from({ length: rows }, () => emptySitting(newSlots)));
   };
 
-  const filledDates = dates.filter((d) => d.trim() !== '');
-  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d, undefined, onDemand) }));
-  const yearMismatch = filledDates.filter((d) => Number(d.slice(0, 4)) !== year);
-  const duplicates = filledDates.length !== new Set(filledDates).size;
-  const countMatches = requiredCount != null && filledDates.length >= minimum;
-  const allDatesOk = dateChecks.every((c) => c.result.ok);
+  const starts = sittings.map((d) => earliestDate(d)).filter(Boolean);
+  const duplicates = starts.length !== new Set(starts).size;
+  const countMatches = requiredCount != null && sittings.length >= minimum;
+  const ready = !!selected && sittingsReady(slots, sittings, year, onDemand, minimum);
 
   const resetAll = () => {
     setQualificationId('');
     setYear(YEAR_OPTIONS[0]);
-    setDates(['']);
+    setSittings([['']]);
   };
 
-  const canSubmit =
-    !!selected && requiredCount != null && countMatches && allDatesOk && yearMismatch.length === 0 && !duplicates && filledDates.length > 0;
+  const canSubmit = ready && requiredCount != null && countMatches;
 
   const onSubmit = () => {
     if (!selected || !canSubmit) return;
@@ -70,7 +66,8 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
         qpId: selected.qpId,
         qpName: selected.qpName,
         year,
-        dates: filledDates,
+        dates: sittings.map((d) => earliestDate(d)),
+        sittings: isSingleDateFallback(slots) ? undefined : sittings.map((d) => ({ componentDates: buildComponentDates(slots, d) })),
         submittedBy: person.name,
         submittedById: person.id,
       },
@@ -143,61 +140,30 @@ export function ProposeDatesForm({ open, onOpenChange }: { open: boolean; onOpen
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Proposed Dates *</Label>
-              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setDates((d) => [...d, ''])}>
-                <Plus className="h-3.5 w-3.5" />
-                Add date
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {dates.map((d, idx) => {
-                const check = d.trim() ? checkSittingDate(d, undefined, onDemand) : null;
-                return (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="date"
-                        value={d}
-                        onChange={(e) =>
-                          setDates((prev) => prev.map((value, i) => (i === idx ? e.target.value : value)))
-                        }
-                      />
-                      {idx >= minimum && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDates((prev) => prev.filter((_, i) => i !== idx))}
-                        >
-                          <Trash2 className="h-4 w-4 text-gray-400" />
-                        </Button>
-                      )}
-                    </div>
-                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" onDemand={onDemand} />}
-                    {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
-                    {check && check.ok && Number(d.slice(0, 4)) !== year && (
-                      <p className="text-xs text-red-600">This date is not in {year}.</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {requiredCount != null && filledDates.length > 0 && !countMatches && (
+            {selected && <QasaSlotsNote slots={slots} />}
+            <SittingDateCards
+              slots={slots}
+              sittings={sittings}
+              onChange={setSittings}
+              minimum={minimum}
+              onDemand={onDemand}
+              year={year}
+              idPrefix="propose"
+            />
+            {requiredCount != null && !countMatches && (
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-800">
                   {selected?.onDemand
-                    ? 'Enter at least one date.'
-                    : `"${selected?.qualificationTitle}" requires ${requiredCount} sitting(s) per year — you have entered ${filledDates.length}.`}
+                    ? 'Add at least one sitting.'
+                    : `"${selected?.qualificationTitle}" requires ${requiredCount} sitting(s) per year — you have ${sittings.length}.`}
                 </AlertDescription>
               </Alert>
             )}
             {duplicates && (
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
-                <AlertDescription className="text-amber-800">Duplicate dates are not allowed.</AlertDescription>
+                <AlertDescription className="text-amber-800">Two sittings cannot start on the same date.</AlertDescription>
               </Alert>
             )}
           </div>

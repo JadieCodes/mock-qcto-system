@@ -10,6 +10,8 @@ import type { Role } from '../../types';
 import { listRecords as listConfirmationRecords } from '../eisa-confirmation/api';
 import type { EisaConfirmationRecord } from '../eisa-confirmation/types';
 import { isConfirmationAccepted } from '../eisa-confirmation/workflow';
+import { listSittings } from '../eisa-calendar/api';
+import type { SittingComponentDate } from '../eisa-calendar/types';
 import { listRegistrationsForSitting } from '../eisa-registration/api';
 import { createVisit, listVisits } from '../site-visits/api';
 import { DEFAULT_NOTICE_LEAD_TIME_DAYS, PLANNER_ROLE, POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visits/config';
@@ -98,12 +100,18 @@ export async function getBatch(id: string): Promise<ResultsBatch | undefined> {
   return loadAll().find((b) => b.id === id);
 }
 
+// Batch Q2: the component dates of the confirmation's EISA Calendar sitting, when it has them.
+async function withCalendarDates<T extends { sittingId: string }>(confirmation: T): Promise<T & { componentDates?: SittingComponentDate[] }> {
+  const sitting = (await listSittings()).find((s) => s.id === confirmation.sittingId);
+  return { ...confirmation, componentDates: sitting?.componentDates };
+}
+
 // QCTO feedback 29.31: the components a new batch for this sitting would get, so the QP's
 // submit dialog can ask for a mark per component (blocked when resultsRulesIssue() gives a message).
 export async function getResultsRulesForSitting(sittingId: string): Promise<ResultsRules> {
   const confirmation = (await listConfirmationRecords()).find((c) => c.sittingId === sittingId);
   if (!confirmation) return { components: [], addendumPassPercent: null };
-  return snapshotResultsRules(await listApplications(), confirmation);
+  return snapshotResultsRules(await listApplications(), await withCalendarDates(confirmation));
 }
 
 // QCTO feedback 29.25: the documents QCTO already holds for this sitting's qualification (mock
@@ -171,7 +179,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   }
   // QCTO feedback 29.31: the components are snapshotted from the approved QASA now; without
   // them there is nothing to mark against, so the batch is blocked.
-  const rules = snapshotResultsRules(await listApplications(), confirmation);
+  const rules = snapshotResultsRules(await listApplications(), await withCalendarDates(confirmation));
   const rulesIssue = resultsRulesIssue(rules);
   if (rulesIssue) throw new Error(rulesIssue);
   const { components, addendumPassPercent } = rules;

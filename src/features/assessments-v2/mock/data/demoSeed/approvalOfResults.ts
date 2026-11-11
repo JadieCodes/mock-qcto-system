@@ -57,6 +57,7 @@ import { RESULTS_AD_ROLE } from '../../../modules/approval-of-results/config';
 import { markEntryIssues } from '../../../modules/approval-of-results/markEntry';
 import { isRecommendDeclineAction, isRequestEvidenceAction, RESULTS_WORKFLOW, submissionDeadlineFor } from '../../../modules/approval-of-results/workflow';
 import type { EisaLearnerResult, EisaReview, EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsComponent, ResultsDraft, ResultsFinalDecision } from '../../../modules/approval-of-results/types';
+import type { EisaSitting } from '../../../modules/eisa-calendar/types';
 import type { EisaConfirmationRecord } from '../../../modules/eisa-confirmation/types';
 import { isConfirmationAccepted } from '../../../modules/eisa-confirmation/workflow';
 import type { EisaRegistrationRecord } from '../../../modules/eisa-registration/types';
@@ -185,7 +186,12 @@ function idNumberOf(learnerId: string): string {
   return learner.idNumber;
 }
 
-export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[], registrations: EisaRegistrationRecord[]): ResultsBatch[] {
+// Batch Q2: the component dates of the calendar sitting a confirmation belongs to.
+function componentDatesOf(sittings: EisaSitting[], sittingId: string) {
+  return sittings.find((s) => s.id === sittingId)?.componentDates;
+}
+
+export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[], registrations: EisaRegistrationRecord[], sittings: EisaSitting[]): ResultsBatch[] {
   const batches: ResultsBatch[] = [];
 
   function confirmationFor(title: string, offsetDays: number): EisaConfirmationRecord {
@@ -210,7 +216,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
     if (codes.length !== pattern.length || codes.length !== confirmation.learners.length) {
       throw new Error(`Demo seed: ${title} ${confirmation.sittingDate} pattern does not match its learners.`);
     }
-    const { components, addendumPassPercent } = snapshotResultsRules(qasas, confirmation);
+    const { components, addendumPassPercent } = snapshotResultsRules(qasas, { ...confirmation, componentDates: componentDatesOf(sittings, confirmation.sittingId) });
     if (components.length === 0) throw new Error(`Demo seed: the approved QASA for ${title} has no assessment components.`);
     if (addendumPassPercent === null) throw new Error(`Demo seed: the approved QASA for ${title} has no addendum pass %.`);
     const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => ({
@@ -527,11 +533,11 @@ function assignVerificationCodes(batches: ResultsBatch[]): ResultsBatch[] {
 // QCTO feedback 05.24: the saved draft behind the Welding sitting at today - 20 — the first two
 // learners captured (one competent, one with a mark below the pass mark in the first component),
 // the third learner still blank. The draft holds marks only; the checks apply at Submit.
-export function seedResultsDrafts(confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[]): ResultsDraft[] {
+export function seedResultsDrafts(confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[], sittings: EisaSitting[]): ResultsDraft[] {
   const date = workingDateFromToday(-20);
   const confirmation = confirmations.find((c) => c.qualificationTitle === 'Welding' && c.sittingDate === date);
   if (!confirmation) throw new Error(`Demo seed: no EISA Confirmation for Welding ${date}.`);
-  const { components } = snapshotResultsRules(qasas, confirmation);
+  const { components } = snapshotResultsRules(qasas, { ...confirmation, componentDates: componentDatesOf(sittings, confirmation.sittingId) });
   if (components.length === 0) throw new Error('Demo seed: the approved QASA for Welding has no assessment components.');
   const [first] = components;
   const learnerResults: EisaLearnerResult[] = confirmation.learners.map((l, i) => {

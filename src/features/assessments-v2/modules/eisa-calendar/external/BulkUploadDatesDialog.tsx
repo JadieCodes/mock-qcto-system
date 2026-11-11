@@ -10,7 +10,8 @@ import { LABELS } from '../../../config/labels';
 import { downloadCsvFile, EXCEL_UPLOAD_TIP } from '../../../shared/csv/csv';
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { filterExternalRecords } from '../../../shared/visibility/recordVisibility';
-import { BULK_COLUMNS, BULK_TEMPLATE_FILE_NAME, buildTemplateCsv, parseBulkFile, toBatchInputs, type BulkRow } from '../bulkUpload';
+import { readXlsx, XLSX_UNREADABLE_MESSAGE } from '../../../shared/files/readXlsx';
+import { BULK_COLUMNS, BULK_TEMPLATE_FILE_NAME, buildTemplateCsv, parseBulkFile, parseBulkTable, toBatchInputs, type BulkRow, type BulkParseResult } from '../bulkUpload';
 import { useEisaSittings, useEligibleQualifications, useProposeBulkSittingBatches } from '../hooks';
 
 // QCTO feedback 3.4: the QP downloads the template, fills in the dates, uploads it as CSV, checks
@@ -41,11 +42,18 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
     setFileError(null);
     setFileName(file?.name ?? null);
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setFileError('Only CSV files can be uploaded. In your spreadsheet program, choose "Save as" and pick CSV.');
+    const lowerName = file.name.toLowerCase();
+    let result: BulkParseResult;
+    if (lowerName.endsWith('.csv')) {
+      result = parseBulkFile(await file.text(), ownQualifications, sittings);
+    } else if (lowerName.endsWith('.xlsx')) {
+      // QCTO feedback 29.11: the rows of an Excel file go through the same checks as a CSV.
+      const read = await readXlsx(await file.arrayBuffer(), { dateHeading: BULK_COLUMNS.date });
+      result = read.ok ? parseBulkTable(read.rows, ownQualifications, sittings) : read;
+    } else {
+      setFileError(XLSX_UNREADABLE_MESSAGE);
       return;
     }
-    const result = parseBulkFile(await file.text(), ownQualifications, sittings);
     if (result.ok) setRows(result.rows);
     else setFileError(result.error);
   };
@@ -68,7 +76,7 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
         <div className="space-y-2">
           <Label>1. Download the template</Label>
           <p className="text-xs text-gray-500">
-            It lists your qualifications with accredited SDPs, one row per required sitting. Fill in the EISA date on each row (YYYY-MM-DD).
+            It lists your qualifications with accredited SDPs, one row per sitting and component day (from the approved QASA). Fill in the EISA date on each row (YYYY-MM-DD). Two components may share a date; the days of one component may not.
             Columns: {Object.values(BULK_COLUMNS).join(', ')}.
           </p>
           <Button
@@ -87,8 +95,8 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-2">
           <Label htmlFor="bulk-dates-file">2. Choose your file</Label>
-          <p className="text-xs text-gray-500">{EXCEL_UPLOAD_TIP}</p>
-          <input id="bulk-dates-file" type="file" accept=".csv,text/csv" className="block text-sm"
+          <p className="text-xs text-gray-500">{EXCEL_UPLOAD_TIP} You can upload a .csv or an .xlsx file.</p>
+          <input id="bulk-dates-file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="block text-sm"
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];
               // Cleared so choosing the same file again (after fixing it) is read again.
@@ -113,8 +121,8 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-800">
-                  {rowsWithErrors} of {rows.length} row{rows.length === 1 ? '' : 's'} need fixing. Correct them in your spreadsheet, save it as CSV
-                  again and choose the file again.
+                  {rowsWithErrors} of {rows.length} row{rows.length === 1 ? '' : 's'} need fixing. Correct them in your spreadsheet, save it again
+                  and choose the file again.
                 </AlertDescription>
               </Alert>
             ) : (
@@ -128,7 +136,7 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {['Row', 'Qualification title', 'Qualification ID', 'NQF level', 'Credits', 'EISA date', 'Registration closes', 'QP', 'Checks'].map((h) => (
+                      {['Row', 'Qualification title', 'Qualification ID', 'NQF level', 'Credits', 'Sitting', 'Component', 'Day', 'EISA date', 'Registration closes', 'QP', 'Checks'].map((h) => (
                         <TableHead key={h} className="whitespace-nowrap">
                           {h}
                         </TableHead>
@@ -143,6 +151,9 @@ function BulkUploadForm({ onClose }: { onClose: () => void }) {
                         <TableCell className="font-mono text-xs">{r.qualificationId || '—'}</TableCell>
                         <TableCell className="whitespace-nowrap">{r.nqfLevel || '—'}</TableCell>
                         <TableCell>{r.credits || '—'}</TableCell>
+                        <TableCell>{r.sittingText || '—'}</TableCell>
+                        <TableCell className="whitespace-nowrap">{r.componentText || '—'}</TableCell>
+                        <TableCell>{r.dayText || '—'}</TableCell>
                         <TableCell className="whitespace-nowrap">{r.date ?? (r.dateText || '—')}</TableCell>
                         <TableCell className="whitespace-nowrap">{r.registrationCloses ?? '—'}</TableCell>
                         <TableCell className="whitespace-nowrap">{person.name}</TableCell>

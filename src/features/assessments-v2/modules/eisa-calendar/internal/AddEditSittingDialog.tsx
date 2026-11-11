@@ -6,7 +6,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { checkSittingDate } from '../dateChecks';
+import { SittingDateCard, QasaSlotsNote } from '../components/SittingDateCards';
+import {
+  buildComponentDates,
+  checkSittingComponentDates,
+  earliestDate,
+  hasSlotErrors,
+  isSingleDateFallback,
+  singleDateSlots,
+  slotsFromSitting,
+  SINGLE_DATE_SLOT_ID,
+} from '../componentDays';
 import { useEligibleQualifications } from '../hooks';
 import { qualificationIdOf } from '../sittingDetails';
 import type { EditSittingInput, EisaSitting } from '../types';
@@ -79,11 +89,22 @@ function AddEditSittingForm({
   const [qpId, setQpId] = useState(sitting?.qpId ?? '');
   const [qpName, setQpName] = useState(sitting?.qpName ?? '');
   const [year, setYear] = useState<number>(sitting?.year ?? YEAR_OPTIONS[0]);
-  const [date, setDate] = useState(sitting?.date ?? '');
+  // Batch Q2 (29.12): one date per component day, kept by slot so it survives the slots changing
+  // when the eligible list loads or another qualification is picked.
+  const [dateBySlot, setDateBySlot] = useState<Record<string, string>>(() => {
+    const entries: Record<string, string> = { [`${SINGLE_DATE_SLOT_ID}|1`]: sitting?.date ?? '' };
+    for (const c of sitting?.componentDates ?? []) entries[`${c.componentId}|${c.day}`] = c.date;
+    return entries;
+  });
 
   const onDemand = eligible.some((q) => q.qualificationId === qualificationId && q.qpId === qpId && q.onDemand);
-  const warning = date ? checkSittingDate(date, undefined, onDemand) : null;
-  const ready = qualificationTitle.trim() !== '' && qpName.trim() !== '' && date !== '';
+  const matched = eligible.find((q) => q.qualificationId === qualificationId && q.qpId === qpId);
+  // A sitting kept under its own entry keeps the component days it was saved with.
+  const slots = matched?.componentSlots ?? (sitting?.componentDates?.length && qualificationId === (sitting.qualificationId ?? null) ? slotsFromSitting(sitting.componentDates) : singleDateSlots());
+  const dates = slots.map((s) => dateBySlot[`${s.componentId}|${s.day}`] ?? '');
+  const date = earliestDate(dates);
+  const hasWarning = dates.some((d) => d !== '') && hasSlotErrors(checkSittingComponentDates(slots, dates, undefined, onDemand).map((e, i) => (dates[i] ? e : [])));
+  const ready = qualificationTitle.trim() !== '' && qpName.trim() !== '' && dates.every((d) => d !== '');
 
   return (
     <>
@@ -143,17 +164,25 @@ function AddEditSittingForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="sitting-date">Date</Label>
-            <Input id="sitting-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
         </div>
 
-        {warning && !warning.ok && (
+        <div className="space-y-2">
+          <QasaSlotsNote slots={slots} />
+          <SittingDateCard
+            slots={slots}
+            dates={dates}
+            onDemand={onDemand}
+            warnOnly
+            idPrefix="sitting-date"
+            onChange={(next) => setDateBySlot((prev) => ({ ...prev, ...Object.fromEntries(slots.map((s, i) => [`${s.componentId}|${s.day}`, next[i]])) }))}
+          />
+        </div>
+
+        {hasWarning && (
           <Alert className="border-amber-500 bg-amber-50">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800">
-              This date would normally be auto-rejected: {warning.reasons.join(' ')} You can still save it — QCTO may override.
+              A date above would normally be auto-rejected. You can still save it — QCTO may override.
             </AlertDescription>
           </Alert>
         )}
@@ -166,7 +195,17 @@ function AddEditSittingForm({
         <Button
           type="button"
           disabled={!ready}
-          onClick={() => onSubmit({ qualificationId, qualificationTitle: qualificationTitle.trim(), qpId, qpName: qpName.trim(), year, date })}
+          onClick={() =>
+            onSubmit({
+              qualificationId,
+              qualificationTitle: qualificationTitle.trim(),
+              qpId,
+              qpName: qpName.trim(),
+              year,
+              date,
+              componentDates: isSingleDateFallback(slots) ? undefined : buildComponentDates(slots, dates),
+            })
+          }
         >
           {sitting ? 'Update Sitting' : 'Add Sitting'}
         </Button>

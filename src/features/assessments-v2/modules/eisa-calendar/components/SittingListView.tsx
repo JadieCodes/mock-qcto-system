@@ -1,6 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { ClosingDate } from './ClosingDate';
+import { componentDateLabel } from '../componentDays';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import { EisaSittingStatusBadge } from './StatusBadge';
 import { UNPUBLISHED_SITTING_STATUSES } from '../api';
@@ -66,7 +67,19 @@ export function SittingListView({
           <TableBody>
             {sorted.map((s) => (
               <TableRow key={s.id}>
-                <TableCell className="whitespace-nowrap font-medium">{s.date}</TableCell>
+                <TableCell className="whitespace-nowrap font-medium">
+                  {s.componentDates?.length ? (
+                    <ul className="space-y-0.5">
+                      {s.componentDates.map((c) => (
+                        <li key={`${c.componentId}-${c.day}`}>
+                          {c.date} <span className="text-xs font-normal text-gray-500">{componentDateLabel(c)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    s.date
+                  )}
+                </TableCell>
                 <TableCell className="whitespace-nowrap font-mono text-xs">{qualificationIdOf(s)}</TableCell>
                 <TableCell className="max-w-[220px] truncate">{displayOrDash(s.qualificationTitle)}</TableCell>
                 <TableCell className="whitespace-nowrap">{displayOrDash(s.qpName)}</TableCell>

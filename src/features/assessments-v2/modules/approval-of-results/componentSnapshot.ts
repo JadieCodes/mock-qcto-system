@@ -1,6 +1,7 @@
 import { approvedAddendumOf, approvedComponentsOf } from '../qsa-addendum/assessmentDetails';
 import type { QsaAddendumApplication } from '../qsa-addendum/types';
 import { isQasaApproved } from '../qsa-addendum/workflow';
+import type { SittingComponentDate } from '../eisa-calendar/types';
 import { componentEisaDates } from './componentDates';
 import type { ResultsComponent } from './types';
 
@@ -29,13 +30,13 @@ export function resultsRulesIssue(rules: ResultsRules): string | null {
 // and each component's lowest and highest mark, so later QASA changes do not move a batch.
 export function snapshotResultsRules(
   qasas: QsaAddendumApplication[],
-  sitting: { qpId: string; qualificationTitle: string; sittingDate: string },
+  sitting: { qpId: string; qualificationTitle: string; sittingDate: string; componentDates?: SittingComponentDate[] },
 ): ResultsRules {
   const qasa = qasas.find(
     (a) => isQasaApproved(a) && a.qpId === sitting.qpId && a.qualificationTitle.toLowerCase() === sitting.qualificationTitle.toLowerCase(),
   );
   const components = qasa ? approvedComponentsOf(qasa) : [];
-  const dates = componentEisaDates(sitting.sittingDate, components.length);
+  const dates = componentEisaDates({ date: sitting.sittingDate, componentDates: sitting.componentDates }, components.map((c) => c.id));
   return {
     addendumPassPercent: qasa ? approvedAddendumOf(qasa).passPercent : null,
     components: components.map((c, i) => ({

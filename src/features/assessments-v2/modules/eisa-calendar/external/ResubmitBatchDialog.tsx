@@ -1,13 +1,12 @@
-import { useState } from 'react';
-import { AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useV2Role } from '../../../shared/ui/useV2Role';
-import { RegistrationCloses } from '../components/RegistrationCloses';
-import { checkSittingDate } from '../dateChecks';
+import { QasaSlotsNote, SittingDateCards } from '../components/SittingDateCards';
+import { buildComponentDates, componentDaySlots, datesForSlots, earliestDate, emptySitting, isSingleDateFallback, singleDateSlots, sittingsReady, type ComponentDaySlot } from '../componentDays';
 import { minimumDateCount, requiredCountText } from '../api';
 import { useEditBatch, useResubmitBatch } from '../hooks';
 import type { EisaSittingBatch } from '../types';
@@ -44,19 +43,42 @@ function ResubmitBatchForm({ batch, mode, onClose }: { batch: EisaSittingBatch; 
   const isPending = resubmit.isPending || editBatch.isPending;
   // QCTO feedback 2.4: the required rows cannot be removed; extra rows can.
   const minimum = minimumDateCount(batch.requiredCount, batch.onDemand);
-  const [dates, setDates] = useState<string[]>(() => [...batch.dates, ...Array<string>(Math.max(minimum - batch.dates.length, 0)).fill('')]);
+  const [slots, setSlots] = useState<ComponentDaySlot[] | null>(null);
+  const [sittings, setSittings] = useState<string[][] | null>(null);
+  // Batch Q2: the slots come from the approved QASA (loaded once); each sitting starts from the
+  // component dates it was saved with, padded with blank sittings up to the required number.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const found = batch.qualificationId ? await componentDaySlots(batch.qualificationId) : singleDateSlots();
+      if (cancelled) return;
+      const existing = batch.dates.map((date, i) => datesForSlots(found, batch.sittings?.[i]?.componentDates, date));
+      const padding = Array.from({ length: Math.max(minimum - existing.length, 0) }, () => emptySitting(found));
+      setSlots(found);
+      setSittings([...existing, ...padding]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [batch, minimum]);
 
-  const filledDates = dates.filter((d) => d.trim() !== '');
-  const dateChecks = filledDates.map((d) => ({ date: d, result: checkSittingDate(d, undefined, batch.onDemand === true) }));
-  const yearMismatch = filledDates.filter((d) => Number(d.slice(0, 4)) !== batch.year);
-  const duplicates = filledDates.length !== new Set(filledDates).size;
-  const countMatches = filledDates.length >= minimum;
-  const allDatesOk = dateChecks.every((c) => c.result.ok);
-  const canSubmit = countMatches && allDatesOk && yearMismatch.length === 0 && !duplicates;
+  const activeSlots = slots ?? singleDateSlots();
+  const activeSittings = sittings ?? [];
+  const starts = activeSittings.map((d) => earliestDate(d)).filter(Boolean);
+  const duplicates = starts.length !== new Set(starts).size;
+  const countMatches = activeSittings.length >= minimum;
+  const canSubmit = slots !== null && sittingsReady(activeSlots, activeSittings, batch.year, batch.onDemand === true, minimum);
 
   const onSubmit = () => {
     if (!canSubmit) return;
-    const params = { batchId: batch.id, dates: filledDates, actorRole: role, actorId: person.id, actorName: person.name };
+    const params = {
+      batchId: batch.id,
+      dates: activeSittings.map((d) => earliestDate(d)),
+      sittings: isSingleDateFallback(activeSlots) ? undefined : activeSittings.map((d) => ({ componentDates: buildComponentDates(activeSlots, d) })),
+      actorRole: role,
+      actorId: person.id,
+      actorName: person.name,
+    };
     if (mode === 'edit') {
       editBatch.mutate({ ...params, actorQpId: person.qpId }, { onSuccess: onClose });
     } else {
@@ -90,54 +112,32 @@ function ResubmitBatchForm({ batch, mode, onClose }: { batch: EisaSittingBatch; 
           )}
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>{mode === 'edit' ? 'Dates *' : 'Corrected Dates *'}</Label>
-              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setDates((d) => [...d, ''])}>
-                <Plus className="h-3.5 w-3.5" />
-                Add date
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {dates.map((d, idx) => {
-                const check = d.trim() ? checkSittingDate(d, undefined, batch.onDemand === true) : null;
-                return (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="date"
-                        value={d}
-                        onChange={(e) => setDates((prev) => prev.map((value, i) => (i === idx ? e.target.value : value)))}
-                      />
-                      {idx >= minimum && (
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setDates((prev) => prev.filter((_, i) => i !== idx))}>
-                          <Trash2 className="h-4 w-4 text-gray-400" />
-                        </Button>
-                      )}
-                    </div>
-                    {/^\d{4}-\d{2}-\d{2}$/.test(d) && <RegistrationCloses sittingDate={d} passedNotice="full" onDemand={batch.onDemand} />}
-                    {check && !check.ok && <p className="text-xs text-red-600">{check.reasons.join(' ')}</p>}
-                    {check && check.ok && Number(d.slice(0, 4)) !== batch.year && (
-                      <p className="text-xs text-red-600">This date is not in {batch.year}.</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {filledDates.length > 0 && !countMatches && (
+            {slots && <QasaSlotsNote slots={slots} />}
+            {sittings && (
+              <SittingDateCards
+                slots={activeSlots}
+                sittings={sittings}
+                onChange={setSittings}
+                minimum={minimum}
+                onDemand={batch.onDemand === true}
+                year={batch.year}
+                idPrefix="resubmit"
+              />
+            )}
+            {sittings && !countMatches && (
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-800">
                   {batch.onDemand
-                    ? 'Enter at least one date.'
-                    : `"${batch.qualificationTitle}" requires ${batch.requiredCount} sitting(s) per year — you have entered ${filledDates.length}.`}
+                    ? 'Add at least one sitting.'
+                    : `"${batch.qualificationTitle}" requires ${batch.requiredCount} sitting(s) per year — you have ${activeSittings.length}.`}
                 </AlertDescription>
               </Alert>
             )}
             {duplicates && (
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
-                <AlertDescription className="text-amber-800">Duplicate dates are not allowed.</AlertDescription>
+                <AlertDescription className="text-amber-800">Two sittings cannot start on the same date.</AlertDescription>
               </Alert>
             )}
           </div>

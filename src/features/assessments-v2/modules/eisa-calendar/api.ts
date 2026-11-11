@@ -9,16 +9,19 @@ import { listRegistrationsForSitting, listSittingIdsWithRegistrations as listReg
 import type { Role } from '../../types';
 import { CALENDAR_REVIEWER_ROLE, DEFAULT_SITTINGS_PER_YEAR, REQUEST_RECOMMENDER_ROLE } from './config';
 import { SUPER_ADMIN_ROLE } from '../../config/administration';
+import { checkSittingComponentDates, earliestComponentDate, hasSlotErrors, slotsFromComponents, slotsFromQasa, type ComponentDaySlot } from './componentDays';
 import { checkSittingDate } from './dateChecks';
 import { calcRegistrationClosingDate, closingDateOf } from './registrationClosing';
 import { BATCH_WORKFLOW, SITTING_LIFECYCLE_WORKFLOW } from './workflow';
 import type {
   AddSittingInput,
+  BatchSittingInput,
   EditSittingInput,
   EisaSitting,
   EisaSittingBatch,
   EligibleQualification,
   ProposeSittingBatchInput,
+  SittingComponentDate,
 } from './types';
 
 export const BATCHES_KEY = 'eisaCalendar:batches';
@@ -71,6 +74,7 @@ export async function listEligibleQualifications(): Promise<EligibleQualificatio
       onDemand,
       nqfLevel: (qasa ?? anyQasa)?.nqfLevel || null,
       credits: (qasa ?? anyQasa)?.credits || null,
+      componentSlots: slotsFromQasa(qasa),
     };
   });
 }
@@ -86,7 +90,15 @@ export function requiredCountText(requiredCount: number, onDemand: boolean | und
 }
 
 // CR-030/CR-032: the checks every set of proposed dates must pass before it reaches QCTO.
-function assertValidBatchDates(dates: string[], year: number, title: string, requiredCount: number, onDemand: boolean | undefined): void {
+function assertValidBatchDates(
+  dates: string[],
+  year: number,
+  title: string,
+  requiredCount: number,
+  onDemand: boolean | undefined,
+  sittings?: BatchSittingInput[],
+  slots?: ComponentDaySlot[],
+): void {
   const minimum = minimumDateCount(requiredCount, onDemand);
   if (dates.length < minimum) {
     throw new Error(
@@ -107,6 +119,33 @@ function assertValidBatchDates(dates: string[], year: number, title: string, req
       throw new Error(`${date}: ${check.reasons.join(' ')}`);
     }
   }
+  // Batch Q2 (29.12): every component day of every sitting passes the same rules. Two different
+  // components may share a date; the days of one component may not.
+  if (sittings && slots) {
+    for (const sitting of sittings) {
+      const found = slots.map((s) => sitting.componentDates.find((c) => c.componentId === s.componentId && c.day === s.day)?.date ?? '');
+      const errors = checkSittingComponentDates(slots, found, undefined, onDemand === true);
+      if (hasSlotErrors(errors)) {
+        const first = errors.findIndex((e) => e.length > 0);
+        throw new Error(`${slots[first].label}: ${errors[first].join(' ')}`);
+      }
+    }
+  }
+}
+
+// Batch Q2: sittings sorted by their earliest date, with `dates` holding that date for each.
+// Without component dates it is the old behaviour: just the sorted dates.
+function orderedSittings(input: { dates: string[]; sittings?: BatchSittingInput[] }): { dates: string[]; sittings?: BatchSittingInput[] } {
+  if (!input.sittings?.length) return { dates: [...input.dates].sort() };
+  const sittings = input.sittings
+    .map((s) => ({ componentDates: s.componentDates, start: earliestComponentDate(s.componentDates) }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  return { dates: sittings.map((s) => s.start), sittings: sittings.map((s) => ({ componentDates: s.componentDates })) };
+}
+
+async function slotsForQualification(qualificationId: string | null | undefined, qpId: string): Promise<ComponentDaySlot[]> {
+  const eligible = qualificationId ? (await listEligibleQualifications()).find((q) => q.qualificationId === qualificationId && q.qpId === qpId) : undefined;
+  return eligible?.componentSlots ?? slotsFromComponents([]);
 }
 
 // QCTO feedback 29.13: the calendar reviewer and the DD are told when a QP sets or changes the
@@ -130,7 +169,7 @@ async function isOnDemandQualification(qualificationId: string | null, qpId: str
 }
 
 function proposedSittingRows(batch: EisaSittingBatch, createdBy: string): EisaSitting[] {
-  return batch.dates.map((date) => ({
+  return batch.dates.map((date, i) => ({
     id: crypto.randomUUID(),
     batchId: batch.id,
     qualificationId: batch.qualificationId ?? null,
@@ -139,6 +178,7 @@ function proposedSittingRows(batch: EisaSittingBatch, createdBy: string): EisaSi
     qpName: batch.qpName,
     year: batch.year,
     date,
+    componentDates: batch.sittings?.[i]?.componentDates,
     status: 'proposed',
     rejectionReason: null,
     postponementReason: null,
@@ -171,7 +211,8 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     throw new Error('This qualification has no accredited SDPs under this QP.');
   }
 
-  assertValidBatchDates(input.dates, input.year, input.qualificationTitle, match.sittingsPerYear, match.onDemand);
+  const ordered = orderedSittings(input);
+  assertValidBatchDates(ordered.dates, input.year, input.qualificationTitle, match.sittingsPerYear, match.onDemand, ordered.sittings, match.componentSlots);
 
   const batch: EisaSittingBatch = {
     id: crypto.randomUUID(),
@@ -182,7 +223,8 @@ export async function proposeSittingBatch(input: ProposeSittingBatchInput): Prom
     year: input.year,
     requiredCount: match.sittingsPerYear,
     onDemand: match.onDemand,
-    dates: [...input.dates].sort(),
+    dates: ordered.dates,
+    sittings: ordered.sittings,
     state: { stageId: 'qcto-review', submittedBy: input.submittedBy, submittedById: input.submittedById },
     rejectionReason: null,
     rejectionHistory: [],
@@ -208,7 +250,8 @@ export async function proposeBulkSittingBatches(inputs: ProposeSittingBatchInput
     if (!match.onDemand && input.dates.length !== match.sittingsPerYear) {
       throw new Error(`"${match.qualificationTitle}" (${input.year}) requires ${match.sittingsPerYear} date(s) — the file has ${input.dates.length}.`);
     }
-    assertValidBatchDates(input.dates, input.year, match.qualificationTitle, match.sittingsPerYear, match.onDemand);
+    const ordered = orderedSittings(input);
+    assertValidBatchDates(ordered.dates, input.year, match.qualificationTitle, match.sittingsPerYear, match.onDemand, ordered.sittings, match.componentSlots);
   }
   const created: EisaSittingBatch[] = [];
   for (const input of inputs) created.push(await proposeSittingBatch(input));
@@ -292,6 +335,7 @@ export async function performBatchAction(params: BatchActionParams): Promise<Eis
 interface ResubmitBatchParams {
   batchId: string;
   dates: string[];
+  sittings?: BatchSittingInput[];
   actorRole: Role;
   actorId: string;
   actorName: string;
@@ -305,7 +349,8 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
   const batch = batches.find((b) => b.id === params.batchId);
   if (!batch) throw new Error('EISA sitting batch not found.');
 
-  assertValidBatchDates(params.dates, batch.year, batch.qualificationTitle, batch.requiredCount, batch.onDemand);
+  const ordered = orderedSittings(params);
+  assertValidBatchDates(ordered.dates, batch.year, batch.qualificationTitle, batch.requiredCount, batch.onDemand, ordered.sittings, await slotsForQualification(batch.qualificationId, batch.qpId));
 
   const nextState = performAction({
     definition: BATCH_WORKFLOW,
@@ -318,7 +363,7 @@ export async function resubmitBatch(params: ResubmitBatchParams): Promise<EisaSi
     recordId: batch.id,
   });
 
-  const updatedBatch: EisaSittingBatch = { ...batch, dates: [...params.dates].sort(), state: nextState };
+  const updatedBatch: EisaSittingBatch = { ...batch, dates: ordered.dates, sittings: ordered.sittings, state: nextState };
   saveBatches(batches.map((b) => (b.id === batch.id ? updatedBatch : b)));
 
   // Fresh sitting rows for the corrected dates — same shape as a brand-new proposal. The
@@ -344,6 +389,7 @@ export const QP_EDITABLE_BATCH_STAGES = ['qcto-review', 'approved'];
 interface EditBatchParams {
   batchId: string;
   dates: string[];
+  sittings?: BatchSittingInput[];
   actorRole: Role;
   actorId: string;
   actorName: string;
@@ -361,12 +407,14 @@ export async function editBatchDates(params: EditBatchParams): Promise<EisaSitti
     throw new Error('These dates can no longer be edited.');
   }
 
-  assertValidBatchDates(params.dates, batch.year, batch.qualificationTitle, batch.requiredCount, batch.onDemand);
+  const ordered = orderedSittings(params);
+  assertValidBatchDates(ordered.dates, batch.year, batch.qualificationTitle, batch.requiredCount, batch.onDemand, ordered.sittings, await slotsForQualification(batch.qualificationId, batch.qpId));
 
   const wasApproved = batch.state.stageId === 'approved';
   const updatedBatch: EisaSittingBatch = {
     ...batch,
-    dates: [...params.dates].sort(),
+    dates: ordered.dates,
+    sittings: ordered.sittings,
     state: { stageId: 'qcto-review', submittedBy: params.actorName, submittedById: params.actorId },
   };
   saveBatches(batches.map((b) => (b.id === batch.id ? updatedBatch : b)));
@@ -409,7 +457,8 @@ export async function addSitting(input: AddSittingInput): Promise<EisaSitting> {
     qpId: input.qpId,
     qpName: input.qpName,
     year: input.year,
-    date: input.date,
+    date: input.componentDates?.length ? earliestComponentDate(input.componentDates) : input.date,
+    componentDates: input.componentDates?.length ? input.componentDates : undefined,
     status: 'published',
     rejectionReason: null,
     postponementReason: null,
@@ -447,7 +496,9 @@ export async function editSitting(id: string, patch: EditSittingInput, actorId: 
   if (!existing) throw new Error('Sitting not found.');
   assertUnpublished(existing, 'updated');
 
-  const updated: EisaSitting = { ...existing, ...patch, onDemand: (await isOnDemandQualification(patch.qualificationId, patch.qpId)) || undefined };
+  const componentDates = patch.componentDates?.length ? patch.componentDates : undefined;
+  const date = componentDates ? earliestComponentDate(componentDates) : patch.date;
+  const updated: EisaSitting = { ...existing, ...patch, date, componentDates, onDemand: (await isOnDemandQualification(patch.qualificationId, patch.qpId)) || undefined };
   saveSittings(sittings.map((s) => (s.id === id ? updated : s)));
   appendAuditEntry({
     recordType: 'eisa-calendar-sitting',
@@ -456,12 +507,12 @@ export async function editSitting(id: string, patch: EditSittingInput, actorId: 
     actorId,
     actorName,
     action:
-      patch.date !== existing.date
-        ? `Updated sitting — date changed from ${existing.date} to ${patch.date}`
+      date !== existing.date
+        ? `Updated sitting — date changed from ${existing.date} to ${date}`
         : 'Updated sitting',
   });
   // QCTO feedback 1.9: the QP is told about an update, the same as a postpone or cancel.
-  const dateNote = patch.date !== existing.date ? ` The date changed from ${existing.date} to ${patch.date}.` : '';
+  const dateNote = date !== existing.date ? ` The date changed from ${existing.date} to ${date}.` : '';
   addNotification({
     recipientRole: 'QP',
     title: 'EISA sitting updated',
@@ -505,6 +556,8 @@ interface SittingLifecycleParams {
   // Row 22/23 (D-11): postpone-only — the new date carried in the SDP/QP notification and the
   // audit trail note.
   proposedNewDate?: string | null;
+  // Batch Q2: the approved new date per component day, written to the sitting on approval.
+  proposedComponentDates?: SittingComponentDate[];
 }
 
 // CR-034: cancellation/postponement — reason required, notifies the affected SDPs (and the
@@ -539,6 +592,11 @@ export async function applyApprovedSittingChange(params: SittingLifecycleParams)
     proposedNewDate: params.actionId === 'sitting-postpone' ? proposedNewDate : sitting.proposedNewDate,
     cancellationReason: params.actionId === 'sitting-cancel' ? params.reason : sitting.cancellationReason,
   };
+  // Batch Q2: the approved postponement dates become the sitting's dates (the earliest is `date`).
+  if (params.actionId === 'sitting-postpone' && params.proposedComponentDates?.length) {
+    updated.componentDates = params.proposedComponentDates;
+    updated.date = earliestComponentDate(params.proposedComponentDates);
+  }
   saveSittings(sittings.map((s) => (s.id === sitting.id ? updated : s)));
 
   const verb = params.actionId === 'sitting-postpone' ? 'postponed' : 'cancelled';

@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ClosingDate } from './ClosingDate';
+import { componentDateLabel } from '../componentDays';
 import { displayOrDash, qualificationIdOf } from '../sittingDetails';
 import type { EisaSitting } from '../types';
 import { EisaSittingStatusBadge } from './StatusBadge';
@@ -16,8 +17,20 @@ export function SittingDetailsDialog({ sitting, onClose }: { sitting: EisaSittin
               <DialogDescription>{displayOrDash(sitting.qualificationTitle)}</DialogDescription>
             </DialogHeader>
             <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
-              <dt className="text-gray-500">Date</dt>
-              <dd className="font-medium">{sitting.date}</dd>
+              <dt className="text-gray-500">{sitting.componentDates?.length ? 'EISA dates' : 'Date'}</dt>
+              <dd className="font-medium">
+                {sitting.componentDates?.length ? (
+                  <ul className="space-y-0.5">
+                    {sitting.componentDates.map((c) => (
+                      <li key={`${c.componentId}-${c.day}`}>
+                        {c.date} <span className="text-xs font-normal text-gray-500">{componentDateLabel(c)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  sitting.date
+                )}
+              </dd>
               <dt className="text-gray-500">Qualification ID</dt>
               <dd className="font-mono text-xs leading-5">{qualificationIdOf(sitting)}</dd>
               <dt className="text-gray-500">Qualification name</dt>

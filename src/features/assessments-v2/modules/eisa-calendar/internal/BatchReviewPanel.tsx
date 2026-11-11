@@ -72,7 +72,7 @@ export function BatchReviewPanel() {
                     <TableCell className="whitespace-nowrap">{batch.qpName}</TableCell>
                     <TableCell>{batch.year}</TableCell>
                     <TableCell>
-                      <DatesWithClosing dates={batch.dates} onDemand={batch.onDemand} />
+                      <DatesWithClosing dates={batch.dates} sittings={batch.sittings} onDemand={batch.onDemand} showChecks />
                     </TableCell>
                     <TableCell>
                       <EisaSittingStatusBadge status={status} />
