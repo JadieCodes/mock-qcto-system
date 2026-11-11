@@ -8,6 +8,8 @@ import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT } from '../site-visit
 import { batchFiguresOf } from './calculation';
 import {
   EISA_EVIDENCE_TAG_OPTIONS,
+  EISA_IRREGULARITIES_QUESTION,
+  EISA_IRREGULARITIES_TAG,
   EISA_REQUIRED_EVIDENCE_TAGS,
   EISA_SINGLE_USE_EVIDENCE_TAGS,
   eisaEvidenceTagLabel,
@@ -279,8 +281,11 @@ export function eisaSubmissionIssues(
   onFile: OnFileDocument[],
   choices: OnFileDocumentChoice[],
   declarationAccepted: boolean,
+  irregularitiesObserved: boolean | null,
 ): ValidationIssue[] {
-  const missingEvidence = EISA_REQUIRED_EVIDENCE_TAGS.filter((tag) => !evidenceDocuments.some((d) => d.tag === tag)).map((tag) => ({
+  // Batch Z1 (11.4): the rules apply at submit only. Yes makes the irregularities report required; No hides that requirement.
+  const requiredTags = irregularitiesObserved === true ? [...EISA_REQUIRED_EVIDENCE_TAGS, EISA_IRREGULARITIES_TAG] : EISA_REQUIRED_EVIDENCE_TAGS;
+  const missingEvidence = requiredTags.filter((tag) => !evidenceDocuments.some((d) => d.tag === tag)).map((tag) => ({
     field: `evidence-${tag}`,
     message: `Upload the ${eisaEvidenceTagLabel(tag).toLowerCase()}.`,
   }));
@@ -291,8 +296,10 @@ export function eisaSubmissionIssues(
   const unconfirmed = onFile
     .filter((doc) => !choices.some((c) => c.documentId === doc.id && (c.choice === 'confirmed' || c.replacement !== null)))
     .map((doc) => ({ field: `on-file-${doc.id}`, message: `Confirm or replace: ${doc.label}.` }));
+  const unanswered = typeof irregularitiesObserved !== 'boolean' ? [{ field: 'irregularities-observed', message: `Answer: ${EISA_IRREGULARITIES_QUESTION}` }] : [];
   return [
     ...missingEvidence,
+    ...unanswered,
     ...repeatedSingleUse,
     ...unconfirmed,
     ...(declarationAccepted ? [] : [{ field: 'declaration', message: 'Tick the declaration.' }]),

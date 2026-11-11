@@ -94,17 +94,26 @@ export const EISA_EVIDENCE_TAG_OPTIONS: { value: EisaEvidenceTag; label: string 
   { value: 'moderation-report', label: 'Moderation report' },
   { value: 'confirmation-letter', label: 'Confirmation letter' },
   { value: 'attendance-register', label: 'Attendance register' },
+  { value: 'invigilator-report', label: 'Invigilator report' },
+  { value: 'irregularities-report', label: 'Irregularities report' },
   { value: 'other', label: 'Other evidence' },
 ];
 
-// Submit stays blocked until a file with each of these tags is uploaded.
-export const EISA_REQUIRED_EVIDENCE_TAGS: EisaEvidenceTag[] = ['marking-report', 'moderation-report'];
+// Batch Z1 (11.4): submit stays blocked until a file with each of these tags is uploaded. The attendance
+// register is required because it confirms the learners attended. The irregularities report is required
+// only when the QP answers Yes to the irregularities question (EISA_IRREGULARITIES_TAG).
+export const EISA_REQUIRED_EVIDENCE_TAGS: EisaEvidenceTag[] = ['marking-report', 'moderation-report', 'attendance-register', 'invigilator-report'];
+
+export const EISA_IRREGULARITIES_TAG: EisaEvidenceTag = 'irregularities-report';
+export const EISA_IRREGULARITIES_QUESTION = 'Were any irregularities observed during the EISA?';
+export const EISA_IRREGULARITIES_NOT_ASKED = 'Not asked (submitted before 11 Nov 2026)';
+export const EISA_IRREGULARITIES_REPORTED = 'The QP reported irregularities – see the Irregularities report';
 
 // Batch M.1: these two tags can be used once only; the other three can tag several files.
 export const EISA_SINGLE_USE_EVIDENCE_TAGS: EisaEvidenceTag[] = ['marking-report', 'moderation-report'];
 
 export const EISA_EVIDENCE_INSTRUCTION =
-  'Upload the marking report, the moderation report, the confirmation letters and the attendance register for this EISA. Tag each file.';
+  'Upload the marking report, the moderation report, the attendance register and the invigilator report for this EISA, and the confirmation letters if you have them. If irregularities were observed, upload the irregularities report too. Tag each file.';
 
 export function eisaEvidenceTagLabel(tag: EisaEvidenceTag): string {
   return EISA_EVIDENCE_TAG_OPTIONS.find((o) => o.value === tag)?.label ?? tag;
@@ -128,6 +137,14 @@ export const CHIEF_DIRECTOR_LETTER_TITLE = 'Chief Director: Occupational Qualifi
 export const DIRECTOR_ASSESSMENT_NAME = 'Dr Ntombi Sithebe';
 
 export const CERTIFICATION_ADDRESSEE = ['Director: Certification', 'Quality Council for Trades and Occupations', '256 Glyn Street', 'Hatfield', '0083'];
+
+// Batch Z1 (11.6): the recommendation letter reaches the Certification domain by itself when the batch is approved.
+export const RECOMMENDATION_COPY_BUTTON = 'Download a copy';
+export const CERTIFICATION_LETTERS_ARRIVE_NOTE = 'Letters arrive here automatically when results are approved.';
+
+export function certificationSentNote(issuedOn: string): string {
+  return `Sent to the Certification domain automatically on ${issuedOn}. No download or email is needed.`;
+}
 
 export const EISA_APPEALS_EMAIL = 'EISAResults@qcto.org.za';
 

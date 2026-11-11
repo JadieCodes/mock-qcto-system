@@ -51,7 +51,7 @@ export function File4Panel({ record, actorId, actorName }: { record: EisaRegistr
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" className="gap-1.5" disabled={download.isPending} onClick={onDownload}>
           <Download className="h-3.5 w-3.5" />
-          Download File 4 (pre-filled)
+          Download File 4 template
         </Button>
         <input
           ref={inputRef}

@@ -77,7 +77,9 @@ export function writeStore<T>(key: string, value: T): void {
 // 'A27' = Batch U: EISA Instrument Validation holds several instruments per submission with an exemplar (29.6) — Electrical
 // Trades has a validated record with 3 instruments and an exemplar that replaced an earlier one, and one record waits
 // for the ASD with the QP's proposed exemplar.
-export const SEED_VERSION = 'A27';
+// 'A28' = Batch Z1: every seeded EISA results batch has an invigilator report and answers the irregularities question
+// (11.4) — No on all but one batch (the Plumbing batch with the Deputy Director), which says Yes and has an irregularities report.
+export const SEED_VERSION = 'A28';
 const SEED_VERSION_KEY = 'seedVersion';
 
 // The "who am I" selection (shared/ui/RoleContext.tsx) is not workflow data, so a seed

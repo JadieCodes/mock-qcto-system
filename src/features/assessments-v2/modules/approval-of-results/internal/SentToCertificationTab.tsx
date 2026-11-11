@@ -3,6 +3,7 @@ import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { batchFiguresOf } from '../calculation';
+import { CERTIFICATION_LETTERS_ARRIVE_NOTE } from '../config';
 import { useFisaResultsBatches, useResultsBatches } from '../hooks';
 import { downloadLetterModel, eisaRecommendationLetter, fisaRecommendationLetter, lastEisaDateOf, lastFisaDateOf, type LetterModel } from '../outcomeLetters';
 import { fisaFiguresOf } from '../workflow';
@@ -68,6 +69,7 @@ export function SentToCertificationTab() {
   return (
     <div className="space-y-6">
       <SectionCard title="Recommendation Letters Received by Certification">
+        <p className="px-4 pt-3 text-sm text-gray-600">{CERTIFICATION_LETTERS_ARRIVE_NOTE}</p>
         {rows.length === 0 ? (
           <EmptyState title="No recommendation letters sent yet" />
         ) : (

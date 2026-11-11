@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { downloadCsvFile } from '../../../shared/csv/csv';
+import { downloadXlsxFile, writeXlsx } from '../../../shared/files/writeXlsx';
 import { toIsoDate } from '../../../shared/dates/workingDays';
 import { SectionCard } from '../../../shared/ui/PageSections';
-import { currentQuarterRange, financialYearQuarters, slashDate, type QuarterRange } from '../trackingRegister';
+import { currentQuarterRange, financialYearQuarters, slashDate, type QuarterRange, type RegisterSheet } from '../trackingRegister';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -23,7 +23,7 @@ function pickRange(q: QuarterRange): string {
   return `${month(q.from)}–${month(q.to)} ${q.to.slice(0, 4)}`;
 }
 
-// Batch N2 (29.28, 29.35): "Download tracking register (CSV)" on the internal dashboard. The range
+// Batch N2 (29.28, 29.35): "Download tracking register (Excel)" (an .xlsx since Batch Z1, 11.7) on the internal dashboard. The range
 // is on the approval-letter date and starts as the current QCTO quarter (financial year, April to
 // March); each quarter of the financial year is a quick pick.
 export function TrackingRegisterDownload({
@@ -31,7 +31,7 @@ export function TrackingRegisterDownload({
   build,
 }: {
   fileNamePrefix: string;
-  build: (from: string, to: string) => { csv: string; rowCount: number };
+  build: (from: string, to: string) => RegisterSheet;
 }) {
   const today = toIsoDate(new Date());
   const initial = currentQuarterRange(today);
@@ -43,8 +43,9 @@ export function TrackingRegisterDownload({
   const rangeInvalid = !from || !to || fromAfterTo;
 
   function download() {
-    const { csv, rowCount } = build(from, to);
-    downloadCsvFile(`${fileNamePrefix}_${slashDate(from).replace(/\//g, '')}-${slashDate(to).replace(/\//g, '')}.csv`, csv);
+    const sheet = build(from, to);
+    const rowCount = sheet.rowCount;
+    downloadXlsxFile(`${fileNamePrefix}_${slashDate(from).replace(/\//g, '')}-${slashDate(to).replace(/\//g, '')}.xlsx`, writeXlsx(sheet));
     if (rowCount === 0) toast.info('No approved batch has an approval letter in this range. The file has the headings only.');
     else toast.success(`Tracking register downloaded (${rowCount} ${rowCount === 1 ? 'row' : 'rows'}).`);
   }
@@ -103,7 +104,7 @@ export function TrackingRegisterDownload({
           </div>
           <Button type="button" className="w-full gap-2 sm:w-auto" disabled={rangeInvalid} onClick={download}>
             <Download className="h-4 w-4" />
-            Download CSV
+            Download tracking register (Excel)
           </Button>
         </div>
 

@@ -196,7 +196,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
   input.evidenceDocuments.forEach(assertFileNotEmpty);
   input.onFileChoices.forEach((c) => c.replacement && assertFileNotEmpty(c.replacement));
   const onFile = onFileDocumentsFor(confirmation.qualificationTitle);
-  const documentIssues = eisaSubmissionIssues(input.evidenceDocuments, onFile, input.onFileChoices, input.declarationAccepted);
+  const documentIssues = eisaSubmissionIssues(input.evidenceDocuments, onFile, input.onFileChoices, input.declarationAccepted, input.irregularitiesObserved);
   if (documentIssues.length > 0) throw new Error(documentIssues[0].message);
   const decidedAt = new Date().toISOString();
   const onFileDocuments: OnFileDocumentRecord[] = onFile.map((doc) => {
@@ -229,6 +229,7 @@ export async function submitResultsBatch(input: NewResultsBatchInput): Promise<R
     addendumPassPercent: addendumPassPercent ?? 0,
     learnerResults: input.learnerResults.map((r) => ({ ...r, idNumber: idNumberOf(r), marks: r.absent ? {} : r.marks })),
     evidenceDocuments: input.evidenceDocuments,
+    irregularitiesObserved: input.irregularitiesObserved,
     onFileDocuments,
     declaration,
     complianceReviewNotes: '',

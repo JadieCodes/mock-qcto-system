@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { getAuditTrail } from '../../../shared/audit/auditLog';
 import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { EVIDENCE_ANY_FILE_HINT } from '../../../shared/files/fileKind';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
 import { PageHeader } from '../../../shared/ui/PageHeader';
@@ -18,7 +19,7 @@ import { isModuleVisible } from '../../../shared/visibility/moduleAccess';
 import { POST_EISA_MONITORING_COMPETENCY_THRESHOLD_PERCENT, visibilityScopeForRole } from '../../site-visits/config';
 import { useSiteVisit } from '../../site-visits/hooks';
 import { checklistCompletionSummary, overallStatusLabel, reportIsApproved } from '../../site-visits/workflow';
-import { EISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from '../config';
+import { certificationSentNote, EISA_RESULTS_RECORD_TYPE, RECOMMENDATION_COPY_BUTTON, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from '../config';
 import { ApprovalHistory } from '../components/ApprovalHistory';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { AuditTrailCsvDownload } from '../components/AuditTrailCsvDownload';
@@ -27,7 +28,7 @@ import { DdLetterChecklistPanel } from '../components/DdLetterChecklistPanel';
 import { DraftBanner } from '../components/DocumentView';
 import { DdLetterChecklistDoc, EisaOutcomeLetterDoc, EisaRecommendationLetterDoc, EisaVerificationReportDoc } from '../components/Documents';
 import { EisaReviewForm } from '../components/EisaReviewForm';
-import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../components/EisaSubmissionPack';
+import { DeclarationLine, EisaEvidenceList, IrregularitiesAnswer, OnFileDocumentsList } from '../components/EisaSubmissionPack';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
 import { EisaLearnerResultsTable } from '../components/EisaLearnerResultsTable';
@@ -202,7 +203,10 @@ function EvidenceTab({ batch }: { batch: ResultsBatch }) {
     <div className="space-y-4">
       <SectionCard title="Evidence documents">
         <div className="p-4">
-          <EisaEvidenceList files={batch.evidenceDocuments} />
+          <div className="space-y-3">
+            <IrregularitiesAnswer batch={batch} />
+            <EisaEvidenceList files={batch.evidenceDocuments} />
+          </div>
         </div>
       </SectionCard>
       <SectionCard title="Already on file">
@@ -215,7 +219,12 @@ function EvidenceTab({ batch }: { batch: ResultsBatch }) {
           <DeclarationLine declaration={batch.declaration} />
         </div>
       </SectionCard>
-      <BatchDocumentsCard documents={documentsForPortal(EISA_BATCH_DOCUMENTS, 'internal')} downloads={eisaDownloads(batch, reportContext)} />
+      <BatchDocumentsCard
+        documents={documentsForPortal(EISA_BATCH_DOCUMENTS, 'internal')}
+        downloads={eisaDownloads(batch, reportContext)}
+        notes={batch.recommendation ? { 'eisa-recommendation-letter': certificationSentNote(batch.recommendation.recommendedAt.slice(0, 10)) } : {}}
+        downloadLabels={{ 'eisa-recommendation-letter': RECOMMENDATION_COPY_BUTTON }}
+      />
     </div>
   );
 }
@@ -327,7 +336,7 @@ function ComplianceReviewTab({ batch }: { batch: ResultsBatch }) {
                 e.target.value = '';
               }}
             />
-            <p className="text-xs text-gray-500">Added files appear on the Evidence tab.</p>
+            <p className="text-xs text-gray-500">Added files appear on the Evidence tab. {EVIDENCE_ANY_FILE_HINT}.</p>
           </>
         )}
         <FileCheckError message={uploadError} />

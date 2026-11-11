@@ -9,7 +9,7 @@ import type { AuditEntry } from '../../shared/audit/types';
 import { batchFiguresOf, competenceRateText, throughputRateText } from './calculation';
 import { annexBlocks, eisaLearnerTable, fileSafe, signOffFromAudit } from './downloads';
 import { downloadDoc, type DocBlock, type DocModel } from './documentModel';
-import { eisaEvidenceTagLabel, onFileChoiceText, RESULTS_AD_ROLE, RESULTS_DD_ROLE, RESULTS_DIRECTOR_ROLE } from './config';
+import { EISA_IRREGULARITIES_REPORTED, eisaEvidenceTagLabel, onFileChoiceText, RESULTS_AD_ROLE, RESULTS_DD_ROLE, RESULTS_DIRECTOR_ROLE } from './config';
 import { eisaReviewRows } from './eisaReview';
 import { ddCheckedIdsOf, ddCompletedText, ddLetterTable, DD_LETTER_CHECK_LINES } from './letterChecklist';
 import { dateOf, eisaFinalEvidence, eisaResultsReceived, letterDateOf } from './trackingRegister';
@@ -179,6 +179,8 @@ export function eisaSectionFive(batch: ResultsBatch): [string, string][] {
     ['Date of approval letter', decision ? dateOf(decision.decidedAt) : ''],
     ['Verification Number', verificationCodeOf(batch)],
     ['If no, date and reason', decision?.outcome === 'declined' ? `${dateOf(decision.decidedAt)}: ${decision.irregularities.join('; ')}` : ''],
+    // Batch Z1 (11.4): only when the QP answered Yes; a batch submitted earlier was never asked.
+    ...(batch.irregularitiesObserved === true ? [['Irregularities reported by the QP', EISA_IRREGULARITIES_REPORTED] as [string, string]] : []),
     ['Recommendation for further action', review.recommendationFurtherAction],
     ['Bad Practices', review.badPractices],
     ['Good Practices', review.goodPractices],

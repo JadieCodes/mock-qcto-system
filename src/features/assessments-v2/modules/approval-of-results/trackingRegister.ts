@@ -10,6 +10,7 @@ import { qpDirectoryEntryFor } from '../../mock/data/qpDirectory';
 import type { AuditEntry } from '../../shared/audit/types';
 import { csvField, withExcelPrefix } from '../../shared/csv/csv';
 import { addWorkingDays, workingDaysBetween } from '../../shared/dates/workingDays';
+import type { XlsxCell } from '../../shared/files/writeXlsx';
 import { batchFiguresOf, calculateLearnerResult } from './calculation';
 import { RESULTS_SUBMISSION_DEADLINE_WORKING_DAYS } from './config';
 import { eisaDatesOf, lastFisaDateOf } from './outcomeLetters';
@@ -291,6 +292,80 @@ export function fisaRegisterRow(batch: FisaResultsBatch): string[] {
 export function fisaRegisterCsv(batches: FisaResultsBatch[], from: string, to: string): { csv: string; rowCount: number } {
   const selected = fisaRegisterBatches(batches, from, to);
   return { csv: csvOf(FISA_REGISTER_HEADINGS, selected.map(fisaRegisterRow)), rowCount: selected.length };
+}
+
+// ----- Excel (Batch Z1, 11.7) -----
+
+// The register as an .xlsx sheet: the same headings, rows and filter as the CSV, with the date
+// columns as real Excel dates and the count, day and rate columns as numbers. Anything that is not
+// a number (an id, a quarter, a blank) stays text, so a leading zero is never lost.
+const EISA_DATE_HEADINGS = new Set([
+  'DATE OF NOTIFICATION:',
+  'Date Conducted',
+  'Last date of EISA',
+  'Date Results Due (within 21 days of EISA)',
+  'Date Results Received',
+  'Date final outstanding evidence received',
+  'Date Approval Due (within 21 days)',
+  'Date Approval Letter Issued',
+]);
+
+const EISA_NUMBER_HEADINGS = new Set([
+  'No.',
+  'Level',
+  'Credits',
+  'submitted in how many days?',
+  'QCTO Turnaround Time',
+  'No. Registered',
+  'No. from RPL',
+  'No. per SDP',
+  'No. Wrote',
+  'Total No. Competent',
+  'Total No. NYC',
+  'RPL Competent',
+  'RPL NYC',
+  'Competency Rate',
+  'Throughput Rate',
+]);
+
+const FISA_DATE_HEADINGS = new Set([
+  'Date FISA Conducted',
+  'Date Results Due (within 21 days of FISA)',
+  'Date Results Received',
+  'Date Additional Evidence Requested',
+  'Date final outstanding evidence received',
+  'Date Approval Due (within 21 days)',
+  'Date Approval Letter Issued',
+]);
+
+const FISA_NUMBER_HEADINGS = new Set(['Level', 'Credits', 'No of learner Enrolled', 'No of learners Competent', 'QCTO Turnaround Time', 'Competency Rate']);
+
+export interface RegisterSheet {
+  sheetName: string;
+  headings: string[];
+  rows: XlsxCell[][];
+  rowCount: number;
+}
+
+function typedCell(heading: string, text: string, dates: Set<string>, numbers: Set<string>): XlsxCell {
+  if (text === '') return null;
+  if (dates.has(heading)) return { date: text.replace(/\//g, '-') };
+  if (numbers.has(heading) && /^-?\d+(\.\d+)?$/.test(text.trim())) return Number(text);
+  return text;
+}
+
+function registerSheetOf(sheetName: string, headings: string[], rows: string[][], dates: Set<string>, numbers: Set<string>): RegisterSheet {
+  return { sheetName, headings, rows: rows.map((row) => row.map((text, i) => typedCell(headings[i], text, dates, numbers))), rowCount: rows.length };
+}
+
+export function eisaRegisterSheet(batches: ResultsBatch[], from: string, to: string): RegisterSheet {
+  const selected = eisaRegisterBatches(batches, from, to);
+  return registerSheetOf('EISA tracking register', EISA_REGISTER_HEADINGS, selected.map((b, i) => eisaRegisterRow(b, i + 1)), EISA_DATE_HEADINGS, EISA_NUMBER_HEADINGS);
+}
+
+export function fisaRegisterSheet(batches: FisaResultsBatch[], from: string, to: string): RegisterSheet {
+  const selected = fisaRegisterBatches(batches, from, to);
+  return registerSheetOf('FISA tracking register', FISA_REGISTER_HEADINGS, selected.map(fisaRegisterRow), FISA_DATE_HEADINGS, FISA_NUMBER_HEADINGS);
 }
 
 // ----- audit trail -----

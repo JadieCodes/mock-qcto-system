@@ -4,7 +4,14 @@ import type { AssessmentComponentType } from '../qsa-addendum/types';
 
 // QCTO feedback 29.23: what an EISA evidence upload is. The list is our reading of the 29 Oct
 // meeting until QCTO confirms it (progress.md, Batch M). FISA keeps its own list (FisaEvidenceTag).
-export type EisaEvidenceTag = 'marking-report' | 'moderation-report' | 'confirmation-letter' | 'attendance-register' | 'other';
+export type EisaEvidenceTag =
+  | 'marking-report'
+  | 'moderation-report'
+  | 'confirmation-letter'
+  | 'attendance-register'
+  | 'invigilator-report'
+  | 'irregularities-report'
+  | 'other';
 
 // UI-only upload: the file's details and the QP's tag, never the file itself.
 export interface EvidenceDocument {
@@ -216,6 +223,9 @@ export interface ResultsBatch {
   // these, not stored separately.
   learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
+  // Batch Z1 (11.4): the QP's answer to "Were any irregularities observed during the EISA?". Optional so a
+  // batch submitted before 11 Nov 2026 still loads; undefined or null reads as "not asked".
+  irregularitiesObserved?: boolean | null;
   // Batch W: allocated when the batch first reaches the ASD (verificationCode.ts); finalDecision carries the same code.
   // Optional so a batch stored before Batch W still loads — read it through verificationCodeOf().
   verificationCode?: string;
@@ -259,6 +269,7 @@ export interface NewResultsBatchInput {
   sittingId: string;
   learnerResults: EisaLearnerResult[];
   evidenceDocuments: EvidenceDocument[];
+  irregularitiesObserved: boolean | null;
   onFileChoices: OnFileDocumentChoice[];
   declarationAccepted: boolean;
   submittedBy: string;

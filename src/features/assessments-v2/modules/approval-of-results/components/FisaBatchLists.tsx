@@ -1,3 +1,4 @@
+import { FileTypeIcon } from '../../../shared/files/FileTypeIcon';
 import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
 import { fisaEvidenceTagLabel, fisaOutcomeLabel } from '../config';
 import type { LearnerResult, TaggedEvidenceDocument } from '../types';
@@ -28,7 +29,8 @@ export function FisaEvidenceList({ files }: { files: TaggedEvidenceDocument[] })
   return (
     <ul className="space-y-1">
       {files.map((f, i) => (
-        <li key={`${f.fileName}-${f.uploadedAt}-${i}`} className="text-sm text-gray-700">
+        <li key={`${f.fileName}-${f.uploadedAt}-${i}`} className="flex flex-wrap items-center gap-x-1 text-sm text-gray-700">
+          <FileTypeIcon fileName={f.fileName} />
           <span className="rounded-md border bg-gray-50 px-1.5 py-0.5 text-xs font-medium text-gray-600">{fisaEvidenceTagLabel(f.tag)}</span>{' '}
           <span className="font-mono text-xs">{f.fileName}</span>
           <span className="text-xs text-gray-500">

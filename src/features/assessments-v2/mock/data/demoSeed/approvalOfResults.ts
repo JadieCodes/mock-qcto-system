@@ -191,6 +191,9 @@ function componentDatesOf(sittings: EisaSitting[], sittingId: string) {
   return sittings.find((s) => s.id === sittingId)?.componentDates;
 }
 
+// Batch Z1 (11.4): the one seeded batch (Plumbing, with the Deputy Director) whose QP reported irregularities.
+const IRREGULARITIES_BATCH_N = 5;
+
 export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmationRecord[], qasas: QsaAddendumApplication[], registrations: EisaRegistrationRecord[], sittings: EisaSitting[]): ResultsBatch[] {
   const batches: ResultsBatch[] = [];
 
@@ -244,11 +247,15 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       uploadedAt: submittedAt,
       tag,
     });
+    const irregularitiesObserved = n === IRREGULARITIES_BATCH_N;
     const evidenceDocuments: EvidenceDocument[] = [
       pdf('Marking_Report', 'marking-report', 412_672),
       pdf('Moderation_Report', 'moderation-report', 1_258_291),
       ...(n % 2 === 0 ? [pdf('Attendance_Register', 'attendance-register', 143_360)] : []),
       ...(n % 3 === 0 ? [pdf('Confirmation_Letter', 'confirmation-letter', 96_256)] : []),
+      // Batch Z1 (11.4): the invigilator report on every batch; the irregularities report only where the QP answered Yes.
+      pdf('Invigilator_Report', 'invigilator-report', 187_392),
+      ...(irregularitiesObserved ? [pdf('Irregularities_Report', 'irregularities-report', 221_184)] : []),
     ];
     const onFileDocuments: OnFileDocumentRecord[] = onFileDocumentsFor(title).map((doc, i) => {
       const replaced = i === n % 6;
@@ -276,6 +283,7 @@ export function seedResultsBatches(log: SeedLog, confirmations: EisaConfirmation
       addendumPassPercent,
       learnerResults,
       evidenceDocuments,
+      irregularitiesObserved,
       // Batch M (29.25): every "Already on file" document confirmed by the QP, one replaced.
       onFileDocuments,
       declaration: { acceptedBy: qp.name, acceptedById: qp.id, acceptedAt: submittedAt },

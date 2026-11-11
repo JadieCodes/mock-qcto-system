@@ -7,9 +7,14 @@ import type { BatchDocumentDefinition } from '../batchDocuments';
 export function BatchDocumentsCard<Id extends string>({
   documents,
   downloads,
+  notes = {},
+  downloadLabels = {},
 }: {
   documents: BatchDocumentDefinition<Id>[];
   downloads: Partial<Record<Id, () => void>>;
+  // Batch Z1 (11.6): a line under a document's name, and a different button text for a document.
+  notes?: Partial<Record<Id, string>>;
+  downloadLabels?: Partial<Record<Id, string>>;
 }) {
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -21,11 +26,14 @@ export function BatchDocumentsCard<Id extends string>({
           const download = downloads[doc.id];
           return (
             <li key={doc.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-              <span className="text-gray-700">{doc.name}</span>
+              <span className="text-gray-700">
+                {doc.name}
+                {notes[doc.id] && <span className="block text-xs text-gray-500">{notes[doc.id]}</span>}
+              </span>
               {download ? (
                 <Button type="button" size="sm" variant="outline" className="gap-2" onClick={download} aria-label={`Download ${doc.name}`}>
                   <Download className="h-4 w-4" />
-                  Download
+                  {downloadLabels[doc.id] ?? 'Download'}
                 </Button>
               ) : (
                 <span className="text-xs text-gray-500">Generated at final approval</span>

@@ -94,6 +94,7 @@ function ResultsCaptureForm({
   const saveDraft = useSaveResultsDraft();
   const [evidenceDocuments, setEvidenceDocuments] = useState<EvidenceDocument[]>([]);
   const [onFileChoices, setOnFileChoices] = useState<OnFileDocumentChoice[]>([]);
+  const [irregularitiesObserved, setIrregularitiesObserved] = useState<boolean | null>(null);
   const [declared, setDeclared] = useState(false);
   const { control, register, handleSubmit, reset, setValue } = useForm<FormValues>({
     defaultValues: { learners: toRows(learners, components, draft?.learnerResults) },
@@ -101,7 +102,7 @@ function ResultsCaptureForm({
   const rows = useWatch({ control, name: 'learners' });
   const learnerResults = toLearnerResults(learners, components, rows);
   const issues = markEntryIssues(components, learnerResults);
-  const documentIssues = eisaSubmissionIssues(evidenceDocuments, onFile, onFileChoices, declared);
+  const documentIssues = eisaSubmissionIssues(evidenceDocuments, onFile, onFileChoices, declared, irregularitiesObserved);
 
   // A row is complete when it is Absent or every mark passes the shared check.
   const isComplete = (r: EisaLearnerResult) => r.absent || components.every((c) => markIssue(c, r.marks[c.id]) === null);
@@ -111,7 +112,7 @@ function ResultsCaptureForm({
   const onSubmit = () => {
     if (issues.length > 0 || documentIssues.length > 0) return;
     submitBatch.mutate(
-      { sittingId: sitting.sittingId, learnerResults, evidenceDocuments, onFileChoices, declarationAccepted: declared, submittedBy: actorName, submittedById: actorId },
+      { sittingId: sitting.sittingId, learnerResults, evidenceDocuments, irregularitiesObserved, onFileChoices, declarationAccepted: declared, submittedBy: actorName, submittedById: actorId },
       { onSuccess: onDone },
     );
   };
@@ -255,7 +256,12 @@ function ResultsCaptureForm({
 
         <ValidationSummary issues={issues} title="Every learner needs a mark per component (or Absent) before you can submit:" />
 
-        <EisaEvidenceUpload files={evidenceDocuments} onChange={setEvidenceDocuments} />
+        <EisaEvidenceUpload
+          files={evidenceDocuments}
+          onChange={setEvidenceDocuments}
+          irregularitiesObserved={irregularitiesObserved}
+          onIrregularitiesChange={setIrregularitiesObserved}
+        />
 
         <OnFileDocumentsSection documents={onFile} choices={onFileChoices} onChange={setOnFileChoices} />
 

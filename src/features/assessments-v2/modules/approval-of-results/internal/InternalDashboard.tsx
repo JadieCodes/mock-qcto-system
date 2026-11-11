@@ -12,7 +12,7 @@ import { filterByScope, type ListScope } from '../../../shared/visibility/record
 import { EISA_RESULTS_RECORD_TYPE } from '../config';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { TrackingRegisterDownload } from '../components/TrackingRegisterDownload';
-import { eisaRegisterCsv } from '../trackingRegister';
+import { eisaRegisterSheet } from '../trackingRegister';
 import { ResultsBatchStatusBadge } from '../components/StatusBadge';
 import { useResultsBatches } from '../hooks';
 import { absenteeismText, batchFiguresOf, competenceRateText, throughputRateText } from '../calculation';
@@ -96,7 +96,7 @@ function EisaResultsTab({ scope }: { scope: ListScope }) {
       </StatTileGrid>
 
       {/* Batch N2: the register covers every approved batch, whatever the My items / All filter shows. */}
-      <TrackingRegisterDownload fileNamePrefix="Tracking_Register_EISA" build={(from, to) => eisaRegisterCsv(allBatches, from, to)} />
+      <TrackingRegisterDownload fileNamePrefix="Tracking_Register_EISA" build={(from, to) => eisaRegisterSheet(allBatches, from, to)} />
 
       <SectionCard title="All Results Batches">
         <BatchesTable batches={batches} onSelect={setSelectedId} />

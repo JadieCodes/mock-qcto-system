@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { EVIDENCE_ANY_FILE_HINT } from '../../../shared/files/fileKind';
+import { FileTypeIcon } from '../../../shared/files/FileTypeIcon';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
 import { useV2Role } from '../../../shared/ui/useV2Role';
@@ -129,6 +131,7 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
           Required before you can submit: a learner spreadsheet, a verification report and an assessment instrument. The learner spreadsheet and the verification
           report can each be added once. The tag cannot be changed once the file is added.
         </p>
+        <p className="text-xs text-gray-500">{EVIDENCE_ANY_FILE_HINT}</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Select value={selectedTag} onValueChange={(v) => setNextTag(v as FisaEvidenceTag)}>
             <SelectTrigger className="sm:w-56" aria-label="Tag for the file">
@@ -169,7 +172,10 @@ function DraftEditor({ batch, onDone }: { batch: FisaResultsBatch; onDone: () =>
             {batch.evidenceDocuments.map((doc, index) => (
               <li key={`${doc.fileName}-${doc.uploadedAt}-${index}`} className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-mono text-xs text-gray-700 truncate">{doc.fileName}</p>
+                  <p className="flex items-center gap-1.5 font-mono text-xs text-gray-700">
+                    <FileTypeIcon fileName={doc.fileName} />
+                    <span className="truncate">{doc.fileName}</span>
+                  </p>
                   <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                     {doc.fileType}, {formatFileSize(doc.fileSize)}, uploaded on {doc.uploadedAt.slice(0, 10)}
                     <DocumentChecked />

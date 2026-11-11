@@ -7,6 +7,7 @@ import { AuditTrailView } from '../../../shared/audit/AuditTrailView';
 import { Checklist } from '../../../shared/checklist/Checklist';
 import { getChecklistIssues, isChecklistComplete } from '../../../shared/checklist/types';
 import { fileUploadIssue } from '../../../shared/files/fileCheck';
+import { EVIDENCE_ANY_FILE_HINT } from '../../../shared/files/fileKind';
 import { DocumentChecked, FileCheckError } from '../../../shared/files/FileCheckNotice';
 import { Modal } from '../../../shared/ui/Modal';
 import { PageHeader } from '../../../shared/ui/PageHeader';
@@ -14,7 +15,7 @@ import { SectionCard, StatTile, StatTileGrid } from '../../../shared/ui/PageSect
 import { useV2Role } from '../../../shared/ui/useV2Role';
 import { ValidationSummary } from '../../../shared/validation/ValidationSummary';
 import type { ValidationIssue } from '../../../shared/validation/types';
-import { FISA_RESULTS_RECORD_TYPE, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from '../config';
+import { certificationSentNote, FISA_RESULTS_RECORD_TYPE, RECOMMENDATION_COPY_BUTTON, RESULTS_AD_ROLE, RESULTS_DD_ROLE } from '../config';
 import { ApprovalHistory } from '../components/ApprovalHistory';
 import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { AuditTrailCsvDownload } from '../components/AuditTrailCsvDownload';
@@ -161,7 +162,12 @@ function EvidenceTab({ batch }: { batch: FisaResultsBatch }) {
           {batch.declaration ? `Ticked by ${batch.declaration.acceptedBy} on ${batch.declaration.acceptedAt.slice(0, 10)}` : '—'}
         </p>
       </SectionCard>
-      <BatchDocumentsCard documents={documentsForPortal(FISA_BATCH_DOCUMENTS, 'internal')} downloads={fisaDownloads(batch)} />
+      <BatchDocumentsCard
+        documents={documentsForPortal(FISA_BATCH_DOCUMENTS, 'internal')}
+        downloads={fisaDownloads(batch)}
+        notes={batch.recommendation ? { 'fisa-recommendation-letter': certificationSentNote(batch.recommendation.recommendedAt.slice(0, 10)) } : {}}
+        downloadLabels={{ 'fisa-recommendation-letter': RECOMMENDATION_COPY_BUTTON }}
+      />
     </div>
   );
 }
@@ -224,7 +230,7 @@ function SectionETab({ batch }: { batch: FisaResultsBatch }) {
                 e.target.value = '';
               }}
             />
-            <p className="text-xs text-gray-500">Added files appear on the Evidence tab.</p>
+            <p className="text-xs text-gray-500">Added files appear on the Evidence tab. {EVIDENCE_ANY_FILE_HINT}.</p>
           </>
         )}
         <FileCheckError message={uploadError} />

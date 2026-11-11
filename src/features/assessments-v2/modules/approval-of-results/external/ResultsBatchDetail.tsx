@@ -10,7 +10,7 @@ import { BatchDocumentsCard } from '../components/BatchDocumentsCard';
 import { BatchTabs } from '../components/BatchTabs';
 import { EvidenceDates, FinalDecisionNotice } from '../components/DecisionPanels';
 import { EisaOutcomeLetterDoc, EisaVerificationReportDoc } from '../components/Documents';
-import { DeclarationLine, EisaEvidenceList, OnFileDocumentsList } from '../components/EisaSubmissionPack';
+import { DeclarationLine, EisaEvidenceList, IrregularitiesAnswer, OnFileDocumentsList } from '../components/EisaSubmissionPack';
 import { documentsForPortal, EISA_BATCH_DOCUMENTS } from '../batchDocuments';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { EisaBatchFigures } from '../components/EisaBatchFigures';
@@ -74,7 +74,10 @@ function EvidenceTab({ batch }: { batch: ResultsBatch }) {
     <div className="space-y-4">
       <SectionCard title="Evidence">
         <div className="p-4">
-          <EisaEvidenceList files={batch.evidenceDocuments} />
+          <div className="space-y-3">
+            <IrregularitiesAnswer batch={batch} />
+            <EisaEvidenceList files={batch.evidenceDocuments} />
+          </div>
         </div>
       </SectionCard>
       <SectionCard title="Already on file">

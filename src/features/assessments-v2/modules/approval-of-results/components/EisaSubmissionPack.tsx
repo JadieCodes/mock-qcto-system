@@ -1,6 +1,13 @@
+import { FileTypeIcon } from '../../../shared/files/FileTypeIcon';
 import { formatFileSize } from '../../rpl-toolkit/toolkitFiles';
-import { eisaEvidenceTagLabel, onFileChoiceText } from '../config';
-import type { EvidenceDocument, OnFileDocumentRecord, ResultsDeclaration } from '../types';
+import {
+  EISA_IRREGULARITIES_NOT_ASKED,
+  EISA_IRREGULARITIES_QUESTION,
+  EISA_IRREGULARITIES_REPORTED,
+  eisaEvidenceTagLabel,
+  onFileChoiceText,
+} from '../config';
+import type { EvidenceDocument, OnFileDocumentRecord, ResultsBatch, ResultsDeclaration } from '../types';
 
 // Read-only views of what the QP sent with an EISA batch, shown to QCTO (QCTO feedback 29.23,
 // 29.25, 29.26) and to the QP.
@@ -11,7 +18,8 @@ export function EisaEvidenceList({ files }: { files: EvidenceDocument[] }) {
   return (
     <ul className="space-y-1">
       {files.map((f, i) => (
-        <li key={`${f.fileName}-${f.uploadedAt}-${i}`} className="text-sm text-gray-700">
+        <li key={`${f.fileName}-${f.uploadedAt}-${i}`} className="flex flex-wrap items-center gap-x-1 text-sm text-gray-700">
+          <FileTypeIcon fileName={f.fileName} />
           <span className="rounded-md border bg-gray-50 px-1.5 py-0.5 text-xs font-medium text-gray-600">{eisaEvidenceTagLabel(f.tag)}</span>{' '}
           <span className="font-mono text-xs">{f.fileName}</span>
           <span className="text-xs text-gray-500">
@@ -21,6 +29,24 @@ export function EisaEvidenceList({ files }: { files: EvidenceDocument[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// Batch Z1 (11.4): the QP's answer to the irregularities question. A batch submitted before 11 Nov 2026
+// was never asked.
+export function IrregularitiesAnswer({ batch }: { batch: Pick<ResultsBatch, 'irregularitiesObserved'> }) {
+  const answer = batch.irregularitiesObserved;
+  return (
+    <div className="space-y-0.5 text-sm text-gray-700">
+      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{EISA_IRREGULARITIES_QUESTION}</p>
+      {typeof answer !== 'boolean' ? (
+        <p className="text-gray-500">{EISA_IRREGULARITIES_NOT_ASKED}</p>
+      ) : answer ? (
+        <p className="font-medium text-amber-700">Yes. {EISA_IRREGULARITIES_REPORTED}</p>
+      ) : (
+        <p>No</p>
+      )}
+    </div>
   );
 }
 
